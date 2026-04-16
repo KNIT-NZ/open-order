@@ -1,0 +1,105 @@
+.
+├── AGENTS.md
+├── app
+│   ├── android-chrome-192x192.png
+│   ├── android-chrome-512x512.png
+│   ├── api
+│   │   ├── ai
+│   │   │   └── answer
+│   │   │       └── route.ts
+│   │   ├── health
+│   │   │   └── route.ts
+│   │   └── search
+│   │       └── route.ts
+│   ├── apple-touch-icon.png
+│   ├── favicon-16x16.png
+│   ├── favicon-32x32.png
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── CLAUDE.md
+├── components
+│   └── open-order
+│       ├── AssistantPanel.tsx
+│       ├── Footer.tsx
+│       ├── Hero.tsx
+│       ├── openOrder.module.css
+│       ├── ResultsList.tsx
+│       └── SearchPanel.tsx
+├── data
+│   ├── raw
+│   │   ├── speakers-rulings-2023.pdf
+│   │   └── standing-orders-2023.pdf
+│   └── sources
+│       └── source-manifest.json
+├── docs
+│   └── architecture.md
+├── eslint.config.mjs
+├── hooks
+│   ├── useOpenOrderAssistant.ts
+│   ├── useOpenOrderSearch.ts
+│   └── useOpenOrderTheme.ts
+├── infra
+│   └── sql
+│       ├── 000_readme.sql
+│       ├── 001_extensions.sql
+│       ├── 002_core_tables.sql
+│       └── 003_text_search.sql
+├── lib
+│   ├── ai
+│   │   ├── gemini.ts
+│   │   └── prompts.ts
+│   ├── chunking.ts
+│   ├── concept-registry.ts
+│   ├── db.ts
+│   ├── env.ts
+│   ├── open-order
+│   │   ├── format.ts
+│   │   ├── types.ts
+│   │   └── url.ts
+│   ├── procedural-reasoning.ts
+│   ├── procedural-search.ts
+│   ├── search-core.ts
+│   ├── search.ts
+│   ├── speakers-rulings-html.ts
+│   ├── standing-orders-html.ts
+│   └── text.ts
+├── next-env.d.ts
+├── next.config.mjs
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── project-structure.txt
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── knit-logo-horizontal-dark.png
+│   ├── knit-logo-horizontal-light.png
+│   ├── next.svg
+│   ├── open-order-logo-dark.png
+│   ├── open-order-logo-light.png
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── scripts
+│   ├── apply-sql.ts
+│   ├── chapter-stats.ts
+│   ├── chunk-sections.ts
+│   ├── count-chunks.ts
+│   ├── count-sections.ts
+│   ├── db-check.ts
+│   ├── db-inspect.ts
+│   ├── heading-stats.ts
+│   ├── ingest-speakers-rulings-html.ts
+│   ├── ingest-speakers-rulings.ts
+│   ├── ingest-standing-orders-html.ts
+│   ├── list-documents.ts
+│   ├── null-heading-samples.ts
+│   ├── sample-sections.ts
+│   ├── seed-documents.ts
+│   └── tail-sections.ts
+├── tsconfig.json
+└── tsconfig.tsbuildinfo
+
+21 directories, 82 files

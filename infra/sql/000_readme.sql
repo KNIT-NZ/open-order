@@ -1,0 +1,10 @@
+-- Open Order SQL directory
+--
+-- Place bootstrap and migration files here.
+--
+-- Suggested near-term files:
+-- 001_extensions.sql
+-- 002_core_tables.sql
+--
+-- We are not enabling pgvector yet by default in this scaffold.
+-- That can be added deliberately once the Neon setup is confirmed.

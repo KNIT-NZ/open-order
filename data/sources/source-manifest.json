@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "slug": "speakers-rulings-2023",
+      "title": "Speakers' Rulings 2023",
+      "corpus": "speakers_rulings",
+      "sourceType": "html_index",
+      "sourceUrl": "https://www.parliament.nz/en/pb/parliamentary-rules/speakers-rulings-2023-by-chapter/",
+      "edition": "2023",
+      "language": "en",
+      "publishedDate": "2023-11-09",
+      "metadata": {
+        "jurisdiction": "New Zealand",
+        "institution": "House of Representatives"
+      }
+    },
+    {
+      "slug": "standing-orders-2023",
+      "title": "Standing Orders of the House of Representatives 2023",
+      "corpus": "standing_orders",
+      "sourceType": "html_index",
+      "sourceUrl": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2023-by-chapter/",
+      "edition": "2023",
+      "language": "en",
+      "publishedDate": "2023-09-09",
+      "metadata": {
+        "jurisdiction": "New Zealand",
+        "institution": "House of Representatives"
+      }
+    }
+  ]
+}
