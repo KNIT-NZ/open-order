@@ -1,5 +1,8 @@
 // lib/concept-registry.ts
-import type { AuthorityClass } from "@/lib/procedural-reasoning";
+import type {
+  AuthorityClass,
+  AuthorityFunction,
+} from "@/lib/procedural-reasoning";
 
 export type ProceduralConceptId =
   | "closure_motion"
@@ -16,9 +19,11 @@ export type ProceduralConceptId =
 export type AuthoritySlotSpec = {
   key: string;
   classes?: AuthorityClass[];
+  functions?: AuthorityFunction[];
   headings?: string[];
   pathIncludes?: string[];
   preferredCorpora?: Array<"standing_orders" | "speakers_rulings">;
+  preferredTextIncludes?: string[];
   maxMatches?: number;
 };
 
@@ -30,9 +35,11 @@ export type AuthorityExclusionSpec = {
 export type ProceduralConcept = {
   id: ProceduralConceptId;
   aliases: string[];
+  plannerTriggers?: string[];
   preferredQueries: string[];
   slots: AuthoritySlotSpec[];
   exclusions?: AuthorityExclusionSpec[];
+  supersedesSlots?: string[];
   defaultPackContribution?: number;
 };
 
@@ -45,6 +52,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       "closure",
       "premature closure",
     ],
+    plannerTriggers: ["closure motion", "acceptance of closure motion"],
     preferredQueries: ["closure motion", "acceptance of closure motion"],
     defaultPackContribution: 3,
     slots: [
@@ -52,6 +60,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "closure_governing_rule",
         headings: ["closure motion"],
         classes: ["governing_rule"],
+        functions: ["rule", "application"],
         preferredCorpora: ["standing_orders"],
         maxMatches: 1,
       },
@@ -59,6 +68,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "closure_qualification",
         headings: ["acceptance of closure motion", "effect of carrying closure motion"],
         classes: ["constraint_or_qualification"],
+        functions: ["constraint", "effect"],
         preferredCorpora: ["standing_orders"],
         maxMatches: 1,
       },
@@ -66,7 +76,8 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   },
   {
     id: "point_of_order",
-    aliases: ["point of order"],
+    aliases: ["point of order", "points of order"],
+    plannerTriggers: ["point of order", "points of order"],
     preferredQueries: ["point of order"],
     defaultPackContribution: 1,
     slots: [
@@ -74,6 +85,12 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "point_of_order_mechanism",
         headings: ["points of order", "point of order"],
         classes: ["procedural_mechanism"],
+        functions: ["procedure"],
+        preferredTextIncludes: [
+          "transgressing the rules of debate",
+          "breach of the rules",
+          "speaker can take action",
+        ],
         maxMatches: 1,
       },
     ],
@@ -87,6 +104,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       "personal reflection",
       "personal reflections",
     ],
+    plannerTriggers: ["personal reflections", "against members"],
     preferredQueries: ["personal reflections", "against members", "procedure"],
     defaultPackContribution: 3,
     slots: [
@@ -95,6 +113,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         pathIncludes: ["personal reflections"],
         headings: ["against members"],
         classes: ["governing_rule"],
+        functions: ["rule", "application"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -103,6 +122,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         pathIncludes: ["personal reflections"],
         headings: ["procedure"],
         classes: ["constraint_or_qualification"],
+        functions: ["procedure", "constraint"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -111,13 +131,16 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "allegation_of_racism",
     aliases: ["racist", "racism", "country of origin", "ethnicity", "nationality"],
+    plannerTriggers: ["allegations of racism"],
     preferredQueries: ["allegations of racism"],
+    supersedesSlots: ["personal_reflection_rule"],
     defaultPackContribution: 2,
     slots: [
       {
         key: "racism_rule",
         headings: ["allegations of racism"],
         classes: ["governing_rule"],
+        functions: ["rule", "application"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -126,6 +149,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "relevancy",
     aliases: ["evasive", "evasiveness", "off topic", "not relevant", "relevancy"],
+    plannerTriggers: ["relevancy"],
     preferredQueries: ["relevancy"],
     defaultPackContribution: 2,
     slots: [
@@ -133,6 +157,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "relevancy_rule",
         headings: ["relevancy"],
         classes: ["governing_rule"],
+        functions: ["rule", "application"],
         maxMatches: 1,
       },
     ],
@@ -140,6 +165,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "chair_control",
     aliases: ["chair", "chairperson", "speaker control"],
+    plannerTriggers: ["chairperson"],
     preferredQueries: ["chairperson"],
     defaultPackContribution: 2,
     slots: [
@@ -155,6 +181,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "committee_of_whole",
     aliases: ["committee of the whole", "committee stage"],
+    plannerTriggers: ["committee of the whole", "committee stage"],
     preferredQueries: ["committee of the whole", "chairperson"],
     defaultPackContribution: 2,
     slots: [
@@ -174,6 +201,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "withdrawal_and_apology",
     aliases: ["withdraw", "apologise", "apology", "withdrawal"],
+    plannerTriggers: ["withdrawal"],
     preferredQueries: ["withdrawal", "procedure"],
     defaultPackContribution: 2,
     slots: [
@@ -181,6 +209,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "withdrawal_rule",
         headings: ["withdrawal"],
         classes: ["constraint_or_qualification", "governing_rule"],
+        functions: ["procedure", "constraint", "rule", "application"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -188,6 +217,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "withdrawal_procedure",
         headings: ["procedure"],
         classes: ["constraint_or_qualification"],
+        functions: ["procedure", "constraint"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -204,6 +234,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       "evasive answer",
       "non-answer",
     ],
+    plannerTriggers: ["accountability to the house", "form of reply"],
     preferredQueries: ["accountability to the House", "form of reply", "point of order"],
     defaultPackContribution: 3,
     slots: [
@@ -211,6 +242,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "ministerial_accountability_rule",
         headings: ["accountability to the house"],
         classes: ["governing_rule"],
+        functions: ["rule", "application"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },
@@ -218,6 +250,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "ministerial_form_of_reply",
         headings: ["form of reply"],
         classes: ["constraint_or_qualification"],
+        functions: ["constraint", "rule", "application"],
         preferredCorpora: ["speakers_rulings"],
         maxMatches: 1,
       },

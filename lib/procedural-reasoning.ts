@@ -22,6 +22,15 @@ export type AuthorityClass =
   | "analogy_or_support"
   | "miscellaneous";
 
+export type AuthorityFunction =
+  | "rule"
+  | "procedure"
+  | "constraint"
+  | "exception"
+  | "application"
+  | "effect"
+  | "context";
+
 export type AuthorityProfile = {
   pathText: string;
   heading: string;
@@ -39,6 +48,7 @@ export type AuthorityProfile = {
   isAcceptance: boolean;
   isEffect: boolean;
   authorityClass: AuthorityClass;
+  authorityFunction: AuthorityFunction;
 };
 
 export type ScoredAuthority = {
@@ -133,7 +143,36 @@ function getConceptById(id: ProceduralConcept["id"]): ProceduralConcept | null {
   return CONCEPT_REGISTRY.find((c) => c.id === id) ?? null;
 }
 
-export function inferConcepts(question: string): ProceduralConcept[] {
+function normalizeConceptTrigger(text: string): string {
+  return cleanQuery(text).toLowerCase();
+}
+
+function addPlannerTriggeredConcepts(
+  matched: Map<string, ProceduralConcept>,
+  plannerQueries: string[],
+): void {
+  const normalizedQueries = new Set(
+    plannerQueries.map(normalizeConceptTrigger).filter(Boolean),
+  );
+
+  if (normalizedQueries.size === 0) return;
+
+  for (const concept of CONCEPT_REGISTRY) {
+    const triggers = concept.plannerTriggers ?? [];
+    if (
+      triggers.some((trigger) =>
+        normalizedQueries.has(normalizeConceptTrigger(trigger)),
+      )
+    ) {
+      matched.set(concept.id, concept);
+    }
+  }
+}
+
+export function inferConcepts(
+  question: string,
+  plannerQueries: string[] = [],
+): ProceduralConcept[] {
   const q = question.toLowerCase();
   const matched = new Map<string, ProceduralConcept>();
 
@@ -216,11 +255,16 @@ export function inferConcepts(question: string): ProceduralConcept[] {
     if (withdrawal) matched.set(withdrawal.id, withdrawal);
   }
 
+  addPlannerTriggeredConcepts(matched, plannerQueries);
+
   return [...matched.values()];
 }
 
-function deriveFrame(question: string): DerivedFrame {
-  const activeConcepts = inferConcepts(question);
+function deriveFrame(
+  question: string,
+  plannerQueries: string[] = [],
+): DerivedFrame {
+  const activeConcepts = inferConcepts(question, plannerQueries);
   const ids = new Set(activeConcepts.map((c) => c.id));
 
   return {
@@ -312,7 +356,7 @@ export function expandPlannerQueries(input: {
   plannerQueries: string[];
   effectiveCorpus: string | null;
 }): string[] {
-  const frame = deriveFrame(input.question);
+  const frame = deriveFrame(input.question, input.plannerQueries);
   const seedQueries = [...input.plannerQueries];
   const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
 
@@ -403,10 +447,65 @@ export function buildAuthorityProfile(
     isClosure
   ) {
     authorityClass = "governing_rule";
-  } else if (isAcceptance || isEffect || heading === "procedure" || heading === "form of reply" || heading === "withdrawal") {
+  } else if (
+    isAcceptance ||
+    isEffect ||
+    heading === "procedure" ||
+    heading === "form of reply" ||
+    heading === "withdrawal"
+  ) {
     authorityClass = "constraint_or_qualification";
   } else if (isRulesOfDebate || isCommitteeStage || isPersonalReflections) {
     authorityClass = "analogy_or_support";
+  }
+
+  const content = result.sectionContent.toLowerCase();
+  const exceptionSignals = [
+    "nothing to prevent",
+    "does not prevent",
+    "not prohibited",
+    "may be made as long as",
+    "may be referred to",
+    "cannot see that i should rule out",
+  ];
+  const constraintSignals = [
+    "unless ",
+    "only if",
+    "only where",
+    "would have to be",
+    "should not be curtailed",
+    "depends on",
+  ];
+  const ruleSignals = [
+    "out of order",
+    "not in order",
+    "prohibits",
+    "must not",
+    "may not",
+    "is inappropriate",
+    "are inappropriate",
+    "should not",
+  ];
+
+  let authorityFunction: AuthorityFunction = "context";
+
+  if (isPointsOfOrder || heading === "procedure") {
+    authorityFunction = "procedure";
+  } else if (exceptionSignals.some((signal) => content.includes(signal))) {
+    authorityFunction = "exception";
+  } else if (isEffect) {
+    authorityFunction = "effect";
+  } else if (
+    isAcceptance ||
+    heading === "form of reply" ||
+    heading === "withdrawal" ||
+    constraintSignals.some((signal) => content.includes(signal))
+  ) {
+    authorityFunction = "constraint";
+  } else if (ruleSignals.some((signal) => content.includes(signal))) {
+    authorityFunction = "rule";
+  } else if (authorityClass === "governing_rule") {
+    authorityFunction = "application";
   }
 
   return {
@@ -426,6 +525,7 @@ export function buildAuthorityProfile(
     isAcceptance,
     isEffect,
     authorityClass,
+    authorityFunction,
   };
 }
 
@@ -458,6 +558,15 @@ function classMatches(
   return classes.includes(profile.authorityClass);
 }
 
+function functionMatches(
+  result: ProceduralSearchResult,
+  functions?: AuthorityFunction[],
+): boolean {
+  if (!functions || functions.length === 0) return true;
+  const profile = buildAuthorityProfile(result);
+  return functions.includes(profile.authorityFunction);
+}
+
 function corpusMatches(
   result: ProceduralSearchResult,
   preferredCorpora?: Array<"standing_orders" | "speakers_rulings">,
@@ -476,6 +585,7 @@ function matchesSlot(
     headingMatches(result, slot.headings) &&
     pathMatches(result, slot.pathIncludes) &&
     classMatches(result, slot.classes) &&
+    functionMatches(result, slot.functions) &&
     corpusMatches(result, slot.preferredCorpora)
   );
 }
@@ -579,11 +689,14 @@ function dedupeScoredAuthorities(
 
 function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
   const seen = new Set<string>();
+  const superseded = new Set(
+    concepts.flatMap((concept) => concept.supersedesSlots ?? []),
+  );
   const slots: AuthoritySlotSpec[] = [];
 
   for (const concept of concepts) {
     for (const slot of concept.slots) {
-      if (seen.has(slot.key)) continue;
+      if (superseded.has(slot.key) || seen.has(slot.key)) continue;
       seen.add(slot.key);
       slots.push(slot);
     }
@@ -592,15 +705,32 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
   return slots;
 }
 
+function scorePreferredText(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+): number {
+  const preferred = slot.preferredTextIncludes ?? [];
+  if (preferred.length === 0) return 0;
+
+  const content = result.sectionContent.toLowerCase();
+  const matchCount = preferred.filter((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  ).length;
+
+  return matchCount * 120;
+}
+
 function scoreSlotMatches(
   result: ProceduralSearchResult,
   slots: AuthoritySlotSpec[],
 ): { matchedSlotKeys: string[]; slotBoost: number } {
-  const matchedSlotKeys = slots
-    .filter((slot) => matchesSlot(result, slot))
-    .map((slot) => slot.key);
+  const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
+  const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
 
-  const slotBoost = matchedSlotKeys.length * 180;
+  const slotBoost = matchedSlots.reduce(
+    (score, slot) => score + 180 + scorePreferredText(result, slot),
+    0,
+  );
 
   return { matchedSlotKeys, slotBoost };
 }
@@ -634,6 +764,7 @@ function passesMinimumThreshold(item: ScoredAuthority): boolean {
 export function selectFinalAuthorities(input: {
   searches: SearchExecution[];
   question: string;
+  plannerQueries?: string[];
   maxAuthorities?: number;
 }): {
   finalAuthorities: ProceduralSearchResult[];
@@ -642,7 +773,7 @@ export function selectFinalAuthorities(input: {
   blueprintSlots: string[];
   selectedSlotMatches: SlotMatch[];
 } {
-  const frame = deriveFrame(input.question);
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
   const slots = buildBlueprintSlots(frame.activeConcepts);
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
@@ -683,16 +814,12 @@ export function selectFinalAuthorities(input: {
   const familyCounts = new Map<string, number>();
   const selectedSlotMatches: SlotMatch[] = [];
 
+  const defaultMaxAuthorities =
+    slots.length > 0 ? Math.max(2, Math.min(slots.length, 8)) : 4;
+
   const computedMaxAuthorities = Math.min(
     10,
-    Math.max(
-      4,
-      input.maxAuthorities ??
-        frame.activeConcepts.reduce(
-          (sum, concept) => sum + (concept.defaultPackContribution ?? 0),
-          2,
-        ),
-    ),
+    Math.max(1, input.maxAuthorities ?? defaultMaxAuthorities),
   );
 
   function canAdd(item: ScoredAuthority): boolean {
@@ -1003,32 +1130,78 @@ export function pruneValidatedAnswerContent(input: {
   };
 }
 
-function classifyConstraint(result: ProceduralSearchResult): string | null {
-  const heading = (result.heading ?? "").toLowerCase();
-  const path = result.path.join(" > ").toLowerCase();
-  const text = result.sectionContent.toLowerCase();
+export type AnswerClaim = {
+  id: string;
+  lineIndex: number;
+  text: string;
+  citations: string[];
+};
 
-  if (
-    heading.includes("acceptance") ||
-    heading.includes("speaker") ||
-    text.includes("if the speaker accepts") ||
-    text.includes("speaker accepts") ||
-    path.includes("chairperson")
-  ) {
-    return `This appears to depend on whether the Chair accepts the procedural step [${result.citationLabel}].`;
+export function extractAnswerClaims(answerText: string): AnswerClaim[] {
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const claims: AnswerClaim[] = [];
+  let currentSection: string | null = null;
+
+  for (const [lineIndex, rawLine] of lines.entries()) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (isStructuralHeading(trimmed)) {
+      currentSection = trimmed;
+      continue;
+    }
+
+    if (!isSubstantiveSection(currentSection)) continue;
+
+    const citations = extractInlineCitations(trimmed);
+    if (citations.length === 0) continue;
+
+    claims.push({
+      id: `claim-${lineIndex + 1}`,
+      lineIndex,
+      text: trimmed,
+      citations,
+    });
   }
 
-  if (
-    heading.includes("effect") ||
-    text.includes("unless ") ||
-    text.includes("except ") ||
-    heading === "form of reply" ||
-    heading === "withdrawal"
-  ) {
-    return `This authority states conditions or consequences that may constrain what happens next [${result.citationLabel}].`;
+  return claims;
+}
+
+export function pruneUnsupportedAnswerClaims(input: {
+  answerText: string;
+  claims: AnswerClaim[];
+  unsupportedClaimIds: string[];
+}): {
+  prunedText: string;
+  removedClaims: AnswerClaim[];
+} {
+  const unsupported = new Set(input.unsupportedClaimIds);
+  const removedClaims = input.claims.filter((claim) =>
+    unsupported.has(claim.id),
+  );
+
+  if (removedClaims.length === 0) {
+    return {
+      prunedText: normalizeAnswerFormatting(input.answerText),
+      removedClaims: [],
+    };
   }
 
-  return null;
+  const removedLineIndexes = new Set(
+    removedClaims.map((claim) => claim.lineIndex),
+  );
+
+  const lines = normalizeAnswerFormatting(input.answerText).split("\n");
+  const prunedText = lines
+    .filter((_, lineIndex) => !removedLineIndexes.has(lineIndex))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    prunedText,
+    removedClaims,
+  };
 }
 
 function classifyOption(result: ProceduralSearchResult): string {
@@ -1043,179 +1216,35 @@ export function buildFallbackAnswer(input: {
   effectiveCorpus: string | null;
   fallbackReason: string;
 }): string {
-  const frame = deriveFrame(input.question);
-  const top = input.authorities.slice(0, 6);
-  const best = top.length > 0 ? top : [];
-  const cite = (index: number) =>
-    best[index] ? `[${best[index].citationLabel}]` : "";
+  const best = input.authorities.slice(0, 4);
+  const citations = best.map((authority) => `[${authority.citationLabel}]`);
 
-  let bottomLine =
-    `The retrieved authorities are too thin to give a confident procedural answer ${cite(
-      0,
-    )}`.trim();
-
-  let whatThisMeans =
-    `The retrieval plan ran, but the result set was not strong enough to support a reliable grounded answer ${cite(
-      0,
-    )}`.trim();
-
-  let options: string[] =
+  const bottomLine =
     best.length > 0
-      ? best.slice(0, 3).map(classifyOption)
+      ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
+      : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
+
+  const whatThisMeans =
+    best.length > 0
+      ? `Treat the authorities below as inspection points rather than as a synthesised answer ${citations[0]}.`
+      : "A narrower search or additional authority is needed before giving procedural advice.";
+
+  const options =
+    best.length > 0
+      ? best.map(classifyOption)
       : ["No clearly relevant authority was retrieved."];
 
-  let constraints: string[] = best
-    .map(classifyConstraint)
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 2);
-
-  if (best.length > 0) {
-    if (frame.closure) {
-      bottomLine =
-        `A member can argue by point of order that accepting a closure motion would be unreasonable at that stage, but the Chair decides whether closure is accepted [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      whatThisMeans =
-        `The strongest grounded pack combines the closure rule, the acceptance constraint, and the point-of-order mechanism, rather than a freestanding rule that debate must continue [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      options = [
-        `Wait for a closure motion to be formally moved, then immediately take a point of order and argue that accepting it would be unreasonable at that stage [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-        `Frame the objection around whether closure should be accepted, not around a claimed absolute right to continue debating [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 2)
-          .join("] [")}].`,
-      ];
-
-      constraints = [
-        `The Chair retains the acceptance judgment, so the move is arguable but not self-executing [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 2)
-          .join("] [")}].`,
-      ];
-    } else if (frame.memberConduct) {
-      bottomLine =
-        `The strongest grounded move is to frame the issue as a personal reflection against a member and ask the Chair to intervene [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      whatThisMeans =
-        `The most on-point authorities are the personal-reflections rulings, especially Against members, Procedure, and, where relevant, Allegations of racism [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      options = [
-        `Rise immediately on a point of order and frame the conduct as a personal reflection against a member [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-        `Ask the Chair to require the remark to be withdrawn or checked procedurally rather than debating the politics of the remark itself [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-      ];
-
-      constraints = [
-        `The safest path is procedural intervention through the Chair, not a broad substantive argument about motives [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-      ];
-    } else if (frame.committeeOfWhole && frame.relevancy) {
-      bottomLine =
-        `The grounded position is that the Chair can be asked, by point of order, to require relevance in committee of the whole [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      whatThisMeans =
-        `The strongest pack combines the Chairperson ruling, Relevancy, and the point-of-order mechanism, all directed to the matter before the committee [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`;
-
-      options = [
-        `Take a point of order and ask the Chair to require the member or Minister to address the matter before the committee [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-        `Frame the intervention as one of relevance and committee control, not merely dissatisfaction with the quality of the answer [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-      ];
-
-      constraints = [
-        `The Chair controls proceedings in committee, so the practical question is whether the Chair accepts the relevance point [${best
-          .map((a) => a.citationLabel)
-          .slice(0, 3)
-          .join("] [")}].`,
-      ];
-    }
-  }
-
-  const optionsText = options.map((item) => `- ${item}`).join("\n");
-  const constraintsText = constraints.map((item) => `- ${item}`).join("\n");
-
-  const orderedForInspection = [...best].sort((a, b) => {
-    const pa = buildAuthorityProfile(a);
-    const pb = buildAuthorityProfile(b);
-
-    const weight = (profile: AuthorityProfile) => {
-      switch (profile.authorityClass) {
-        case "governing_rule":
-          return 1;
-        case "procedural_mechanism":
-          return 2;
-        case "chair_control":
-          return 3;
-        case "constraint_or_qualification":
-          return 4;
-        case "analogy_or_support":
-          return 5;
-        default:
-          return 6;
-      }
-    };
-
-    const wa = weight(pa);
-    const wb = weight(pb);
-
-    if (wa !== wb) return wa - wb;
-    return b.rank - a.rank;
-  });
-
   const inspect =
-    orderedForInspection.length > 0
-      ? orderedForInspection
-          .slice(0, 4)
+    best.length > 0
+      ? best
           .map((authority) => {
             const profile = buildAuthorityProfile(authority);
-            const label =
-              profile.authorityClass === "governing_rule"
-                ? "governing rule"
-                : profile.authorityClass === "chair_control"
-                  ? "chair control"
-                  : profile.authorityClass === "procedural_mechanism"
-                    ? "procedural mechanism"
-                    : profile.authorityClass === "constraint_or_qualification"
-                      ? "constraint or qualification"
-                      : "supporting authority";
+            const why =
+              authority.heading?.trim() ||
+              authority.path[authority.path.length - 1] ||
+              "Relevant authority";
 
-            const why = authority.heading?.trim()
-              ? authority.heading
-              : authority.path[authority.path.length - 1] ?? "Relevant authority";
-
-            return `- [${authority.citationLabel}] ${why} (${label})`;
+            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
           })
           .join("\n")
       : "- No strong authorities were retrieved.";
@@ -1228,17 +1257,12 @@ export function buildFallbackAnswer(input: {
     whatThisMeans,
     "",
     "Your options:",
-    optionsText || "- No clearly relevant authority was retrieved.",
+    ...options.map((option) => `- ${option}`),
     "",
     "Risks or constraints:",
-    constraintsText ||
-      `- This fallback cannot confidently synthesise constraints beyond the retrieved authorities ${
-        cite(0) || ""
-      }`.trim(),
+    `- A substantive answer was withheld because validation failed: ${input.fallbackReason}`,
     "",
     "Best authorities to inspect or cite:",
     inspect,
-    "",
-    `- Fallback note: the AI draft was not trusted because validation failed (${input.fallbackReason}).`,
   ].join("\n");
 }

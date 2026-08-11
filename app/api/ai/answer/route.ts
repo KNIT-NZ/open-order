@@ -3,7 +3,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { generateJson, streamText } from "@/lib/ai/gemini";
 import {
+  ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
   ANSWER_STREAM_SYSTEM_PROMPT,
+  buildAnswerClaimValidationPrompt,
   buildGroundedAnswerPrompt,
   buildSearchPlannerPrompt,
   SEARCH_PLANNER_SYSTEM_PROMPT,
@@ -13,8 +15,10 @@ import {
   buildAuthorityPayload,
   buildFallbackAnswer,
   expandPlannerQueries,
+  extractAnswerClaims,
   inferConcepts,
   normalizeAnswerFormatting,
+  pruneUnsupportedAnswerClaims,
   pruneValidatedAnswerContent,
   rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
@@ -41,6 +45,16 @@ const searchPlanSchema = z.object({
   preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
   searchQueries: z.array(z.string().min(1)).min(1).max(3),
   notes: z.string(),
+});
+
+const claimValidationSchema = z.object({
+  claims: z.array(
+    z.object({
+      id: z.string().min(1),
+      supported: z.boolean(),
+      reason: z.string(),
+    }),
+  ),
 });
 
 type SearchPlan = z.infer<typeof searchPlanSchema>;
@@ -86,8 +100,6 @@ export async function POST(request: NextRequest) {
   const { question, corpus = null } = parsed.data;
   const encoder = new TextEncoder();
 
-  const inferredConcepts = inferConcepts(question);
-
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (event: string, data: unknown) => {
@@ -114,6 +126,7 @@ export async function POST(request: NextRequest) {
 
           const plan = searchPlanSchema.parse(rawPlan);
           const effectiveCorpus = corpus ?? plan.preferredCorpus ?? null;
+          const inferredConcepts = inferConcepts(question, plan.searchQueries);
 
           send("plan", plan);
 
@@ -134,7 +147,7 @@ export async function POST(request: NextRequest) {
             const searchResponse = await searchProceduralAuthorities({
               q: query,
               corpus: effectiveCorpus,
-              limit: 6,
+              limit: 10,
               offset: 0,
             });
 
@@ -148,6 +161,7 @@ export async function POST(request: NextRequest) {
           const selected = selectFinalAuthorities({
             searches,
             question,
+            plannerQueries: plan.searchQueries,
           });
 
           const finalAuthorities = selected.finalAuthorities;
@@ -249,7 +263,7 @@ export async function POST(request: NextRequest) {
                     results: finalAuthorities,
                   },
                 ],
-                concepts: inferredConcepts.map((c) => c.id),
+                concepts: selected.activeConceptIds,
               }),
               temperature: 0.2,
             });
@@ -257,6 +271,7 @@ export async function POST(request: NextRequest) {
             let finalAnswer = normalizeAnswerFormatting(draftedAnswer);
             let rewriteNote: string | null = null;
             let pruneNote: string | null = null;
+            let claimValidationNote: string | null = null;
 
             if (!finalAnswer.trim()) {
               const fallbackReason = "The AI draft was empty.";
@@ -291,6 +306,11 @@ export async function POST(request: NextRequest) {
               controller.close();
               return;
             }
+
+            send("stage", {
+              key: "validating",
+              label: "Validating grounded claims",
+            });
 
             const initialPrune = pruneValidatedAnswerContent({
               answerText: finalAnswer,
@@ -458,6 +478,126 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            const answerClaims = extractAnswerClaims(finalAnswer);
+
+            if (answerClaims.length === 0) {
+              const fallbackReason =
+                "The AI draft contained no substantive grounded claims after deterministic validation.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "No grounded claims remained; returning fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
+            const rawClaimValidation = await generateJson<unknown>({
+              systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+              prompt: buildAnswerClaimValidationPrompt({
+                claims: answerClaims,
+                authorities: finalAuthorities,
+              }),
+              temperature: 0,
+            });
+
+            const claimValidation =
+              claimValidationSchema.parse(rawClaimValidation);
+            const validationById = new Map(
+              claimValidation.claims.map((claim) => [claim.id, claim]),
+            );
+
+            const unsupportedClaimIds = answerClaims
+              .filter(
+                (claim) => validationById.get(claim.id)?.supported !== true,
+              )
+              .map((claim) => claim.id);
+
+            if (unsupportedClaimIds.length > 0) {
+              const semanticPrune = pruneUnsupportedAnswerClaims({
+                answerText: finalAnswer,
+                claims: answerClaims,
+                unsupportedClaimIds,
+              });
+
+              finalAnswer = normalizeAnswerFormatting(
+                semanticPrune.prunedText,
+              );
+              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+            }
+
+            const remainingClaims = extractAnswerClaims(finalAnswer);
+            const finalCitationValidation = validateAnswerCitations({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+            const finalMentionValidation = validateAnswerAuthorityMentions({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            if (
+              remainingClaims.length === 0 ||
+              !finalCitationValidation.ok ||
+              !finalMentionValidation.ok
+            ) {
+              const fallbackReason =
+                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Semantic validation rejected the draft; returning fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
             send("answer_delta", { text: finalAnswer });
 
             send("done", {
@@ -471,6 +611,7 @@ export async function POST(request: NextRequest) {
               authorities: authorityPayload,
               rewriteNote,
               pruneNote,
+              claimValidationNote,
             });
 
             controller.close();

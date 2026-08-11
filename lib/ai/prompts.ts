@@ -141,6 +141,84 @@ If the retrieved material is thin or ambiguous, say that explicitly with citatio
 Do not return JSON.
 `.trim();
 
+export const ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT = `
+You are a strict evidence-entailment validator for New Zealand parliamentary procedure.
+
+You are NOT answering the user's question.
+You are checking whether each drafted claim is actually supported by the authority or authorities cited on that claim.
+
+Validation rules:
+- Assess only the proposition as written.
+- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
+- A merely related authority is not enough.
+- Reject claims that turn a narrow example into a general rule.
+- Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
+- Reject claims that treat an exception or qualification as the governing rule.
+- Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
+- Multiple cited authorities may be read together, but only the cited authorities may support the claim.
+- Be conservative. If support is ambiguous, mark the claim unsupported.
+- Do not rewrite claims.
+- Do not add authorities.
+- Return JSON only.
+
+Return this exact shape:
+{
+  "claims": [
+    {
+      "id": "claim-1",
+      "supported": true,
+      "reason": "brief explanation"
+    }
+  ]
+}
+`.trim();
+
+export function buildAnswerClaimValidationPrompt(input: {
+  claims: Array<{
+    id: string;
+    text: string;
+    citations: string[];
+  }>;
+  authorities: ProceduralSearchResult[];
+}): string {
+  const citedLabels = new Set(
+    input.claims.flatMap((claim) => claim.citations),
+  );
+
+  const renderedAuthorities = input.authorities
+    .filter((authority) => citedLabels.has(authority.citationLabel))
+    .map(
+      (authority) => `
+[${authority.citationLabel}]
+Heading: ${authority.heading ?? "None"}
+Path: ${authority.path.join(" > ")}
+Text:
+${authority.sectionContent}
+`.trim(),
+    )
+    .join("\n\n");
+
+  const renderedClaims = input.claims
+    .map(
+      (claim) => `
+${claim.id}
+Claim: ${claim.text}
+Cited authorities: ${claim.citations.map((citation) => `[${citation}]`).join(" ")}
+`.trim(),
+    )
+    .join("\n\n");
+
+  return `
+Claims to validate:
+${renderedClaims}
+
+Available cited authority text:
+${renderedAuthorities || "No cited authority text was available."}
+
+Return one validation result for every claim ID above.
+`.trim();
+}
+
 export function buildSearchPlannerPrompt(input: {
   question: string;
   corpus?: string | null;
@@ -183,6 +261,7 @@ Corpus: ${result.documentCorpus}
 Document title: ${result.documentTitle}
 Heading: ${result.heading ?? "None"}
 Authority class: ${authorityProfile.authorityClass}
+Authority function: ${authorityProfile.authorityFunction}
 Path: ${result.path.join(" > ")}
 Path text: ${result.pathText}
 Source URL: ${result.sourceUrl ?? "None"}
