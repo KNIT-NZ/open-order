@@ -57,6 +57,8 @@ export type ScoredAuthority = {
   queryIndex: number;
   routeBoost: number;
   slotBoost: number;
+  preferredTextBoost: number;
+  bridgeBoost: number;
   adjustedRank: number;
   matchedSlotKeys: string[];
 };
@@ -475,6 +477,7 @@ export function buildAuthorityProfile(
     "would have to be",
     "should not be curtailed",
     "depends on",
+    "cannot take exception",
   ];
   const ruleSignals = [
     "out of order",
@@ -489,7 +492,7 @@ export function buildAuthorityProfile(
 
   let authorityFunction: AuthorityFunction = "context";
 
-  if (isPointsOfOrder || heading === "procedure") {
+  if (isPointsOfOrder) {
     authorityFunction = "procedure";
   } else if (exceptionSignals.some((signal) => content.includes(signal))) {
     authorityFunction = "exception";
@@ -502,6 +505,8 @@ export function buildAuthorityProfile(
     constraintSignals.some((signal) => content.includes(signal))
   ) {
     authorityFunction = "constraint";
+  } else if (heading === "procedure") {
+    authorityFunction = "procedure";
   } else if (ruleSignals.some((signal) => content.includes(signal))) {
     authorityFunction = "rule";
   } else if (authorityClass === "governing_rule") {
@@ -705,6 +710,15 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
   return slots;
 }
 
+function countTextMatches(
+  content: string,
+  phrases: string[],
+): number {
+  return phrases.filter((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  ).length;
+}
+
 function scorePreferredText(
   result: ProceduralSearchResult,
   slot: AuthoritySlotSpec,
@@ -713,26 +727,75 @@ function scorePreferredText(
   if (preferred.length === 0) return 0;
 
   const content = result.sectionContent.toLowerCase();
-  const matchCount = preferred.filter((phrase) =>
-    content.includes(phrase.toLowerCase()),
-  ).length;
+  return countTextMatches(content, preferred) * 120;
+}
 
-  return matchCount * 120;
+function contextPreferenceApplies(
+  activeConceptIds: Set<string>,
+  preference: NonNullable<AuthoritySlotSpec["contextualTextPreferences"]>[number],
+): boolean {
+  const any = preference.whenAnyConcepts ?? [];
+  const all = preference.whenAllConcepts ?? [];
+
+  const anySatisfied =
+    any.length === 0 || any.some((conceptId) => activeConceptIds.has(conceptId));
+  const allSatisfied =
+    all.length === 0 || all.every((conceptId) => activeConceptIds.has(conceptId));
+
+  return anySatisfied && allSatisfied;
+}
+
+function scoreContextualBridgeText(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+  activeConceptIds: Set<string>,
+): number {
+  const preferences = slot.contextualTextPreferences ?? [];
+  if (preferences.length === 0) return 0;
+
+  const content = result.sectionContent.toLowerCase();
+
+  return preferences.reduce((score, preference) => {
+    if (!contextPreferenceApplies(activeConceptIds, preference)) {
+      return score;
+    }
+
+    const matches = countTextMatches(content, preference.textIncludes);
+    const bonusPerMatch = preference.bonusPerMatch ?? 180;
+    return score + matches * bonusPerMatch;
+  }, 0);
 }
 
 function scoreSlotMatches(
   result: ProceduralSearchResult,
   slots: AuthoritySlotSpec[],
-): { matchedSlotKeys: string[]; slotBoost: number } {
+  activeConceptIds: Set<string>,
+): {
+  matchedSlotKeys: string[];
+  slotBoost: number;
+  preferredTextBoost: number;
+  bridgeBoost: number;
+} {
   const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
   const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
 
-  const slotBoost = matchedSlots.reduce(
-    (score, slot) => score + 180 + scorePreferredText(result, slot),
+  const slotBoost = matchedSlots.length * 180;
+  const preferredTextBoost = matchedSlots.reduce(
+    (score, slot) => score + scorePreferredText(result, slot),
+    0,
+  );
+  const bridgeBoost = matchedSlots.reduce(
+    (score, slot) =>
+      score + scoreContextualBridgeText(result, slot, activeConceptIds),
     0,
   );
 
-  return { matchedSlotKeys, slotBoost };
+  return {
+    matchedSlotKeys,
+    slotBoost,
+    preferredTextBoost,
+    bridgeBoost,
+  };
 }
 
 function profileFamilyKey(item: ScoredAuthority): string {
@@ -775,6 +838,7 @@ export function selectFinalAuthorities(input: {
 } {
   const frame = deriveFrame(input.question, input.plannerQueries ?? []);
   const slots = buildBlueprintSlots(frame.activeConcepts);
+  const activeConceptIds = new Set(frame.activeConcepts.map((concept) => concept.id));
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
     (search, queryIndex) =>
@@ -785,7 +849,12 @@ export function selectFinalAuthorities(input: {
           frame,
         });
 
-        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
+        const {
+          matchedSlotKeys,
+          slotBoost,
+          preferredTextBoost,
+          bridgeBoost,
+        } = scoreSlotMatches(result, slots, activeConceptIds);
 
         return {
           result,
@@ -793,7 +862,14 @@ export function selectFinalAuthorities(input: {
           queryIndex,
           routeBoost,
           slotBoost,
-          adjustedRank: result.rank + routeBoost + slotBoost,
+          preferredTextBoost,
+          bridgeBoost,
+          adjustedRank:
+            result.rank +
+            routeBoost +
+            slotBoost +
+            preferredTextBoost +
+            bridgeBoost,
           matchedSlotKeys,
         };
       }),
@@ -802,6 +878,9 @@ export function selectFinalAuthorities(input: {
   const sorted = [...flattened].sort((a, b) => {
     if (b.adjustedRank !== a.adjustedRank)
       return b.adjustedRank - a.adjustedRank;
+    if (b.bridgeBoost !== a.bridgeBoost) return b.bridgeBoost - a.bridgeBoost;
+    if (b.preferredTextBoost !== a.preferredTextBoost)
+      return b.preferredTextBoost - a.preferredTextBoost;
     if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
     if (b.routeBoost !== a.routeBoost) return b.routeBoost - a.routeBoost;
     if (b.result.rank !== a.result.rank) return b.result.rank - a.result.rank;

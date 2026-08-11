@@ -1,0 +1,4716 @@
+============================================================================================
+BUNDLE METADATA
+============================================================================================
+OPEN ORDER PROCEDURAL BRIDGE PATCH EVIDENCE
+Generated: 2026-08-12T09:34:57.109119+12:00
+Repository: /Users/brendan/Projects/KNIT/open-order
+Branch: main
+HEAD: 2bed4662bf0617cd8189752454dd5bb45317a6d4
+
+Audit target:
+  Correct interaction between:
+    - personal_reflection / allegation_of_racism
+    - point_of_order
+    - authority-function / slot selection
+    - tactic-oriented answer composition
+    - claim-entailment validation and diagnostics
+
+Observed regression to explain:
+  48/7 correctly limits taking personal exception on behalf of another member,
+  but the selected point-of-order authority was generic 21/5 rather than a
+  stronger rules-of-debate enforcement authority such as 22/5.
+
+No env files, credentials, secrets, generated output, or dependency trees
+are intentionally included.
+
+============================================================================================
+GIT STATUS
+============================================================================================
+## main...origin/main
+
+============================================================================================
+CURRENT UNSTAGED DIFF — AUDIT SCOPE
+============================================================================================
+(none)
+
+============================================================================================
+CURRENT STAGED DIFF — AUDIT SCOPE
+============================================================================================
+(none)
+
+============================================================================================
+TARGETED RG — CONCEPT INFERENCE AND PLANNER ADOPTION
+============================================================================================
+exit=0
+lib/procedural-reasoning.ts:65:  activeConcepts: ProceduralConcept[];
+lib/procedural-reasoning.ts:152:  plannerQueries: string[],
+lib/procedural-reasoning.ts:155:    plannerQueries.map(normalizeConceptTrigger).filter(Boolean),
+lib/procedural-reasoning.ts:161:    const triggers = concept.plannerTriggers ?? [];
+lib/procedural-reasoning.ts:172:export function inferConcepts(
+lib/procedural-reasoning.ts:174:  plannerQueries: string[] = [],
+lib/procedural-reasoning.ts:195:    const concept = getConceptById("point_of_order");
+lib/procedural-reasoning.ts:258:  addPlannerTriggeredConcepts(matched, plannerQueries);
+lib/procedural-reasoning.ts:265:  plannerQueries: string[] = [],
+lib/procedural-reasoning.ts:267:  const activeConcepts = inferConcepts(question, plannerQueries);
+lib/procedural-reasoning.ts:268:  const ids = new Set(activeConcepts.map((c) => c.id));
+lib/procedural-reasoning.ts:271:    activeConcepts,
+lib/procedural-reasoning.ts:356:  plannerQueries: string[];
+lib/procedural-reasoning.ts:359:  const frame = deriveFrame(input.question, input.plannerQueries);
+lib/procedural-reasoning.ts:360:  const seedQueries = [...input.plannerQueries];
+lib/procedural-reasoning.ts:361:  const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
+lib/procedural-reasoning.ts:372:      frame.activeConcepts.some((c) => c.id === "allegation_of_racism")
+lib/procedural-reasoning.ts:387:    frame.activeConcepts.some((c) => c.id === "point_of_order") ||
+lib/procedural-reasoning.ts:767:  plannerQueries?: string[];
+lib/procedural-reasoning.ts:772:  activeConceptIds: string[];
+lib/procedural-reasoning.ts:776:  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+lib/procedural-reasoning.ts:777:  const slots = buildBlueprintSlots(frame.activeConcepts);
+lib/procedural-reasoning.ts:827:    if (isExcludedByConcepts(item.result, frame.activeConcepts)) return false;
+lib/procedural-reasoning.ts:870:    activeConceptIds: frame.activeConcepts.map((c) => c.id),
+app/api/ai/answer/route.ts:19:  inferConcepts,
+app/api/ai/answer/route.ts:129:          const inferredConcepts = inferConcepts(question, plan.searchQueries);
+app/api/ai/answer/route.ts:140:            plannerQueries: plan.searchQueries,
+app/api/ai/answer/route.ts:164:            plannerQueries: plan.searchQueries,
+app/api/ai/answer/route.ts:178:            activeConcepts: selected.activeConceptIds,
+app/api/ai/answer/route.ts:266:                concepts: selected.activeConceptIds,
+lib/concept-registry.ts:9:  | "point_of_order"
+lib/concept-registry.ts:38:  plannerTriggers?: string[];
+lib/concept-registry.ts:39:  preferredQueries: string[];
+lib/concept-registry.ts:55:    plannerTriggers: ["closure motion", "acceptance of closure motion"],
+lib/concept-registry.ts:56:    preferredQueries: ["closure motion", "acceptance of closure motion"],
+lib/concept-registry.ts:78:    id: "point_of_order",
+lib/concept-registry.ts:80:    plannerTriggers: ["point of order", "points of order"],
+lib/concept-registry.ts:81:    preferredQueries: ["point of order"],
+lib/concept-registry.ts:85:        key: "point_of_order_mechanism",
+lib/concept-registry.ts:107:    plannerTriggers: ["personal reflections", "against members"],
+lib/concept-registry.ts:108:    preferredQueries: ["personal reflections", "against members", "procedure"],
+lib/concept-registry.ts:134:    plannerTriggers: ["allegations of racism"],
+lib/concept-registry.ts:135:    preferredQueries: ["allegations of racism"],
+lib/concept-registry.ts:152:    plannerTriggers: ["relevancy"],
+lib/concept-registry.ts:153:    preferredQueries: ["relevancy"],
+lib/concept-registry.ts:168:    plannerTriggers: ["chairperson"],
+lib/concept-registry.ts:169:    preferredQueries: ["chairperson"],
+lib/concept-registry.ts:184:    plannerTriggers: ["committee of the whole", "committee stage"],
+lib/concept-registry.ts:185:    preferredQueries: ["committee of the whole", "chairperson"],
+lib/concept-registry.ts:204:    plannerTriggers: ["withdrawal"],
+lib/concept-registry.ts:205:    preferredQueries: ["withdrawal", "procedure"],
+lib/concept-registry.ts:237:    plannerTriggers: ["accountability to the house", "form of reply"],
+lib/concept-registry.ts:238:    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
+lib/concept-registry.ts:269:    preferredQueries: ["withdrawal", "procedure", "point of order"],
+
+============================================================================================
+TARGETED RG — BLUEPRINT / AUTHORITY FUNCTION / SLOT SELECTION
+============================================================================================
+exit=0
+app/api/ai/answer/route.ts:24:  selectFinalAuthorities,
+app/api/ai/answer/route.ts:161:          const selected = selectFinalAuthorities({
+app/api/ai/answer/route.ts:208:              slotBoost: item.slotBoost,
+app/api/ai/answer/route.ts:210:              matchedSlots: item.matchedSlotKeys,
+lib/ai/prompts.ts:264:Authority function: ${authorityProfile.authorityFunction}
+lib/procedural-reasoning.ts:7:  type AuthoritySlotSpec,
+lib/procedural-reasoning.ts:25:export type AuthorityFunction =
+lib/procedural-reasoning.ts:51:  authorityFunction: AuthorityFunction;
+lib/procedural-reasoning.ts:59:  slotBoost: number;
+lib/procedural-reasoning.ts:61:  matchedSlotKeys: string[];
+lib/procedural-reasoning.ts:490:  let authorityFunction: AuthorityFunction = "context";
+lib/procedural-reasoning.ts:493:    authorityFunction = "procedure";
+lib/procedural-reasoning.ts:495:    authorityFunction = "exception";
+lib/procedural-reasoning.ts:497:    authorityFunction = "effect";
+lib/procedural-reasoning.ts:504:    authorityFunction = "constraint";
+lib/procedural-reasoning.ts:506:    authorityFunction = "rule";
+lib/procedural-reasoning.ts:508:    authorityFunction = "application";
+lib/procedural-reasoning.ts:528:    authorityFunction,
+lib/procedural-reasoning.ts:563:  functions?: AuthorityFunction[],
+lib/procedural-reasoning.ts:567:  return functions.includes(profile.authorityFunction);
+lib/procedural-reasoning.ts:582:  slot: AuthoritySlotSpec,
+lib/procedural-reasoning.ts:690:function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
+lib/procedural-reasoning.ts:693:    concepts.flatMap((concept) => concept.supersedesSlots ?? []),
+lib/procedural-reasoning.ts:695:  const slots: AuthoritySlotSpec[] = [];
+lib/procedural-reasoning.ts:710:  slot: AuthoritySlotSpec,
+lib/procedural-reasoning.ts:712:  const preferred = slot.preferredTextIncludes ?? [];
+lib/procedural-reasoning.ts:725:  slots: AuthoritySlotSpec[],
+lib/procedural-reasoning.ts:726:): { matchedSlotKeys: string[]; slotBoost: number } {
+lib/procedural-reasoning.ts:727:  const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
+lib/procedural-reasoning.ts:728:  const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
+lib/procedural-reasoning.ts:730:  const slotBoost = matchedSlots.reduce(
+lib/procedural-reasoning.ts:735:  return { matchedSlotKeys, slotBoost };
+lib/procedural-reasoning.ts:746:  slots: AuthoritySlotSpec[],
+lib/procedural-reasoning.ts:748:  const matched = slots.find((slot) => item.matchedSlotKeys.includes(slot.key));
+lib/procedural-reasoning.ts:753:  if (item.slotBoost > 0) return true;
+lib/procedural-reasoning.ts:764:export function selectFinalAuthorities(input: {
+lib/procedural-reasoning.ts:777:  const slots = buildBlueprintSlots(frame.activeConcepts);
+lib/procedural-reasoning.ts:788:        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
+lib/procedural-reasoning.ts:795:          slotBoost,
+lib/procedural-reasoning.ts:796:          adjustedRank: result.rank + routeBoost + slotBoost,
+lib/procedural-reasoning.ts:797:          matchedSlotKeys,
+lib/procedural-reasoning.ts:805:    if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
+lib/procedural-reasoning.ts:842:    for (const slotKey of item.matchedSlotKeys) {
+lib/procedural-reasoning.ts:853:      (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
+lib/procedural-reasoning.ts:1247:            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
+lib/concept-registry.ts:4:  AuthorityFunction,
+lib/concept-registry.ts:19:export type AuthoritySlotSpec = {
+lib/concept-registry.ts:22:  functions?: AuthorityFunction[];
+lib/concept-registry.ts:26:  preferredTextIncludes?: string[];
+lib/concept-registry.ts:40:  slots: AuthoritySlotSpec[];
+lib/concept-registry.ts:42:  supersedesSlots?: string[];
+lib/concept-registry.ts:89:        preferredTextIncludes: [
+lib/concept-registry.ts:136:    supersedesSlots: ["personal_reflection_rule"],
+
+============================================================================================
+TARGETED RG — CLAIM / ENTAILMENT VALIDATION
+============================================================================================
+exit=0
+lib/chunking.ts:111:  const semanticBoundaryRegex =
+lib/chunking.ts:117:  while ((match = semanticBoundaryRegex.exec(text)) !== null) {
+lib/chunking.ts:179:  const semanticBlocks = splitSemanticBlocks(text);
+lib/chunking.ts:180:  if (semanticBlocks.length === 0) {
+lib/chunking.ts:184:  const normalizedBlocks = semanticBlocks.flatMap((block) =>
+app/api/ai/answer/route.ts:21:  pruneUnsupportedAnswerClaims,
+app/api/ai/answer/route.ts:22:  pruneValidatedAnswerContent,
+app/api/ai/answer/route.ts:50:const claimValidationSchema = z.object({
+app/api/ai/answer/route.ts:51:  claims: z.array(
+app/api/ai/answer/route.ts:54:      supported: z.boolean(),
+app/api/ai/answer/route.ts:274:            let claimValidationNote: string | null = null;
+app/api/ai/answer/route.ts:312:              label: "Validating grounded claims",
+app/api/ai/answer/route.ts:315:            const initialPrune = pruneValidatedAnswerContent({
+app/api/ai/answer/route.ts:322:              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+app/api/ai/answer/route.ts:327:                "The AI draft could not be validated after pruning unsupported content.";
+app/api/ai/answer/route.ts:415:              const secondPrune = pruneValidatedAnswerContent({
+app/api/ai/answer/route.ts:422:              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
+app/api/ai/answer/route.ts:444:                      ? "unknown validation failure"
+app/api/ai/answer/route.ts:485:                "The AI draft contained no substantive grounded claims after deterministic validation.";
+app/api/ai/answer/route.ts:497:                label: "No grounded claims remained; returning fallback",
+app/api/ai/answer/route.ts:521:                claims: answerClaims,
+app/api/ai/answer/route.ts:527:            const claimValidation =
+app/api/ai/answer/route.ts:528:              claimValidationSchema.parse(rawClaimValidation);
+app/api/ai/answer/route.ts:529:            const validationById = new Map(
+app/api/ai/answer/route.ts:530:              claimValidation.claims.map((claim) => [claim.id, claim]),
+app/api/ai/answer/route.ts:533:            const unsupportedClaimIds = answerClaims
+app/api/ai/answer/route.ts:535:                (claim) => validationById.get(claim.id)?.supported !== true,
+app/api/ai/answer/route.ts:537:              .map((claim) => claim.id);
+app/api/ai/answer/route.ts:539:            if (unsupportedClaimIds.length > 0) {
+app/api/ai/answer/route.ts:540:              const semanticPrune = pruneUnsupportedAnswerClaims({
+app/api/ai/answer/route.ts:542:                claims: answerClaims,
+app/api/ai/answer/route.ts:543:                unsupportedClaimIds,
+app/api/ai/answer/route.ts:547:                semanticPrune.prunedText,
+app/api/ai/answer/route.ts:549:              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+app/api/ai/answer/route.ts:568:                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
+app/api/ai/answer/route.ts:580:                label: "Semantic validation rejected the draft; returning fallback",
+app/api/ai/answer/route.ts:614:              claimValidationNote,
+lib/ai/prompts.ts:102:Be tactically useful, but never overclaim.
+lib/ai/prompts.ts:106:- Every substantive claim must be grounded in the retrieved authority pack.
+lib/ai/prompts.ts:145:You are a strict evidence-entailment validator for New Zealand parliamentary procedure.
+lib/ai/prompts.ts:148:You are checking whether each drafted claim is actually supported by the authority or authorities cited on that claim.
+lib/ai/prompts.ts:152:- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
+lib/ai/prompts.ts:154:- Reject claims that turn a narrow example into a general rule.
+lib/ai/prompts.ts:155:- Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
+lib/ai/prompts.ts:156:- Reject claims that treat an exception or qualification as the governing rule.
+lib/ai/prompts.ts:157:- Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
+lib/ai/prompts.ts:158:- Multiple cited authorities may be read together, but only the cited authorities may support the claim.
+lib/ai/prompts.ts:159:- Be conservative. If support is ambiguous, mark the claim unsupported.
+lib/ai/prompts.ts:160:- Do not rewrite claims.
+lib/ai/prompts.ts:166:  "claims": [
+lib/ai/prompts.ts:168:      "id": "claim-1",
+lib/ai/prompts.ts:169:      "supported": true,
+lib/ai/prompts.ts:177:  claims: Array<{
+lib/ai/prompts.ts:185:    input.claims.flatMap((claim) => claim.citations),
+lib/ai/prompts.ts:201:  const renderedClaims = input.claims
+lib/ai/prompts.ts:203:      (claim) => `
+lib/ai/prompts.ts:204:${claim.id}
+lib/ai/prompts.ts:205:Claim: ${claim.text}
+lib/ai/prompts.ts:206:Cited authorities: ${claim.citations.map((citation) => `[${citation}]`).join(" ")}
+lib/ai/prompts.ts:218:Return one validation result for every claim ID above.
+lib/ai/prompts.ts:318:- omit unsupported propositions rather than guessing,
+lib/procedural-reasoning.ts:1070:export function pruneValidatedAnswerContent(input: {
+lib/procedural-reasoning.ts:1142:  const claims: AnswerClaim[] = [];
+lib/procedural-reasoning.ts:1159:    claims.push({
+lib/procedural-reasoning.ts:1160:      id: `claim-${lineIndex + 1}`,
+lib/procedural-reasoning.ts:1167:  return claims;
+lib/procedural-reasoning.ts:1170:export function pruneUnsupportedAnswerClaims(input: {
+lib/procedural-reasoning.ts:1172:  claims: AnswerClaim[];
+lib/procedural-reasoning.ts:1173:  unsupportedClaimIds: string[];
+lib/procedural-reasoning.ts:1178:  const unsupported = new Set(input.unsupportedClaimIds);
+lib/procedural-reasoning.ts:1179:  const removedClaims = input.claims.filter((claim) =>
+lib/procedural-reasoning.ts:1180:    unsupported.has(claim.id),
+lib/procedural-reasoning.ts:1191:    removedClaims.map((claim) => claim.lineIndex),
+lib/procedural-reasoning.ts:1263:    `- A substantive answer was withheld because validation failed: ${input.fallbackReason}`,
+
+============================================================================================
+TARGETED RG — TACTIC / ANSWER INTENT
+============================================================================================
+exit=0
+lib/open-order/format.ts:204:  "Bottom line",
+lib/open-order/format.ts:486:    `Intent: ${input.plan?.intent ?? "None"}`,
+lib/open-order/types.ts:43:  intent:
+lib/open-order/types.ts:48:    | "tactic"
+app/api/ai/answer/route.ts:7:  ANSWER_STREAM_SYSTEM_PROMPT,
+app/api/ai/answer/route.ts:9:  buildGroundedAnswerPrompt,
+app/api/ai/answer/route.ts:36:  intent: z.enum([
+app/api/ai/answer/route.ts:41:    "tactic",
+app/api/ai/answer/route.ts:219:              planIntent: plan.intent,
+app/api/ai/answer/route.ts:255:              systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
+app/api/ai/answer/route.ts:256:              prompt: buildGroundedAnswerPrompt({
+app/api/ai/answer/route.ts:281:                planIntent: plan.intent,
+app/api/ai/answer/route.ts:331:                planIntent: plan.intent,
+app/api/ai/answer/route.ts:372:                planIntent: plan.intent,
+app/api/ai/answer/route.ts:451:                  planIntent: plan.intent,
+app/api/ai/answer/route.ts:489:                planIntent: plan.intent,
+app/api/ai/answer/route.ts:572:                planIntent: plan.intent,
+app/api/ai/answer/route.ts:627:              planIntent: plan.intent,
+lib/ai/prompts.ts:79:- Use "tactic" when the user asks how to stop, counter, shut down, force, challenge, or steer something procedurally.
+lib/ai/prompts.ts:85:- Use "clarification" only when the question is genuinely too indeterminate for a narrower intent.
+lib/ai/prompts.ts:89:  "intent": "explain_rule" | "explain_statement" | "options" | "admissibility" | "tactic" | "compare_authorities" | "clarification",
+lib/ai/prompts.ts:96:export const ANSWER_STREAM_SYSTEM_PROMPT = `
+lib/ai/prompts.ts:102:Be tactically useful, but never overclaim.
+lib/ai/prompts.ts:107:- Every substantive line in "Bottom line", "What this means", and every bullet under "Your options" and "Risks or constraints" should include at least one inline citation.
+lib/ai/prompts.ts:117:  - what is tactically arguable but uncertain.
+lib/ai/prompts.ts:121:Bottom line:
+lib/ai/prompts.ts:127:Your options:
+lib/ai/prompts.ts:237:export function buildGroundedAnswerPrompt(input: {
+lib/ai/prompts.ts:314:- what is tactically possible but uncertain.
+lib/procedural-reasoning.ts:885:    [/^Bottom line\s*:?$/im, "Bottom line:"],
+lib/procedural-reasoning.ts:887:    [/^Your options\s*:?$/im, "Your options:"],
+lib/procedural-reasoning.ts:1040:    "Bottom line:",
+lib/procedural-reasoning.ts:1042:    "Your options:",
+lib/procedural-reasoning.ts:1050:    section === "Bottom line:" ||
+lib/procedural-reasoning.ts:1052:    section === "Your options:" ||
+lib/procedural-reasoning.ts:1253:    "Bottom line:",
+lib/procedural-reasoning.ts:1259:    "Your options:",
+
+============================================================================================
+TARGETED RG — DIAGNOSTIC CONTRACT
+============================================================================================
+exit=0
+lib/open-order/format.ts:431:  const finalAuthoritySelectionText =
+lib/open-order/format.ts:432:    input.finalAuthoritySelection.length > 0
+lib/open-order/format.ts:433:      ? input.finalAuthoritySelection
+lib/open-order/format.ts:504:    finalAuthoritySelectionText,
+lib/open-order/types.ts:118:  finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
+lib/open-order/types.ts:135:  finalAuthoritySelection: AiDiagnosticFinalAuthority[];
+lib/open-order/types.ts:152:  finalAuthoritySelection: [],
+lib/open-order/types.ts:164:  diagnostics: AiDiagnostics;
+app/api/ai/answer/route.ts:50:const claimValidationSchema = z.object({
+app/api/ai/answer/route.ts:175:          send("diagnostics", {
+app/api/ai/answer/route.ts:179:            blueprintSlots: selected.blueprintSlots,
+app/api/ai/answer/route.ts:201:            finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
+app/api/ai/answer/route.ts:213:            selectedSlotMatches: selected.selectedSlotMatches,
+app/api/ai/answer/route.ts:272:            let rewriteNote: string | null = null;
+app/api/ai/answer/route.ts:273:            let pruneNote: string | null = null;
+app/api/ai/answer/route.ts:274:            let claimValidationNote: string | null = null;
+app/api/ai/answer/route.ts:322:              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+app/api/ai/answer/route.ts:422:              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
+app/api/ai/answer/route.ts:527:            const claimValidation =
+app/api/ai/answer/route.ts:528:              claimValidationSchema.parse(rawClaimValidation);
+app/api/ai/answer/route.ts:530:              claimValidation.claims.map((claim) => [claim.id, claim]),
+app/api/ai/answer/route.ts:549:              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+app/api/ai/answer/route.ts:612:              rewriteNote,
+app/api/ai/answer/route.ts:613:              pruneNote,
+app/api/ai/answer/route.ts:614:              claimValidationNote,
+lib/procedural-reasoning.ts:773:  blueprintSlots: string[];
+lib/procedural-reasoning.ts:774:  selectedSlotMatches: SlotMatch[];
+lib/procedural-reasoning.ts:815:  const selectedSlotMatches: SlotMatch[] = [];
+lib/procedural-reasoning.ts:843:      selectedSlotMatches.push({
+lib/procedural-reasoning.ts:871:    blueprintSlots: slots.map((slot) => slot.key),
+lib/procedural-reasoning.ts:872:    selectedSlotMatches,
+
+============================================================================================
+TARGETED RG — PROCEDURAL MECHANISM TERMS
+============================================================================================
+exit=0
+lib/ai/prompts.ts:27:  - "point of order"
+lib/ai/prompts.ts:46:  - "point of order"
+lib/ai/prompts.ts:54:  - prefer queries like "chairperson", "relevancy", "point of order", "committee of the whole"
+lib/ai/prompts.ts:60:  - prefer queries like "accountability to the House", "point of order", and only use "relevancy" if the context is debate rather than replies
+lib/ai/prompts.ts:62:  - prefer queries like "withdrawal", "procedure", and "point of order"
+lib/procedural-reasoning.ts:194:  if (q.includes("point of order")) {
+lib/procedural-reasoning.ts:303:      "point of order",
+lib/procedural-reasoning.ts:307:    "point of order relevancy": ["point of order", "relevancy"],
+lib/procedural-reasoning.ts:318:    return ["chairperson", "relevancy", "point of order"];
+lib/procedural-reasoning.ts:321:  if (q.includes("point of order") && q.includes("relevancy")) {
+lib/procedural-reasoning.ts:322:    return ["point of order", "relevancy"];
+lib/procedural-reasoning.ts:393:    additions.push("point of order");
+lib/procedural-reasoning.ts:419:  const isRulesOfDebate = pathText.includes("rules of debate");
+lib/procedural-reasoning.ts:424:  const isPointsOfOrder = heading === "points of order" || heading === "point of order";
+lib/procedural-reasoning.ts:664:  if (query.includes("point of order") && profile.isPointsOfOrder) boost += 100;
+lib/concept-registry.ts:79:    aliases: ["point of order", "points of order"],
+lib/concept-registry.ts:80:    plannerTriggers: ["point of order", "points of order"],
+lib/concept-registry.ts:81:    preferredQueries: ["point of order"],
+lib/concept-registry.ts:86:        headings: ["points of order", "point of order"],
+lib/concept-registry.ts:90:          "transgressing the rules of debate",
+lib/concept-registry.ts:91:          "breach of the rules",
+lib/concept-registry.ts:238:    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
+lib/concept-registry.ts:269:    preferredQueries: ["withdrawal", "procedure", "point of order"],
+
+============================================================================================
+DISCOVERED CALLERS / IMPORTERS
+============================================================================================
+app/api/ai/answer/route.ts
+lib/ai/prompts.ts
+lib/concept-registry.ts
+lib/open-order/format.ts
+lib/open-order/types.ts
+lib/procedural-reasoning.ts
+
+============================================================================================
+SHA-256 — CURRENT AUDIT FILES
+============================================================================================
+326722a2bc6ed967502769a33dbf3fa9b8a7566a1604f16ec5174e774014c03a  lib/procedural-reasoning.ts
+132425308aa8508f2e8bf123b6638bd8b31bc554286898ede2184f2c4b562b7b  lib/concept-registry.ts
+9cd230a9e4ced024695a76a6fd6b41077f59013a9f7a124378675b5feadcc414  lib/ai/prompts.ts
+4f55d90342488b6062d02ed30010c23be0f0245f7b5d147f386a9a01147be566  app/api/ai/answer/route.ts
+9c753e56de10240e848455a8deaab6cd3ff6bfec333ff800f44584456a8a0e4a  lib/open-order/types.ts
+fd2c04805a04f83767527cb19e10e626ee26dec6870b82869790bfca2e6811b6  lib/open-order/format.ts
+ab9a031bc10bf19b4a863cc33ebb99537f5f201724afeda2ffd8b2a9f872f17d  lib/procedural-search.ts
+863a154b7c562eefe59f89b36f058dd518bec01876ac5ad46ffff0bc90d48c87  lib/ai/gemini.ts
+323da72164ea38d3b358d0f13aad946b25dae7aaf933286822e4159309553abc  package.json
+d0015b2639702f15c4e74a50fe31087cc8cd8515113f41dab0768740846d9d2b  tsconfig.json
+07eba1567e7cfcf34bf732d2cfa9bfe853cf377dad97598bcdbf367754e755c5  eslint.config.mjs
+baa85f59da58b8a0a6fc19748585a0efefa784957366ae081777a441dffca5eb  next.config.mjs
+
+============================================================================================
+COMPLETE SOURCE — lib/procedural-reasoning.ts
+============================================================================================
+// lib/procedural-reasoning.ts
+import type { ProceduralSearchResult } from "@/lib/procedural-search";
+import { cleanQuery } from "@/lib/search-core";
+import {
+  CONCEPT_REGISTRY,
+  type AuthorityExclusionSpec,
+  type AuthoritySlotSpec,
+  type ProceduralConcept,
+} from "./concept-registry";
+
+export type SearchExecution = {
+  query: string;
+  corpus: string | null;
+  results: ProceduralSearchResult[];
+};
+
+export type AuthorityClass =
+  | "governing_rule"
+  | "chair_control"
+  | "procedural_mechanism"
+  | "constraint_or_qualification"
+  | "analogy_or_support"
+  | "miscellaneous";
+
+export type AuthorityFunction =
+  | "rule"
+  | "procedure"
+  | "constraint"
+  | "exception"
+  | "application"
+  | "effect"
+  | "context";
+
+export type AuthorityProfile = {
+  pathText: string;
+  heading: string;
+  isCommitteeOfWhole: boolean;
+  isCommitteeStage: boolean;
+  isRulesOfDebate: boolean;
+  isPersonalReflections: boolean;
+  isAgainstMembers: boolean;
+  isAllegationsOfRacism: boolean;
+  isChairperson: boolean;
+  isPointsOfOrder: boolean;
+  isRelevancy: boolean;
+  isSelectCommitteeChairpersons: boolean;
+  isClosure: boolean;
+  isAcceptance: boolean;
+  isEffect: boolean;
+  authorityClass: AuthorityClass;
+  authorityFunction: AuthorityFunction;
+};
+
+export type ScoredAuthority = {
+  result: ProceduralSearchResult;
+  query: string;
+  queryIndex: number;
+  routeBoost: number;
+  slotBoost: number;
+  adjustedRank: number;
+  matchedSlotKeys: string[];
+};
+
+type DerivedFrame = {
+  activeConcepts: ProceduralConcept[];
+  committeeOfWhole: boolean;
+  memberConduct: boolean;
+  closure: boolean;
+  relevancy: boolean;
+  ministerialAccountability: boolean;
+  retrospectiveDiscipline: boolean;
+};
+
+type SlotMatch = {
+  slotKey: string;
+  citationLabel: string;
+  heading: string | null;
+};
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function firstWords(text: string, wordCount = 10): string {
+  return normalizeWhitespace(text)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, wordCount)
+    .join(" ");
+}
+
+export function buildSourceHref(
+  result: Pick<
+    ProceduralSearchResult,
+    "sourceUrl" | "sourceAnchor" | "sectionContent"
+  >,
+): string | null {
+  if (!result.sourceUrl) return null;
+
+  const content = normalizeWhitespace(result.sectionContent);
+  const textStart = firstWords(content, 10) || null;
+  const baseUrl = result.sourceUrl.split("#")[0];
+  const anchor = result.sourceAnchor ? encodeURI(result.sourceAnchor) : null;
+
+  if (textStart && anchor) {
+    return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;
+  }
+
+  if (textStart) {
+    return `${baseUrl}#:~:text=${encodeURIComponent(textStart)}`;
+  }
+
+  if (anchor) {
+    return `${baseUrl}#${anchor}`;
+  }
+
+  return baseUrl;
+}
+
+export function buildAuthorityPayload(results: ProceduralSearchResult[]) {
+  return results.map((result) => ({
+    sectionId: result.sectionId,
+    sectionKey: result.sectionKey,
+    citationLabel: result.citationLabel,
+    heading: result.heading,
+    path: result.path,
+    documentSlug: result.documentSlug,
+    documentTitle: result.documentTitle,
+    documentCorpus: result.documentCorpus,
+    sourceUrl: result.sourceUrl,
+    sourceAnchor: result.sourceAnchor,
+    sourceHref: buildSourceHref(result),
+    rank: result.rank,
+  }));
+}
+
+function hasAlias(question: string, concept: ProceduralConcept): boolean {
+  const q = question.toLowerCase();
+  return concept.aliases.some((alias) => q.includes(alias));
+}
+
+function getConceptById(id: ProceduralConcept["id"]): ProceduralConcept | null {
+  return CONCEPT_REGISTRY.find((c) => c.id === id) ?? null;
+}
+
+function normalizeConceptTrigger(text: string): string {
+  return cleanQuery(text).toLowerCase();
+}
+
+function addPlannerTriggeredConcepts(
+  matched: Map<string, ProceduralConcept>,
+  plannerQueries: string[],
+): void {
+  const normalizedQueries = new Set(
+    plannerQueries.map(normalizeConceptTrigger).filter(Boolean),
+  );
+
+  if (normalizedQueries.size === 0) return;
+
+  for (const concept of CONCEPT_REGISTRY) {
+    const triggers = concept.plannerTriggers ?? [];
+    if (
+      triggers.some((trigger) =>
+        normalizedQueries.has(normalizeConceptTrigger(trigger)),
+      )
+    ) {
+      matched.set(concept.id, concept);
+    }
+  }
+}
+
+export function inferConcepts(
+  question: string,
+  plannerQueries: string[] = [],
+): ProceduralConcept[] {
+  const q = question.toLowerCase();
+  const matched = new Map<string, ProceduralConcept>();
+
+  for (const concept of CONCEPT_REGISTRY) {
+    if (hasAlias(q, concept)) {
+      matched.set(concept.id, concept);
+    }
+  }
+
+  if (
+    q.includes("question to be put") ||
+    q.includes("question be put") ||
+    q.includes("premature")
+  ) {
+    const concept = getConceptById("closure_motion");
+    if (concept) matched.set(concept.id, concept);
+  }
+
+  if (q.includes("point of order")) {
+    const concept = getConceptById("point_of_order");
+    if (concept) matched.set(concept.id, concept);
+  }
+
+  if (
+    q.includes("committee of the whole") ||
+    q.includes("committee stage")
+  ) {
+    const committee = getConceptById("committee_of_whole");
+    if (committee) matched.set(committee.id, committee);
+
+    const chair = getConceptById("chair_control");
+    if (chair) matched.set(chair.id, chair);
+  }
+
+  if (
+    q.includes("racist") ||
+    q.includes("racism") ||
+    q.includes("country of origin") ||
+    q.includes("right to speak") ||
+    q.includes("ethnicity") ||
+    q.includes("nationality")
+  ) {
+    const personal = getConceptById("personal_reflection");
+    if (personal) matched.set(personal.id, personal);
+
+    const racism = getConceptById("allegation_of_racism");
+    if (racism) matched.set(racism.id, racism);
+  }
+
+  if (
+    q.includes("evasive") ||
+    q.includes("relevancy") ||
+    q.includes("relevant") ||
+    q.includes("back on track")
+  ) {
+    const relevancy = getConceptById("relevancy");
+    if (relevancy) matched.set(relevancy.id, relevancy);
+  }
+
+  if (
+    q.includes("accountability to the house") ||
+    q.includes("account to the house") ||
+    q.includes("avoid directly answering") ||
+    q.includes("non-answer")
+  ) {
+    const accountability = getConceptById("ministerial_accountability");
+    if (accountability) matched.set(accountability.id, accountability);
+  }
+
+  if (
+    q.includes("yesterday") ||
+    q.includes("previous sitting") ||
+    q.includes("require an apology") ||
+    q.includes("require a member to apologise")
+  ) {
+    const retrospective = getConceptById("retrospective_discipline");
+    if (retrospective) matched.set(retrospective.id, retrospective);
+
+    const withdrawal = getConceptById("withdrawal_and_apology");
+    if (withdrawal) matched.set(withdrawal.id, withdrawal);
+  }
+
+  addPlannerTriggeredConcepts(matched, plannerQueries);
+
+  return [...matched.values()];
+}
+
+function deriveFrame(
+  question: string,
+  plannerQueries: string[] = [],
+): DerivedFrame {
+  const activeConcepts = inferConcepts(question, plannerQueries);
+  const ids = new Set(activeConcepts.map((c) => c.id));
+
+  return {
+    activeConcepts,
+    committeeOfWhole: ids.has("committee_of_whole"),
+    memberConduct:
+      ids.has("personal_reflection") || ids.has("allegation_of_racism"),
+    closure: ids.has("closure_motion"),
+    relevancy: ids.has("relevancy"),
+    ministerialAccountability: ids.has("ministerial_accountability"),
+    retrospectiveDiscipline: ids.has("retrospective_discipline"),
+  };
+}
+
+function canonicalizeProceduralQuery(query: string): string[] {
+  const q = cleanQuery(query).toLowerCase();
+  if (!q) return [];
+
+  const aliases: Record<string, string[]> = {
+    "question to be put": ["closure motion"],
+    "question be put": ["closure motion"],
+    premature: ["closure motion", "acceptance of closure motion"],
+    evasive: ["relevancy"],
+    evasiveness: ["relevancy"],
+    "back on track": ["relevancy"],
+    "country of origin": ["personal reflections", "against members"],
+    nationality: ["personal reflections", "against members"],
+    ethnicity: ["personal reflections", "against members"],
+    racist: ["allegations of racism"],
+    racism: ["allegations of racism"],
+    "borderline racist": ["allegations of racism"],
+    "right to speak": ["against members", "personal reflections"],
+    "chairperson relevancy committee of the whole": [
+      "chairperson",
+      "relevancy",
+      "point of order",
+    ],
+    "committee of the whole chairperson": ["chairperson"],
+    "chairperson relevancy": ["chairperson", "relevancy"],
+    "point of order relevancy": ["point of order", "relevancy"],
+    "relevancy committee of the whole": ["relevancy", "chairperson"],
+  };
+
+  if (aliases[q]) return aliases[q];
+
+  if (
+    q.includes("committee of the whole") &&
+    q.includes("chairperson") &&
+    q.includes("relevancy")
+  ) {
+    return ["chairperson", "relevancy", "point of order"];
+  }
+
+  if (q.includes("point of order") && q.includes("relevancy")) {
+    return ["point of order", "relevancy"];
+  }
+
+  if (q.includes("chairperson") && q.includes("relevancy")) {
+    return ["chairperson", "relevancy"];
+  }
+
+  return [query];
+}
+
+function uniqQueries(queries: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const raw of queries) {
+    const canonicalized = canonicalizeProceduralQuery(raw);
+
+    for (const candidate of canonicalized) {
+      const query = cleanQuery(candidate);
+      if (!query) continue;
+
+      const key = query.toLowerCase();
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      output.push(query);
+    }
+  }
+
+  return output;
+}
+
+export function expandPlannerQueries(input: {
+  question: string;
+  plannerQueries: string[];
+  effectiveCorpus: string | null;
+}): string[] {
+  const frame = deriveFrame(input.question, input.plannerQueries);
+  const seedQueries = [...input.plannerQueries];
+  const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
+
+  const additions: string[] = [];
+
+  if (frame.closure) {
+    additions.push("closure motion", "acceptance of closure motion");
+  }
+
+  if (frame.memberConduct) {
+    additions.push("personal reflections", "against members");
+    if (
+      frame.activeConcepts.some((c) => c.id === "allegation_of_racism")
+    ) {
+      additions.push("allegations of racism");
+    }
+  }
+
+  if (frame.committeeOfWhole) {
+    additions.push("chairperson");
+  }
+
+  if (frame.relevancy) {
+    additions.push("relevancy");
+  }
+
+  if (
+    frame.activeConcepts.some((c) => c.id === "point_of_order") ||
+    frame.closure ||
+    frame.committeeOfWhole ||
+    frame.ministerialAccountability ||
+    frame.retrospectiveDiscipline
+  ) {
+    additions.push("point of order");
+  }
+
+  if (frame.ministerialAccountability) {
+    additions.push("accountability to the House", "form of reply");
+  }
+
+  if (frame.retrospectiveDiscipline) {
+    additions.push("withdrawal", "procedure");
+  }
+
+  return uniqQueries([...seedQueries, ...conceptQueries, ...additions]).slice(
+    0,
+    6,
+  );
+}
+
+export function buildAuthorityProfile(
+  result: ProceduralSearchResult,
+): AuthorityProfile {
+  const pathText = result.path.join(" > ").toLowerCase();
+  const heading = (result.heading ?? "").toLowerCase();
+
+  const isCommitteeOfWhole = pathText.includes("committees of the whole house");
+  const isCommitteeStage =
+    pathText.includes("committee stage") || pathText.includes("amendments");
+  const isRulesOfDebate = pathText.includes("rules of debate");
+  const isPersonalReflections = pathText.includes("personal reflections");
+  const isAgainstMembers = heading === "against members";
+  const isAllegationsOfRacism = heading === "allegations of racism";
+  const isChairperson = heading === "chairperson";
+  const isPointsOfOrder = heading === "points of order" || heading === "point of order";
+  const isRelevancy = heading === "relevancy" || pathText.includes("relevancy");
+  const isSelectCommitteeChairpersons =
+    pathText.includes("chairpersons of select committees") ||
+    pathText.includes("questions to other members");
+  const isClosure =
+    heading.includes("closure") || pathText.includes("closure of debate");
+  const isAcceptance =
+    heading.includes("acceptance") ||
+    pathText.includes("acceptance of closure motion");
+  const isEffect =
+    heading.includes("effect") || pathText.includes("effect of carrying");
+
+  let authorityClass: AuthorityClass = "miscellaneous";
+
+  if (isPointsOfOrder) {
+    authorityClass = "procedural_mechanism";
+  } else if (isChairperson) {
+    authorityClass = "chair_control";
+  } else if (
+    isAgainstMembers ||
+    isAllegationsOfRacism ||
+    isRelevancy ||
+    isClosure
+  ) {
+    authorityClass = "governing_rule";
+  } else if (
+    isAcceptance ||
+    isEffect ||
+    heading === "procedure" ||
+    heading === "form of reply" ||
+    heading === "withdrawal"
+  ) {
+    authorityClass = "constraint_or_qualification";
+  } else if (isRulesOfDebate || isCommitteeStage || isPersonalReflections) {
+    authorityClass = "analogy_or_support";
+  }
+
+  const content = result.sectionContent.toLowerCase();
+  const exceptionSignals = [
+    "nothing to prevent",
+    "does not prevent",
+    "not prohibited",
+    "may be made as long as",
+    "may be referred to",
+    "cannot see that i should rule out",
+  ];
+  const constraintSignals = [
+    "unless ",
+    "only if",
+    "only where",
+    "would have to be",
+    "should not be curtailed",
+    "depends on",
+  ];
+  const ruleSignals = [
+    "out of order",
+    "not in order",
+    "prohibits",
+    "must not",
+    "may not",
+    "is inappropriate",
+    "are inappropriate",
+    "should not",
+  ];
+
+  let authorityFunction: AuthorityFunction = "context";
+
+  if (isPointsOfOrder || heading === "procedure") {
+    authorityFunction = "procedure";
+  } else if (exceptionSignals.some((signal) => content.includes(signal))) {
+    authorityFunction = "exception";
+  } else if (isEffect) {
+    authorityFunction = "effect";
+  } else if (
+    isAcceptance ||
+    heading === "form of reply" ||
+    heading === "withdrawal" ||
+    constraintSignals.some((signal) => content.includes(signal))
+  ) {
+    authorityFunction = "constraint";
+  } else if (ruleSignals.some((signal) => content.includes(signal))) {
+    authorityFunction = "rule";
+  } else if (authorityClass === "governing_rule") {
+    authorityFunction = "application";
+  }
+
+  return {
+    pathText,
+    heading,
+    isCommitteeOfWhole,
+    isCommitteeStage,
+    isRulesOfDebate,
+    isPersonalReflections,
+    isAgainstMembers,
+    isAllegationsOfRacism,
+    isChairperson,
+    isPointsOfOrder,
+    isRelevancy,
+    isSelectCommitteeChairpersons,
+    isClosure,
+    isAcceptance,
+    isEffect,
+    authorityClass,
+    authorityFunction,
+  };
+}
+
+function headingMatches(
+  result: ProceduralSearchResult,
+  headings?: string[],
+): boolean {
+  if (!headings || headings.length === 0) return true;
+  const heading = (result.heading ?? "").toLowerCase();
+  return headings.some((candidate) => heading === candidate.toLowerCase());
+}
+
+function pathMatches(
+  result: ProceduralSearchResult,
+  pathIncludes?: string[],
+): boolean {
+  if (!pathIncludes || pathIncludes.length === 0) return true;
+  const pathText = result.path.join(" > ").toLowerCase();
+  return pathIncludes.some((candidate) =>
+    pathText.includes(candidate.toLowerCase()),
+  );
+}
+
+function classMatches(
+  result: ProceduralSearchResult,
+  classes?: AuthorityClass[],
+): boolean {
+  if (!classes || classes.length === 0) return true;
+  const profile = buildAuthorityProfile(result);
+  return classes.includes(profile.authorityClass);
+}
+
+function functionMatches(
+  result: ProceduralSearchResult,
+  functions?: AuthorityFunction[],
+): boolean {
+  if (!functions || functions.length === 0) return true;
+  const profile = buildAuthorityProfile(result);
+  return functions.includes(profile.authorityFunction);
+}
+
+function corpusMatches(
+  result: ProceduralSearchResult,
+  preferredCorpora?: Array<"standing_orders" | "speakers_rulings">,
+): boolean {
+  if (!preferredCorpora || preferredCorpora.length === 0) return true;
+  return preferredCorpora.includes(
+    result.documentCorpus as "standing_orders" | "speakers_rulings",
+  );
+}
+
+function matchesSlot(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+): boolean {
+  return (
+    headingMatches(result, slot.headings) &&
+    pathMatches(result, slot.pathIncludes) &&
+    classMatches(result, slot.classes) &&
+    functionMatches(result, slot.functions) &&
+    corpusMatches(result, slot.preferredCorpora)
+  );
+}
+
+function matchesExclusion(
+  result: ProceduralSearchResult,
+  exclusion: AuthorityExclusionSpec,
+): boolean {
+  return (
+    headingMatches(result, exclusion.headings) &&
+    pathMatches(result, exclusion.pathIncludes)
+  );
+}
+
+function isExcludedByConcepts(
+  result: ProceduralSearchResult,
+  concepts: ProceduralConcept[],
+): boolean {
+  return concepts.some((concept) =>
+    (concept.exclusions ?? []).some((exclusion) =>
+      matchesExclusion(result, exclusion),
+    ),
+  );
+}
+
+function scoreContextualAuthority(input: {
+  result: ProceduralSearchResult;
+  query: string;
+  frame: DerivedFrame;
+}): number {
+  const profile = buildAuthorityProfile(input.result);
+  const query = input.query.toLowerCase();
+
+  let boost = 0;
+
+  if (input.frame.committeeOfWhole) {
+    if (profile.isCommitteeOfWhole) boost += 120;
+    if (profile.isChairperson && profile.isCommitteeOfWhole) boost += 140;
+    if (profile.isSelectCommitteeChairpersons) boost -= 260;
+  }
+
+  if (input.frame.memberConduct) {
+    if (profile.isPersonalReflections) boost += 140;
+    if (profile.isAgainstMembers) boost += 160;
+    if (profile.isAllegationsOfRacism) boost += 180;
+    if (profile.heading === "procedure" && profile.isPersonalReflections)
+      boost += 120;
+    if (profile.pathText.includes("judiciary")) boost -= 180;
+    if (profile.pathText.includes("questions to ministers and members"))
+      boost -= 180;
+  }
+
+  if (input.frame.closure) {
+    if (profile.heading.includes("closure")) boost += 140;
+    if (profile.pathText.includes("closure of debate")) boost += 120;
+    if (profile.isPointsOfOrder) boost += 60;
+  }
+
+  if (input.frame.relevancy) {
+    if (profile.isRelevancy) boost += 130;
+    if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 100;
+  }
+
+  if (input.frame.ministerialAccountability) {
+    if (profile.heading === "accountability to the house") boost += 170;
+    if (profile.heading === "form of reply") boost += 150;
+    if (profile.isPointsOfOrder) boost += 80;
+  }
+
+  if (input.frame.retrospectiveDiscipline) {
+    if (profile.heading === "withdrawal") boost += 170;
+    if (profile.heading === "procedure") boost += 130;
+    if (profile.isPointsOfOrder) boost += 70;
+  }
+
+  if (query.includes("point of order") && profile.isPointsOfOrder) boost += 100;
+  if (query.includes("relevancy") && profile.isRelevancy) boost += 90;
+  if (query.includes("chairperson") && profile.isChairperson) boost += 90;
+  if (query.includes("against members") && profile.isAgainstMembers) boost += 110;
+  if (query.includes("allegations of racism") && profile.isAllegationsOfRacism)
+    boost += 120;
+  if (query.includes("closure motion") && profile.isClosure) boost += 100;
+
+  return boost;
+}
+
+function dedupeScoredAuthorities(
+  results: ScoredAuthority[],
+): ScoredAuthority[] {
+  const seen = new Set<string>();
+  const output: ScoredAuthority[] = [];
+
+  for (const item of results) {
+    if (seen.has(item.result.sectionId)) continue;
+    seen.add(item.result.sectionId);
+    output.push(item);
+  }
+
+  return output;
+}
+
+function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
+  const seen = new Set<string>();
+  const superseded = new Set(
+    concepts.flatMap((concept) => concept.supersedesSlots ?? []),
+  );
+  const slots: AuthoritySlotSpec[] = [];
+
+  for (const concept of concepts) {
+    for (const slot of concept.slots) {
+      if (superseded.has(slot.key) || seen.has(slot.key)) continue;
+      seen.add(slot.key);
+      slots.push(slot);
+    }
+  }
+
+  return slots;
+}
+
+function scorePreferredText(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+): number {
+  const preferred = slot.preferredTextIncludes ?? [];
+  if (preferred.length === 0) return 0;
+
+  const content = result.sectionContent.toLowerCase();
+  const matchCount = preferred.filter((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  ).length;
+
+  return matchCount * 120;
+}
+
+function scoreSlotMatches(
+  result: ProceduralSearchResult,
+  slots: AuthoritySlotSpec[],
+): { matchedSlotKeys: string[]; slotBoost: number } {
+  const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
+  const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
+
+  const slotBoost = matchedSlots.reduce(
+    (score, slot) => score + 180 + scorePreferredText(result, slot),
+    0,
+  );
+
+  return { matchedSlotKeys, slotBoost };
+}
+
+function profileFamilyKey(item: ScoredAuthority): string {
+  const heading = (item.result.heading ?? "none").toLowerCase();
+  const pathTail = item.result.path.slice(-2).join(" > ").toLowerCase();
+  return `${heading}::${pathTail}`;
+}
+
+function slotMaxForItem(
+  item: ScoredAuthority,
+  slots: AuthoritySlotSpec[],
+): number {
+  const matched = slots.find((slot) => item.matchedSlotKeys.includes(slot.key));
+  return matched?.maxMatches ?? 2;
+}
+
+function passesMinimumThreshold(item: ScoredAuthority): boolean {
+  if (item.slotBoost > 0) return true;
+  if (item.routeBoost > 0) return true;
+  if (item.adjustedRank >= 120) return true;
+  if (item.result.matchSignals.exactSectionKeyMatch) return true;
+  if (item.result.matchSignals.exactCitationMatch) return true;
+  if (item.result.matchSignals.exactHeadingMatch) return true;
+  if (item.result.matchSignals.headingPhraseMatch) return true;
+  if (item.result.matchSignals.pathPhraseMatch) return true;
+  return false;
+}
+
+export function selectFinalAuthorities(input: {
+  searches: SearchExecution[];
+  question: string;
+  plannerQueries?: string[];
+  maxAuthorities?: number;
+}): {
+  finalAuthorities: ProceduralSearchResult[];
+  scoredAuthorities: ScoredAuthority[];
+  activeConceptIds: string[];
+  blueprintSlots: string[];
+  selectedSlotMatches: SlotMatch[];
+} {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
+
+  const flattened: ScoredAuthority[] = input.searches.flatMap(
+    (search, queryIndex) =>
+      search.results.map((result) => {
+        const routeBoost = scoreContextualAuthority({
+          result,
+          query: search.query,
+          frame,
+        });
+
+        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
+
+        return {
+          result,
+          query: search.query,
+          queryIndex,
+          routeBoost,
+          slotBoost,
+          adjustedRank: result.rank + routeBoost + slotBoost,
+          matchedSlotKeys,
+        };
+      }),
+  );
+
+  const sorted = [...flattened].sort((a, b) => {
+    if (b.adjustedRank !== a.adjustedRank)
+      return b.adjustedRank - a.adjustedRank;
+    if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
+    if (b.routeBoost !== a.routeBoost) return b.routeBoost - a.routeBoost;
+    if (b.result.rank !== a.result.rank) return b.result.rank - a.result.rank;
+    return a.result.citationLabel.localeCompare(b.result.citationLabel);
+  });
+
+  const deduped = dedupeScoredAuthorities(sorted);
+  const selected: ScoredAuthority[] = [];
+  const seen = new Set<string>();
+  const familyCounts = new Map<string, number>();
+  const selectedSlotMatches: SlotMatch[] = [];
+
+  const defaultMaxAuthorities =
+    slots.length > 0 ? Math.max(2, Math.min(slots.length, 8)) : 4;
+
+  const computedMaxAuthorities = Math.min(
+    10,
+    Math.max(1, input.maxAuthorities ?? defaultMaxAuthorities),
+  );
+
+  function canAdd(item: ScoredAuthority): boolean {
+    if (seen.has(item.result.sectionId)) return false;
+    if (isExcludedByConcepts(item.result, frame.activeConcepts)) return false;
+    if (!passesMinimumThreshold(item)) return false;
+
+    const key = profileFamilyKey(item);
+    const count = familyCounts.get(key) ?? 0;
+    return count < slotMaxForItem(item, slots);
+  }
+
+  function add(item: ScoredAuthority) {
+    selected.push(item);
+    seen.add(item.result.sectionId);
+
+    const key = profileFamilyKey(item);
+    familyCounts.set(key, (familyCounts.get(key) ?? 0) + 1);
+
+    for (const slotKey of item.matchedSlotKeys) {
+      selectedSlotMatches.push({
+        slotKey,
+        citationLabel: item.result.citationLabel,
+        heading: item.result.heading,
+      });
+    }
+  }
+
+  for (const slot of slots) {
+    const candidate = deduped.find(
+      (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
+    );
+    if (candidate) add(candidate);
+  }
+
+  for (const item of deduped) {
+    if (selected.length >= computedMaxAuthorities) break;
+    if (!canAdd(item)) continue;
+    add(item);
+  }
+
+  return {
+    finalAuthorities: selected.map((item) => ({
+      ...item.result,
+      rank: item.adjustedRank,
+    })),
+    scoredAuthorities: selected,
+    activeConceptIds: frame.activeConcepts.map((c) => c.id),
+    blueprintSlots: slots.map((slot) => slot.key),
+    selectedSlotMatches,
+  };
+}
+
+export function normalizeAnswerFormatting(text: string): string {
+  const normalized = text
+    .replace(/^\*\s+/gm, "- ")
+    .replace(/^\*\*\s+/gm, "- ")
+    .replace(/^\*\s{2,}/gm, "- ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+
+  const headingMap: Array<[RegExp, string]> = [
+    [/^Bottom line\s*:?$/im, "Bottom line:"],
+    [/^What this means\s*:?$/im, "What this means:"],
+    [/^Your options\s*:?$/im, "Your options:"],
+    [/^Risks(?: or)? constraints\s*:?$/im, "Risks or constraints:"],
+    [/^Best authorities to inspect(?: or cite)?\s*:?$/im, "Best authorities to inspect or cite:"],
+  ];
+
+  return headingMap.reduce(
+    (acc, [pattern, replacement]) => acc.replace(pattern, replacement),
+    normalized,
+  );
+}
+
+function extractInlineCitations(answerText: string): string[] {
+  const matches = answerText.match(/\[[^\]]+\]/g) ?? [];
+  return matches.map((match) => match.slice(1, -1).trim()).filter(Boolean);
+}
+
+function looksLikeEmbeddedAuthorityReference(citation: string): boolean {
+  const lower = citation.toLowerCase();
+
+  return (
+    lower.includes("mentioned in") ||
+    lower.includes("referred to in") ||
+    lower.includes("cited in") ||
+    /\bso\s+\d+/i.test(citation) ||
+    /\bstanding order\s+\d+/i.test(citation)
+  );
+}
+
+function isCitationAllowed(cited: string, allowedLabels: Set<string>): boolean {
+  if (allowedLabels.has(cited)) return true;
+
+  for (const label of allowedLabels) {
+    if (
+      cited === label ||
+      cited.startsWith(`${label}(`) ||
+      cited.startsWith(`${label} `) ||
+      cited.startsWith(`${label},`) ||
+      cited.startsWith(`${label};`) ||
+      cited.startsWith(`${label}:`)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function stripBracketedCitations(text: string): string {
+  return text.replace(/\[[^\]]+\]/g, " ");
+}
+
+function normalizeAuthorityMention(text: string): string {
+  return text
+    .replace(/^standing order\s+/i, "SO ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function validateAnswerAuthorityMentions(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): { ok: true } | { ok: false; invalidAuthorityMentions: string[] } {
+  const allowed = new Set(
+    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
+  );
+
+  const prose = stripBracketedCitations(input.answerText);
+
+  const matches = [
+    ...new Set(
+      prose.match(/\b(?:standing order|so)\s+\d+[a-z]?|\b\d+\/\d+\b/gi) ?? [],
+    ),
+  ];
+
+  const invalid = matches.filter((m) => {
+    const normalized = normalizeAuthorityMention(m);
+    return !allowed.has(normalized);
+  });
+
+  if (invalid.length > 0) {
+    return { ok: false, invalidAuthorityMentions: invalid };
+  }
+
+  return { ok: true };
+}
+
+export function rewriteForbiddenAuthorityMentions(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): {
+  rewrittenText: string;
+  removedMentions: string[];
+} {
+  const allowed = new Set(
+    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
+  );
+
+  const pattern = /\b(?:standing order|so)\s+\d+[a-z]?|\b\d+\/\d+\b/gi;
+  const removed: string[] = [];
+
+  const rewritten = input.answerText.replace(pattern, (match) => {
+    const normalized = normalizeAuthorityMention(match);
+
+    if (allowed.has(normalized)) {
+      return match;
+    }
+
+    removed.push(match);
+    return "the retrieved authority";
+  });
+
+  return {
+    rewrittenText: rewritten,
+    removedMentions: [...new Set(removed)],
+  };
+}
+
+export function validateAnswerCitations(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): { ok: true } | { ok: false; invalidCitations: string[] } {
+  const cited = extractInlineCitations(input.answerText);
+  if (cited.length === 0) {
+    return { ok: true };
+  }
+
+  const allowedLabels = new Set(
+    input.authorities.map((authority) => authority.citationLabel),
+  );
+
+  const invalidCitations = [
+    ...new Set(
+      cited.filter(
+        (citation) =>
+          !isCitationAllowed(citation, allowedLabels) ||
+          looksLikeEmbeddedAuthorityReference(citation),
+      ),
+    ),
+  ];
+
+  if (invalidCitations.length > 0) {
+    return {
+      ok: false,
+      invalidCitations,
+    };
+  }
+
+  return { ok: true };
+}
+
+function isStructuralHeading(line: string): boolean {
+  return [
+    "Bottom line:",
+    "What this means:",
+    "Your options:",
+    "Risks or constraints:",
+    "Best authorities to inspect or cite:",
+  ].includes(line.trim());
+}
+
+function isSubstantiveSection(section: string | null): boolean {
+  return (
+    section === "Bottom line:" ||
+    section === "What this means:" ||
+    section === "Your options:" ||
+    section === "Risks or constraints:"
+  );
+}
+
+function lineHasAllowedCitation(
+  line: string,
+  allowedLabels: Set<string>,
+): boolean {
+  const citations = extractInlineCitations(line);
+  if (citations.length === 0) return false;
+  return citations.every((citation) => isCitationAllowed(citation, allowedLabels));
+}
+
+function isLikelyBestAuthorityLine(line: string): boolean {
+  return /^\-\s*\[[^\]]+\]/.test(line.trim()) || /^\-\s*\S+/.test(line.trim());
+}
+
+export function pruneValidatedAnswerContent(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): {
+  prunedText: string;
+  removedLines: string[];
+} {
+  const allowedLabels = new Set(
+    input.authorities.map((authority) => authority.citationLabel),
+  );
+
+  const lines = normalizeAnswerFormatting(input.answerText).split("\n");
+  const kept: string[] = [];
+  const removedLines: string[] = [];
+  let currentSection: string | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimRight();
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      kept.push("");
+      continue;
+    }
+
+    if (isStructuralHeading(trimmed)) {
+      currentSection = trimmed;
+      kept.push(trimmed);
+      continue;
+    }
+
+    if (currentSection === "Best authorities to inspect or cite:") {
+      if (isLikelyBestAuthorityLine(trimmed)) {
+        kept.push(line);
+      } else {
+        removedLines.push(line);
+      }
+      continue;
+    }
+
+    if (isSubstantiveSection(currentSection)) {
+      if (lineHasAllowedCitation(trimmed, allowedLabels)) {
+        kept.push(line);
+      } else {
+        removedLines.push(line);
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  const prunedText = kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    prunedText,
+    removedLines,
+  };
+}
+
+export type AnswerClaim = {
+  id: string;
+  lineIndex: number;
+  text: string;
+  citations: string[];
+};
+
+export function extractAnswerClaims(answerText: string): AnswerClaim[] {
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const claims: AnswerClaim[] = [];
+  let currentSection: string | null = null;
+
+  for (const [lineIndex, rawLine] of lines.entries()) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (isStructuralHeading(trimmed)) {
+      currentSection = trimmed;
+      continue;
+    }
+
+    if (!isSubstantiveSection(currentSection)) continue;
+
+    const citations = extractInlineCitations(trimmed);
+    if (citations.length === 0) continue;
+
+    claims.push({
+      id: `claim-${lineIndex + 1}`,
+      lineIndex,
+      text: trimmed,
+      citations,
+    });
+  }
+
+  return claims;
+}
+
+export function pruneUnsupportedAnswerClaims(input: {
+  answerText: string;
+  claims: AnswerClaim[];
+  unsupportedClaimIds: string[];
+}): {
+  prunedText: string;
+  removedClaims: AnswerClaim[];
+} {
+  const unsupported = new Set(input.unsupportedClaimIds);
+  const removedClaims = input.claims.filter((claim) =>
+    unsupported.has(claim.id),
+  );
+
+  if (removedClaims.length === 0) {
+    return {
+      prunedText: normalizeAnswerFormatting(input.answerText),
+      removedClaims: [],
+    };
+  }
+
+  const removedLineIndexes = new Set(
+    removedClaims.map((claim) => claim.lineIndex),
+  );
+
+  const lines = normalizeAnswerFormatting(input.answerText).split("\n");
+  const prunedText = lines
+    .filter((_, lineIndex) => !removedLineIndexes.has(lineIndex))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    prunedText,
+    removedClaims,
+  };
+}
+
+function classifyOption(result: ProceduralSearchResult): string {
+  const heading = result.heading ?? "Relevant authority";
+  return `Inspect or cite ${heading} to test whether it directly governs the step in issue [${result.citationLabel}].`;
+}
+
+export function buildFallbackAnswer(input: {
+  question: string;
+  planIntent: string;
+  authorities: ProceduralSearchResult[];
+  effectiveCorpus: string | null;
+  fallbackReason: string;
+}): string {
+  const best = input.authorities.slice(0, 4);
+  const citations = best.map((authority) => `[${authority.citationLabel}]`);
+
+  const bottomLine =
+    best.length > 0
+      ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
+      : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
+
+  const whatThisMeans =
+    best.length > 0
+      ? `Treat the authorities below as inspection points rather than as a synthesised answer ${citations[0]}.`
+      : "A narrower search or additional authority is needed before giving procedural advice.";
+
+  const options =
+    best.length > 0
+      ? best.map(classifyOption)
+      : ["No clearly relevant authority was retrieved."];
+
+  const inspect =
+    best.length > 0
+      ? best
+          .map((authority) => {
+            const profile = buildAuthorityProfile(authority);
+            const why =
+              authority.heading?.trim() ||
+              authority.path[authority.path.length - 1] ||
+              "Relevant authority";
+
+            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
+          })
+          .join("\n")
+      : "- No strong authorities were retrieved.";
+
+  return [
+    "Bottom line:",
+    bottomLine,
+    "",
+    "What this means:",
+    whatThisMeans,
+    "",
+    "Your options:",
+    ...options.map((option) => `- ${option}`),
+    "",
+    "Risks or constraints:",
+    `- A substantive answer was withheld because validation failed: ${input.fallbackReason}`,
+    "",
+    "Best authorities to inspect or cite:",
+    inspect,
+  ].join("\n");
+}
+
+============================================================================================
+COMPLETE SOURCE — lib/concept-registry.ts
+============================================================================================
+// lib/concept-registry.ts
+import type {
+  AuthorityClass,
+  AuthorityFunction,
+} from "@/lib/procedural-reasoning";
+
+export type ProceduralConceptId =
+  | "closure_motion"
+  | "point_of_order"
+  | "personal_reflection"
+  | "allegation_of_racism"
+  | "relevancy"
+  | "chair_control"
+  | "committee_of_whole"
+  | "withdrawal_and_apology"
+  | "ministerial_accountability"
+  | "retrospective_discipline";
+
+export type AuthoritySlotSpec = {
+  key: string;
+  classes?: AuthorityClass[];
+  functions?: AuthorityFunction[];
+  headings?: string[];
+  pathIncludes?: string[];
+  preferredCorpora?: Array<"standing_orders" | "speakers_rulings">;
+  preferredTextIncludes?: string[];
+  maxMatches?: number;
+};
+
+export type AuthorityExclusionSpec = {
+  headings?: string[];
+  pathIncludes?: string[];
+};
+
+export type ProceduralConcept = {
+  id: ProceduralConceptId;
+  aliases: string[];
+  plannerTriggers?: string[];
+  preferredQueries: string[];
+  slots: AuthoritySlotSpec[];
+  exclusions?: AuthorityExclusionSpec[];
+  supersedesSlots?: string[];
+  defaultPackContribution?: number;
+};
+
+export const CONCEPT_REGISTRY: ProceduralConcept[] = [
+  {
+    id: "closure_motion",
+    aliases: [
+      "question be put",
+      "question to be put",
+      "closure",
+      "premature closure",
+    ],
+    plannerTriggers: ["closure motion", "acceptance of closure motion"],
+    preferredQueries: ["closure motion", "acceptance of closure motion"],
+    defaultPackContribution: 3,
+    slots: [
+      {
+        key: "closure_governing_rule",
+        headings: ["closure motion"],
+        classes: ["governing_rule"],
+        functions: ["rule", "application"],
+        preferredCorpora: ["standing_orders"],
+        maxMatches: 1,
+      },
+      {
+        key: "closure_qualification",
+        headings: ["acceptance of closure motion", "effect of carrying closure motion"],
+        classes: ["constraint_or_qualification"],
+        functions: ["constraint", "effect"],
+        preferredCorpora: ["standing_orders"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "point_of_order",
+    aliases: ["point of order", "points of order"],
+    plannerTriggers: ["point of order", "points of order"],
+    preferredQueries: ["point of order"],
+    defaultPackContribution: 1,
+    slots: [
+      {
+        key: "point_of_order_mechanism",
+        headings: ["points of order", "point of order"],
+        classes: ["procedural_mechanism"],
+        functions: ["procedure"],
+        preferredTextIncludes: [
+          "transgressing the rules of debate",
+          "breach of the rules",
+          "speaker can take action",
+        ],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "personal_reflection",
+    aliases: [
+      "personal attack",
+      "attack on member",
+      "right to speak",
+      "personal reflection",
+      "personal reflections",
+    ],
+    plannerTriggers: ["personal reflections", "against members"],
+    preferredQueries: ["personal reflections", "against members", "procedure"],
+    defaultPackContribution: 3,
+    slots: [
+      {
+        key: "personal_reflection_rule",
+        pathIncludes: ["personal reflections"],
+        headings: ["against members"],
+        classes: ["governing_rule"],
+        functions: ["rule", "application"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+      {
+        key: "personal_reflection_procedure",
+        pathIncludes: ["personal reflections"],
+        headings: ["procedure"],
+        classes: ["constraint_or_qualification"],
+        functions: ["procedure", "constraint"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "allegation_of_racism",
+    aliases: ["racist", "racism", "country of origin", "ethnicity", "nationality"],
+    plannerTriggers: ["allegations of racism"],
+    preferredQueries: ["allegations of racism"],
+    supersedesSlots: ["personal_reflection_rule"],
+    defaultPackContribution: 2,
+    slots: [
+      {
+        key: "racism_rule",
+        headings: ["allegations of racism"],
+        classes: ["governing_rule"],
+        functions: ["rule", "application"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "relevancy",
+    aliases: ["evasive", "evasiveness", "off topic", "not relevant", "relevancy"],
+    plannerTriggers: ["relevancy"],
+    preferredQueries: ["relevancy"],
+    defaultPackContribution: 2,
+    slots: [
+      {
+        key: "relevancy_rule",
+        headings: ["relevancy"],
+        classes: ["governing_rule"],
+        functions: ["rule", "application"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "chair_control",
+    aliases: ["chair", "chairperson", "speaker control"],
+    plannerTriggers: ["chairperson"],
+    preferredQueries: ["chairperson"],
+    defaultPackContribution: 2,
+    slots: [
+      {
+        key: "chair_control_rule",
+        headings: ["chairperson"],
+        classes: ["chair_control"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "committee_of_whole",
+    aliases: ["committee of the whole", "committee stage"],
+    plannerTriggers: ["committee of the whole", "committee stage"],
+    preferredQueries: ["committee of the whole", "chairperson"],
+    defaultPackContribution: 2,
+    slots: [
+      {
+        key: "committee_of_whole_context",
+        pathIncludes: ["committees of the whole house"],
+        preferredCorpora: ["standing_orders", "speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+    exclusions: [
+      {
+        pathIncludes: ["chairpersons of select committees"],
+      },
+    ],
+  },
+  {
+    id: "withdrawal_and_apology",
+    aliases: ["withdraw", "apologise", "apology", "withdrawal"],
+    plannerTriggers: ["withdrawal"],
+    preferredQueries: ["withdrawal", "procedure"],
+    defaultPackContribution: 2,
+    slots: [
+      {
+        key: "withdrawal_rule",
+        headings: ["withdrawal"],
+        classes: ["constraint_or_qualification", "governing_rule"],
+        functions: ["procedure", "constraint", "rule", "application"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+      {
+        key: "withdrawal_procedure",
+        headings: ["procedure"],
+        classes: ["constraint_or_qualification"],
+        functions: ["procedure", "constraint"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "ministerial_accountability",
+    aliases: [
+      "areas of responsibility",
+      "avoid directly answering",
+      "abdication of responsibility",
+      "account to the house",
+      "accountability to the house",
+      "evasive answer",
+      "non-answer",
+    ],
+    plannerTriggers: ["accountability to the house", "form of reply"],
+    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
+    defaultPackContribution: 3,
+    slots: [
+      {
+        key: "ministerial_accountability_rule",
+        headings: ["accountability to the house"],
+        classes: ["governing_rule"],
+        functions: ["rule", "application"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+      {
+        key: "ministerial_form_of_reply",
+        headings: ["form of reply"],
+        classes: ["constraint_or_qualification"],
+        functions: ["constraint", "rule", "application"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+  {
+    id: "retrospective_discipline",
+    aliases: [
+      "yesterday",
+      "previous sitting",
+      "something that happened in the house yesterday",
+      "require a member to apologise",
+      "require an apology",
+      "apology for something that happened",
+    ],
+    preferredQueries: ["withdrawal", "procedure", "point of order"],
+    defaultPackContribution: 3,
+    slots: [
+      {
+        key: "retrospective_withdrawal",
+        headings: ["withdrawal"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+      {
+        key: "retrospective_procedure",
+        headings: ["procedure"],
+        preferredCorpora: ["speakers_rulings"],
+        maxMatches: 1,
+      },
+    ],
+  },
+];
+
+============================================================================================
+COMPLETE SOURCE — lib/ai/prompts.ts
+============================================================================================
+// lib/ai/prompts.ts
+import type { ProceduralSearchResult } from "@/lib/procedural-search";
+import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
+
+export const SEARCH_PLANNER_SYSTEM_PROMPT = `
+You are an expert assistant for New Zealand parliamentary procedure.
+
+Your job is to interpret naive natural-language questions into a small, efficient procedural search plan.
+
+Important constraints:
+- You are NOT answering the user's question yet.
+- You are ONLY planning targeted retrieval queries.
+- Prefer 1 to 3 search queries total.
+- Queries should be short, canonical, procedural, and retrieval-friendly.
+- Prefer the named procedural concept that is most likely to appear in a Standing Order heading or Speaker's Ruling heading.
+- Avoid vague abstractions such as "Speaker discretion debate" or long natural-language paraphrases.
+- Avoid broad generic queries when a more specific heading-native label is available.
+- If the user paraphrases something said in debate, infer the likely procedural label behind it.
+- If the user asks "what are my options", search for the governing procedure plus acceptance, effect, constraints, and closely related rulings if relevant.
+- Prefer query terms that resemble actual heading labels or subheading labels.
+- Return JSON only.
+
+Standing Orders query style:
+- Good examples:
+  - "closure motion"
+  - "acceptance of closure motion"
+  - "point of order"
+  - "relevancy"
+  - "urgency"
+  - "financial veto"
+  - "personal explanation"
+  - "parliamentary privilege"
+- Avoid:
+  - "question be put too early"
+  - "Speaker discretion debate"
+  - "what happens if debate not finished"
+
+Speakers' Rulings query style:
+- Prefer short heading-native labels such as:
+  - "personal reflections"
+  - "against members"
+  - "procedure"
+  - "unparliamentary language"
+  - "chairperson"
+  - "relevancy"
+  - "point of order"
+  - "accountability to the House"
+  - "form of reply"
+  - "questions to Ministers"
+- When the issue concerns remarks attacking a member personally, especially identity, ethnicity, nationality, or their right to speak:
+  - strongly prefer queries like "personal reflections", "against members", "procedure", "unparliamentary language"
+  - do NOT rely on a broad query like "unparliamentary language" alone if "personal reflections" or "against members" is more on point
+- When the issue concerns evasiveness, lack of relevance, or getting a Minister back on track in committee of the whole:
+  - prefer queries like "chairperson", "relevancy", "point of order", "committee of the whole"
+  - avoid diffuse queries like "committee of the whole debate" unless paired with a more precise procedural label
+- When the issue concerns whether remarks should be withdrawn or the Chair should intervene:
+  - include "procedure" if the relevant corpus is Speakers' Rulings
+  - consider "withdrawal" when apology or retraction is central
+- When the issue concerns Ministers avoiding direct accountability in replies:
+  - prefer queries like "accountability to the House", "point of order", and only use "relevancy" if the context is debate rather than replies
+- When the issue concerns requiring a member to apologise or withdraw for something said in an earlier sitting:
+  - prefer queries like "withdrawal", "procedure", and "point of order"
+  - avoid vague queries like "Speaker's powers" unless no more specific procedural label is available
+- If a question sounds like member conduct rather than a formal rule text, prefer "speakers_rulings" over "standing_orders".
+
+Corpus choice:
+- Choose "standing_orders" when the question is about the formal rule itself or a named Standing Order procedure.
+- Choose "speakers_rulings" when the question is about how the Chair has applied or enforced debate rules in practice.
+- Choose null when both corpora may matter or you are unsure.
+
+Query composition rules:
+- Prefer 2 queries when there is one core procedure and one closely related enforcement or application concept.
+- Prefer 3 queries only when each query adds a distinct procedural angle.
+- Do not repeat near-duplicates.
+- Do not include filler words.
+- Do not include explanatory notes inside the query strings.
+
+Intent mapping:
+- Use "tactic" when the user asks how to stop, counter, shut down, force, challenge, or steer something procedurally.
+- Use "admissibility" when the question is whether something can be said, moved, tabled, or allowed.
+- Use "options" when the user explicitly asks what can be done next.
+- Use "explain_statement" when the user is trying to decode what another member meant procedurally.
+- Use "explain_rule" when the user mainly wants the rule explained.
+- Use "compare_authorities" only when the user is explicitly comparing provisions or sources.
+- Use "clarification" only when the question is genuinely too indeterminate for a narrower intent.
+
+Return this exact shape:
+{
+  "intent": "explain_rule" | "explain_statement" | "options" | "admissibility" | "tactic" | "compare_authorities" | "clarification",
+  "preferredCorpus": "standing_orders" | "speakers_rulings" | null,
+  "searchQueries": ["..."],
+  "notes": "brief note"
+}
+`.trim();
+
+export const ANSWER_STREAM_SYSTEM_PROMPT = `
+You are an expert assistant for New Zealand parliamentary procedure.
+
+You answer ONLY from retrieved parliamentary authorities provided to you.
+You must NOT invent rules, powers, or interpretations that are not grounded in the supplied authorities.
+If the retrieved material is insufficient, say so clearly.
+Be tactically useful, but never overclaim.
+Prefer plain, direct English.
+
+Critical grounding rules:
+- Every substantive claim must be grounded in the retrieved authority pack.
+- Every substantive line in "Bottom line", "What this means", and every bullet under "Your options" and "Risks or constraints" should include at least one inline citation.
+- Use only the exact citation labels provided in the retrieved authorities, for example [SO 89] or [22/5].
+- Do not invent, transform, shorten, renumber, or generalise citation labels.
+- Do not cite or rely on any authority that is not present in the retrieved authority pack, even if it seems obviously relevant from your background knowledge.
+- Do not cite an authority merely because a retrieved ruling mentions, quotes, paraphrases, or refers to it. If an authority is not itself present in the retrieved pack, treat it as unavailable.
+- If you are unsure which authority supports a sentence, omit that sentence.
+- Prefer the most directly on-point authorities over weaker incidental matches.
+- Where relevant, distinguish between:
+  - what the authorities clearly allow,
+  - what appears to depend on the Chair,
+  - what is tactically arguable but uncertain.
+
+Write in this exact structure and punctuation:
+
+Bottom line:
+<1 to 2 short lines, each with inline citations>
+
+What this means:
+<1 to 3 short lines, each with inline citations>
+
+Your options:
+- <option 1 with inline citations>
+- <option 2 with inline citations>
+- <option 3 if relevant, with inline citations>
+
+Risks or constraints:
+- <risk or uncertainty with inline citations>
+- <risk or uncertainty with inline citations>
+
+Best authorities to inspect or cite:
+- <citation> <short reason it matters>
+- <citation> <short reason it matters>
+
+If the retrieved material is thin or ambiguous, say that explicitly with citations.
+Do not return JSON.
+`.trim();
+
+export const ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT = `
+You are a strict evidence-entailment validator for New Zealand parliamentary procedure.
+
+You are NOT answering the user's question.
+You are checking whether each drafted claim is actually supported by the authority or authorities cited on that claim.
+
+Validation rules:
+- Assess only the proposition as written.
+- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
+- A merely related authority is not enough.
+- Reject claims that turn a narrow example into a general rule.
+- Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
+- Reject claims that treat an exception or qualification as the governing rule.
+- Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
+- Multiple cited authorities may be read together, but only the cited authorities may support the claim.
+- Be conservative. If support is ambiguous, mark the claim unsupported.
+- Do not rewrite claims.
+- Do not add authorities.
+- Return JSON only.
+
+Return this exact shape:
+{
+  "claims": [
+    {
+      "id": "claim-1",
+      "supported": true,
+      "reason": "brief explanation"
+    }
+  ]
+}
+`.trim();
+
+export function buildAnswerClaimValidationPrompt(input: {
+  claims: Array<{
+    id: string;
+    text: string;
+    citations: string[];
+  }>;
+  authorities: ProceduralSearchResult[];
+}): string {
+  const citedLabels = new Set(
+    input.claims.flatMap((claim) => claim.citations),
+  );
+
+  const renderedAuthorities = input.authorities
+    .filter((authority) => citedLabels.has(authority.citationLabel))
+    .map(
+      (authority) => `
+[${authority.citationLabel}]
+Heading: ${authority.heading ?? "None"}
+Path: ${authority.path.join(" > ")}
+Text:
+${authority.sectionContent}
+`.trim(),
+    )
+    .join("\n\n");
+
+  const renderedClaims = input.claims
+    .map(
+      (claim) => `
+${claim.id}
+Claim: ${claim.text}
+Cited authorities: ${claim.citations.map((citation) => `[${citation}]`).join(" ")}
+`.trim(),
+    )
+    .join("\n\n");
+
+  return `
+Claims to validate:
+${renderedClaims}
+
+Available cited authority text:
+${renderedAuthorities || "No cited authority text was available."}
+
+Return one validation result for every claim ID above.
+`.trim();
+}
+
+export function buildSearchPlannerPrompt(input: {
+  question: string;
+  corpus?: string | null;
+}): string {
+  return `
+User question:
+${input.question}
+
+Requested corpus filter:
+${input.corpus ?? "none"}
+
+Generate a search plan now.
+`.trim();
+}
+
+export function buildGroundedAnswerPrompt(input: {
+  question: string;
+  corpus?: string | null;
+  concepts?: string[];
+  searches: Array<{
+    query: string;
+    corpus: string | null;
+    results: ProceduralSearchResult[];
+  }>;
+}): string {
+  const renderedSearches = input.searches
+    .map((search, searchIndex) => {
+      const renderedResults =
+        search.results.length === 0
+          ? "No results."
+          : search.results
+              .map((result, resultIndex) => {
+                const authorityProfile = buildAuthorityProfile(result);
+
+                return `
+[Authority ${searchIndex + 1}.${resultIndex + 1}]
+Citation: ${result.citationLabel}
+Section key: ${result.sectionKey}
+Corpus: ${result.documentCorpus}
+Document title: ${result.documentTitle}
+Heading: ${result.heading ?? "None"}
+Authority class: ${authorityProfile.authorityClass}
+Authority function: ${authorityProfile.authorityFunction}
+Path: ${result.path.join(" > ")}
+Path text: ${result.pathText}
+Source URL: ${result.sourceUrl ?? "None"}
+Source anchor: ${result.sourceAnchor ?? "None"}
+Rank: ${result.rank.toFixed(2)}
+Cluster support count: ${result.clusterSupportCount}
+Match signals:
+- exact section key: ${result.matchSignals.exactSectionKeyMatch ? "yes" : "no"}
+- exact citation: ${result.matchSignals.exactCitationMatch ? "yes" : "no"}
+- exact heading: ${result.matchSignals.exactHeadingMatch ? "yes" : "no"}
+- heading phrase: ${result.matchSignals.headingPhraseMatch ? "yes" : "no"}
+- body phrase: ${result.matchSignals.bodyPhraseMatch ? "yes" : "no"}
+- path phrase: ${result.matchSignals.pathPhraseMatch ? "yes" : "no"}
+Text:
+${result.sectionContent}
+`.trim();
+              })
+              .join("\n\n");
+
+      return `
+[Search ${searchIndex + 1}]
+Query: ${search.query}
+Corpus: ${search.corpus ?? "none"}
+
+${renderedResults}
+`.trim();
+    })
+    .join("\n\n====================\n\n");
+
+  return `
+User question:
+${input.question}
+
+Requested corpus filter:
+${input.corpus ?? "none"}
+
+Detected procedural concepts:
+${input.concepts?.join(", ") ?? "none"}
+
+Retrieved authorities:
+${renderedSearches}
+
+Answer the user's question using only the retrieved authorities above.
+Prefer authorities whose heading, path, and citation are most clearly on point.
+Prefer the most directly relevant authorities over broad or incidental matches.
+Do not rely on weak body-only overlap where a clearer heading/path authority exists.
+If useful, distinguish between:
+- what the rules clearly allow,
+- what depends on the Chair,
+- what is tactically possible but uncertain.
+
+Remember:
+- every substantive line should carry inline citations,
+- omit unsupported propositions rather than guessing,
+- keep the answer compact, procedural, and grounded.
+`.trim();
+}
+
+============================================================================================
+COMPLETE SOURCE — app/api/ai/answer/route.ts
+============================================================================================
+// app/api/ai/answer/route.ts
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { generateJson, streamText } from "@/lib/ai/gemini";
+import {
+  ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+  ANSWER_STREAM_SYSTEM_PROMPT,
+  buildAnswerClaimValidationPrompt,
+  buildGroundedAnswerPrompt,
+  buildSearchPlannerPrompt,
+  SEARCH_PLANNER_SYSTEM_PROMPT,
+} from "@/lib/ai/prompts";
+import { searchProceduralAuthorities } from "@/lib/procedural-search";
+import {
+  buildAuthorityPayload,
+  buildFallbackAnswer,
+  expandPlannerQueries,
+  extractAnswerClaims,
+  inferConcepts,
+  normalizeAnswerFormatting,
+  pruneUnsupportedAnswerClaims,
+  pruneValidatedAnswerContent,
+  rewriteForbiddenAuthorityMentions,
+  selectFinalAuthorities,
+  type SearchExecution,
+  validateAnswerAuthorityMentions,
+  validateAnswerCitations,
+} from "@/lib/procedural-reasoning";
+
+const aiAnswerRequestSchema = z.object({
+  question: z.string().min(1, "Question is required"),
+  corpus: z.enum(["standing_orders", "speakers_rulings"]).nullable().optional(),
+});
+
+const searchPlanSchema = z.object({
+  intent: z.enum([
+    "explain_rule",
+    "explain_statement",
+    "options",
+    "admissibility",
+    "tactic",
+    "compare_authorities",
+    "clarification",
+  ]),
+  preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
+  searchQueries: z.array(z.string().min(1)).min(1).max(3),
+  notes: z.string(),
+});
+
+const claimValidationSchema = z.object({
+  claims: z.array(
+    z.object({
+      id: z.string().min(1),
+      supported: z.boolean(),
+      reason: z.string(),
+    }),
+  ),
+});
+
+type SearchPlan = z.infer<typeof searchPlanSchema>;
+type AuthorityPayload = ReturnType<typeof buildAuthorityPayload>[number];
+
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+export async function POST(request: NextRequest) {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(sseEvent("error", { message: "Invalid JSON body" }), {
+      status: 400,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+      },
+    });
+  }
+
+  const parsed = aiAnswerRequestSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return new Response(
+      sseEvent("error", {
+        message: "Invalid request body",
+        details: parsed.error.flatten(),
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      },
+    );
+  }
+
+  const { question, corpus = null } = parsed.data;
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(sseEvent(event, data)));
+      };
+
+      const run = async () => {
+        const started = Date.now();
+
+        try {
+          send("stage", {
+            key: "planning",
+            label: "Planning retrieval",
+          });
+
+          const rawPlan = await generateJson<unknown>({
+            systemInstruction: SEARCH_PLANNER_SYSTEM_PROMPT,
+            prompt: buildSearchPlannerPrompt({
+              question,
+              corpus,
+            }),
+            temperature: 0.1,
+          });
+
+          const plan = searchPlanSchema.parse(rawPlan);
+          const effectiveCorpus = corpus ?? plan.preferredCorpus ?? null;
+          const inferredConcepts = inferConcepts(question, plan.searchQueries);
+
+          send("plan", plan);
+
+          send("stage", {
+            key: "retrieving",
+            label: "Retrieving authorities",
+          });
+
+          const expandedQueries = expandPlannerQueries({
+            question,
+            plannerQueries: plan.searchQueries,
+            effectiveCorpus,
+          });
+
+          const searches: SearchExecution[] = [];
+
+          for (const query of expandedQueries) {
+            const searchResponse = await searchProceduralAuthorities({
+              q: query,
+              corpus: effectiveCorpus,
+              limit: 10,
+              offset: 0,
+            });
+
+            searches.push({
+              query,
+              corpus: effectiveCorpus,
+              results: searchResponse.results,
+            });
+          }
+
+          const selected = selectFinalAuthorities({
+            searches,
+            question,
+            plannerQueries: plan.searchQueries,
+          });
+
+          const finalAuthorities = selected.finalAuthorities;
+          const authorityPayload: AuthorityPayload[] =
+            buildAuthorityPayload(finalAuthorities);
+
+          send("authorities", {
+            authorities: authorityPayload,
+          });
+
+          send("diagnostics", {
+            effectiveCorpus,
+            inferredConcepts: inferredConcepts.map((concept) => concept.id),
+            activeConcepts: selected.activeConceptIds,
+            blueprintSlots: selected.blueprintSlots,
+            expandedQueries,
+            retrievals: searches.map((search) => ({
+              query: search.query,
+              corpus: search.corpus,
+              resultCount: search.results.length,
+              topResults: search.results.slice(0, 6).map((result) => ({
+                sectionId: result.sectionId,
+                sectionKey: result.sectionKey,
+                citationLabel: result.citationLabel,
+                heading: result.heading,
+                documentTitle: result.documentTitle,
+                documentCorpus: result.documentCorpus,
+                rank: result.rank,
+                sectionRank: result.sectionRank,
+                pathRank: result.pathRank,
+                bodyRank: result.bodyRank,
+                chunkRank: result.chunkRank,
+                clusterSupportCount: result.clusterSupportCount,
+                matchSignals: result.matchSignals,
+              })),
+            })),
+            finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
+              query: item.query,
+              citationLabel: item.result.citationLabel,
+              heading: item.result.heading,
+              documentCorpus: item.result.documentCorpus,
+              baseRank: item.result.rank,
+              routeBoost: item.routeBoost,
+              slotBoost: item.slotBoost,
+              adjustedRank: item.adjustedRank,
+              matchedSlots: item.matchedSlotKeys,
+              path: item.result.path,
+            })),
+            selectedSlotMatches: selected.selectedSlotMatches,
+          });
+
+          if (finalAuthorities.length === 0) {
+            const fallbackAnswer = buildFallbackAnswer({
+              question,
+              planIntent: plan.intent,
+              authorities: finalAuthorities,
+              effectiveCorpus,
+              fallbackReason: "No relevant authorities were retrieved.",
+            });
+
+            send("stage", {
+              key: "answering",
+              label: "No authorities retrieved; returning grounded fallback",
+            });
+
+            send("answer_delta", { text: fallbackAnswer });
+
+            send("done", {
+              ok: true,
+              degraded: true,
+              question,
+              corpus: effectiveCorpus,
+              latencyMs: Date.now() - started,
+              plan,
+              answerText: fallbackAnswer,
+              authorities: authorityPayload,
+              fallbackReason: "No relevant authorities were retrieved.",
+            });
+
+            controller.close();
+            return;
+          }
+
+          send("stage", {
+            key: "answering",
+            label: "Drafting answer",
+          });
+
+          try {
+            const draftedAnswer = await streamText({
+              systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
+              prompt: buildGroundedAnswerPrompt({
+                question,
+                corpus: effectiveCorpus,
+                searches: [
+                  {
+                    query: "final_authority_pack",
+                    corpus: effectiveCorpus,
+                    results: finalAuthorities,
+                  },
+                ],
+                concepts: selected.activeConceptIds,
+              }),
+              temperature: 0.2,
+            });
+
+            let finalAnswer = normalizeAnswerFormatting(draftedAnswer);
+            let rewriteNote: string | null = null;
+            let pruneNote: string | null = null;
+            let claimValidationNote: string | null = null;
+
+            if (!finalAnswer.trim()) {
+              const fallbackReason = "The AI draft was empty.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Empty draft; returning grounded fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
+            send("stage", {
+              key: "validating",
+              label: "Validating grounded claims",
+            });
+
+            const initialPrune = pruneValidatedAnswerContent({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            finalAnswer = normalizeAnswerFormatting(initialPrune.prunedText);
+            if (initialPrune.removedLines.length > 0) {
+              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+            }
+
+            if (!finalAnswer.trim()) {
+              const fallbackReason =
+                "The AI draft could not be validated after pruning unsupported content.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Draft empty after pruning; returning grounded fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
+            const citationValidation = validateAnswerCitations({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            if (!citationValidation.ok) {
+              const fallbackReason = `The AI draft cited authorities that were not retrieved: ${citationValidation.invalidCitations
+                .map((citation) => `[${citation}]`)
+                .join(", ")}`;
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Draft rejected; returning grounded fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+                invalidCitations: citationValidation.invalidCitations,
+              });
+
+              controller.close();
+              return;
+            }
+
+            const authorityMentionValidation = validateAnswerAuthorityMentions({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            if (!authorityMentionValidation.ok) {
+              const rewrite = rewriteForbiddenAuthorityMentions({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              finalAnswer = normalizeAnswerFormatting(rewrite.rewrittenText);
+
+              const secondPrune = pruneValidatedAnswerContent({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              finalAnswer = normalizeAnswerFormatting(secondPrune.prunedText);
+
+              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
+                ", ",
+              )}${
+                secondPrune.removedLines.length > 0
+                  ? `; pruned additional lines: ${secondPrune.removedLines.length}`
+                  : ""
+              }`;
+
+              const recheckMentions = validateAnswerAuthorityMentions({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              const recheckCitations = validateAnswerCitations({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
+                const fallbackReason = `The AI draft mentioned or cited authorities that could not be grounded: ${
+                  recheckMentions.ok
+                    ? recheckCitations.ok
+                      ? "unknown validation failure"
+                      : recheckCitations.invalidCitations.join(", ")
+                    : recheckMentions.invalidAuthorityMentions.join(", ")
+                }`;
+
+                const fallbackAnswer = buildFallbackAnswer({
+                  question,
+                  planIntent: plan.intent,
+                  authorities: finalAuthorities,
+                  effectiveCorpus,
+                  fallbackReason,
+                });
+
+                send("stage", {
+                  key: "validating",
+                  label: "Draft rejected; returning grounded fallback",
+                });
+
+                send("answer_delta", { text: fallbackAnswer });
+
+                send("done", {
+                  ok: true,
+                  degraded: true,
+                  question,
+                  corpus: effectiveCorpus,
+                  latencyMs: Date.now() - started,
+                  plan,
+                  answerText: fallbackAnswer,
+                  authorities: authorityPayload,
+                  fallbackReason,
+                });
+
+                controller.close();
+                return;
+              }
+            }
+
+            const answerClaims = extractAnswerClaims(finalAnswer);
+
+            if (answerClaims.length === 0) {
+              const fallbackReason =
+                "The AI draft contained no substantive grounded claims after deterministic validation.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "No grounded claims remained; returning fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
+            const rawClaimValidation = await generateJson<unknown>({
+              systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+              prompt: buildAnswerClaimValidationPrompt({
+                claims: answerClaims,
+                authorities: finalAuthorities,
+              }),
+              temperature: 0,
+            });
+
+            const claimValidation =
+              claimValidationSchema.parse(rawClaimValidation);
+            const validationById = new Map(
+              claimValidation.claims.map((claim) => [claim.id, claim]),
+            );
+
+            const unsupportedClaimIds = answerClaims
+              .filter(
+                (claim) => validationById.get(claim.id)?.supported !== true,
+              )
+              .map((claim) => claim.id);
+
+            if (unsupportedClaimIds.length > 0) {
+              const semanticPrune = pruneUnsupportedAnswerClaims({
+                answerText: finalAnswer,
+                claims: answerClaims,
+                unsupportedClaimIds,
+              });
+
+              finalAnswer = normalizeAnswerFormatting(
+                semanticPrune.prunedText,
+              );
+              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+            }
+
+            const remainingClaims = extractAnswerClaims(finalAnswer);
+            const finalCitationValidation = validateAnswerCitations({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+            const finalMentionValidation = validateAnswerAuthorityMentions({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            if (
+              remainingClaims.length === 0 ||
+              !finalCitationValidation.ok ||
+              !finalMentionValidation.ok
+            ) {
+              const fallbackReason =
+                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Semantic validation rejected the draft; returning fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
+            send("answer_delta", { text: finalAnswer });
+
+            send("done", {
+              ok: true,
+              degraded: false,
+              question,
+              corpus: effectiveCorpus,
+              latencyMs: Date.now() - started,
+              plan,
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+              rewriteNote,
+              pruneNote,
+              claimValidationNote,
+            });
+
+            controller.close();
+            return;
+          } catch (draftingError) {
+            const draftingMessage =
+              draftingError instanceof Error
+                ? draftingError.message
+                : "AI drafting failed.";
+
+            const fallbackAnswer = buildFallbackAnswer({
+              question,
+              planIntent: plan.intent,
+              authorities: finalAuthorities,
+              effectiveCorpus,
+              fallbackReason: draftingMessage,
+            });
+
+            send("stage", {
+              key: "answering",
+              label: "AI drafting failed; returning grounded fallback",
+            });
+
+            send("answer_delta", { text: fallbackAnswer });
+
+            send("done", {
+              ok: true,
+              degraded: true,
+              question,
+              corpus: effectiveCorpus,
+              latencyMs: Date.now() - started,
+              plan,
+              answerText: fallbackAnswer,
+              authorities: authorityPayload,
+              fallbackReason: draftingMessage,
+            });
+
+            controller.close();
+            return;
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unknown AI answer error";
+
+          send("error", {
+            message,
+            retryable:
+              typeof error === "object" &&
+              error !== null &&
+              "retryable" in error &&
+              typeof (error as { retryable?: unknown }).retryable === "boolean"
+                ? (error as { retryable: boolean }).retryable
+                : false,
+            kind:
+              typeof error === "object" &&
+              error !== null &&
+              "kind" in error &&
+              typeof (error as { kind?: unknown }).kind === "string"
+                ? (error as { kind: string }).kind
+                : "unknown",
+          });
+          controller.close();
+        }
+      };
+
+      void run();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
+============================================================================================
+COMPLETE SOURCE — lib/open-order/types.ts
+============================================================================================
+// lib/open-order/types.ts
+export type SearchResult = {
+  sectionId: string;
+  sectionKey: string;
+  citationLabel: string;
+  heading: string | null;
+  headingHighlighted: string | null;
+  path: string[];
+  documentSlug: string;
+  documentTitle: string;
+  documentCorpus: string;
+  sourceUrl: string | null;
+  sourceAnchor: string | null;
+  rank: number;
+  sectionRank: number;
+  chunkRank: number | null;
+  sectionContent: string;
+  sectionContentHighlighted?: string | null;
+  matchSignals: {
+    exactSectionKeyMatch: boolean;
+    exactCitationMatch: boolean;
+    exactHeadingMatch: boolean;
+    headingPhraseMatch: boolean;
+    bodyPhraseMatch: boolean;
+  };
+};
+
+export type SearchResponse = {
+  ok: boolean;
+  query: string;
+  corpus: string | null;
+  limit: number;
+  offset: number;
+  total: number;
+  hasMore: boolean;
+  latencyMs: number;
+  results: SearchResult[];
+};
+
+export type ThemeMode = "light" | "dark";
+
+export type AiPlan = {
+  intent:
+    | "explain_rule"
+    | "explain_statement"
+    | "options"
+    | "admissibility"
+    | "tactic"
+    | "compare_authorities"
+    | "clarification";
+  preferredCorpus: "standing_orders" | "speakers_rulings" | null;
+  searchQueries: string[];
+  notes: string;
+};
+
+export type AiAuthority = {
+  sectionId: string;
+  sectionKey: string;
+  citationLabel: string;
+  heading: string | null;
+  path: string[];
+  documentSlug: string;
+  documentTitle: string;
+  documentCorpus: string;
+  sourceUrl: string | null;
+  sourceAnchor: string | null;
+  sourceHref: string | null;
+  rank: number;
+  canonicalHref?: string;
+};
+
+export type AiDiagnosticTopResult = {
+  sectionId: string;
+  sectionKey: string;
+  citationLabel: string;
+  heading: string | null;
+  documentTitle: string;
+  documentCorpus: string;
+  rank: number;
+  sectionRank: number;
+  pathRank: number;
+  bodyRank: number;
+  chunkRank: number | null;
+  clusterSupportCount: number;
+  matchSignals: {
+    exactSectionKeyMatch: boolean;
+    exactCitationMatch: boolean;
+    exactHeadingMatch: boolean;
+    headingPhraseMatch: boolean;
+    bodyPhraseMatch: boolean;
+    pathPhraseMatch?: boolean;
+  };
+};
+
+export type AiDiagnosticRetrieval = {
+  query: string;
+  corpus: string | null;
+  resultCount: number;
+  topResults: AiDiagnosticTopResult[];
+};
+
+export type AiDiagnosticFinalAuthority = {
+  query: string;
+  citationLabel: string;
+  heading: string | null;
+  documentCorpus: string;
+  baseRank: number;
+  routeBoost: number;
+  adjustedRank: number;
+  path: string[];
+};
+
+export type AiDiagnosticsPayload = {
+  effectiveCorpus: string | null;
+  inferredConcepts?: string[];
+  expandedQueries?: string[];
+  retrievals: AiDiagnosticRetrieval[];
+  finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
+};
+
+export type AiDiagnostics = {
+  question: string;
+  requestedCorpus: string | null;
+  effectiveCorpus: string | null;
+  stageLabel: string | null;
+  startedAt: string | null;
+  latencyMs: number | null;
+  plan: AiPlan | null;
+  authorities: AiAuthority[];
+  answerText: string;
+  error: string | null;
+  inferredConcepts: string[];
+  expandedQueries: string[];
+  retrievals: AiDiagnosticRetrieval[];
+  finalAuthoritySelection: AiDiagnosticFinalAuthority[];
+};
+
+export const EMPTY_AI_DIAGNOSTICS: AiDiagnostics = {
+  question: "",
+  requestedCorpus: null,
+  effectiveCorpus: null,
+  stageLabel: null,
+  startedAt: null,
+  latencyMs: null,
+  plan: null,
+  authorities: [],
+  answerText: "",
+  error: null,
+  inferredConcepts: [],
+  expandedQueries: [],
+  retrievals: [],
+  finalAuthoritySelection: [],
+};
+
+export type UseOpenOrderAssistantReturn = {
+  question: string;
+  setQuestion: (value: string) => void;
+  stageLabel: string | null;
+  plan: AiPlan | null;
+  authorities: AiAuthority[];
+  answerText: string;
+  error: string | null;
+  isLoading: boolean;
+  diagnostics: AiDiagnostics;
+  copiedToken: string | null;
+  setCopiedToken: (value: string | null) => void;
+  debugSnapshot: string;
+  hasDebugSnapshot: boolean;
+  ask: (requestedCorpus: string | null) => Promise<void>;
+};
+
+============================================================================================
+COMPLETE SOURCE — lib/open-order/format.ts
+============================================================================================
+import type {
+  AiDiagnosticTopResult,
+  AiDiagnostics,
+  SearchResult,
+} from "./types";
+
+export function corpusLabel(corpus: string): string {
+  switch (corpus) {
+    case "standing_orders":
+      return "Standing Orders";
+    case "speakers_rulings":
+      return "Speakers' Rulings";
+    default:
+      return corpus;
+  }
+}
+
+export function resultReason(result: SearchResult): string {
+  const signals = result.matchSignals;
+
+  if (signals.exactSectionKeyMatch || signals.exactCitationMatch) {
+    return "Exact citation";
+  }
+
+  if (signals.exactHeadingMatch) {
+    return "Exact heading";
+  }
+
+  if (signals.headingPhraseMatch) {
+    return "Heading phrase";
+  }
+
+  if (signals.bodyPhraseMatch) {
+    return "Body phrase";
+  }
+
+  return "Ranked match";
+}
+
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function stripHtmlTags(text: string): string {
+  return text.replace(/<[^>]+>/g, "");
+}
+
+export function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+export function firstWords(text: string, wordCount = 10): string {
+  return normalizeWhitespace(text)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, wordCount)
+    .join(" ");
+}
+
+export function buildTextFragmentStart(result: SearchResult): string | null {
+  const content = normalizeWhitespace(stripHtmlTags(result.sectionContent));
+  if (!content) return null;
+
+  const initial = firstWords(content, 10);
+  if (!initial) return null;
+
+  return initial;
+}
+
+export function buildSourceHref(result: SearchResult): string | null {
+  if (!result.sourceUrl) return null;
+
+  const textStart = buildTextFragmentStart(result);
+  const baseUrl = result.sourceUrl.split("#")[0];
+  const anchor = result.sourceAnchor ? encodeURI(result.sourceAnchor) : null;
+
+  if (textStart && anchor) {
+    return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;
+  }
+
+  if (textStart) {
+    return `${baseUrl}#:~:text=${encodeURIComponent(textStart)}`;
+  }
+
+  if (anchor) {
+    return `${baseUrl}#${anchor}`;
+  }
+
+  return baseUrl;
+}
+
+export function buildCanonicalCitationHref(
+  citationLabel: string,
+  corpus: string,
+  focus: string,
+): string {
+  const params = new URLSearchParams({
+    q: citationLabel,
+    corpus,
+    focus,
+  });
+
+  return `/?${params.toString()}`;
+}
+
+export function formatInlineStructure(html: string): string {
+  let output = html;
+
+  output = output.replace(
+    /^(\(\d+[A-Z]?\))/gm,
+    '<span class="oo-clauseLabel">$1</span>',
+  );
+
+  output = output.replace(
+    /(^|\s)(\([a-z]\))(?=\s)/g,
+    '$1<span class="oo-subclauseLabel">$2</span>',
+  );
+
+  output = output.replace(
+    /(^|\s)(\([ivx]+\))(?=\s)/gi,
+    '$1<span class="oo-subclauseLabel">$2</span>',
+  );
+
+  output = output.replace(
+    /^•\s+(.*)$/gm,
+    '<span class="oo-bulletRow"><span class="oo-bulletLabel">•</span><span>$1</span></span>',
+  );
+
+  return output;
+}
+
+export function splitIntoParagraphs(htmlLikeText: string): string[] {
+  return htmlLikeText
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function buildFormattedSectionHtml(result: SearchResult): string {
+  const base =
+    result.sectionContentHighlighted && result.sectionContentHighlighted.trim()
+      ? result.sectionContentHighlighted
+      : escapeHtml(result.sectionContent);
+
+  const paragraphs = splitIntoParagraphs(base);
+
+  return paragraphs
+    .map((paragraph) => {
+      const trimmed = paragraph.trim();
+
+      if (/^•\s+/m.test(trimmed)) {
+        const bulletLines = trimmed
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => formatInlineStructure(line))
+          .join("");
+
+        return `<div class="oo-sectionBlock oo-sectionBlockBullets">${bulletLines}</div>`;
+      }
+
+      if (
+        /^(\(\d+[A-Z]?\)|\([a-z]\)|\([ivx]+\))/i.test(trimmed) ||
+        /(^|\s)(\([a-z]\)|\([ivx]+\))/i.test(trimmed)
+      ) {
+        return `<div class="oo-sectionBlock oo-sectionBlockClause">${formatInlineStructure(
+          trimmed,
+        )}</div>`;
+      }
+
+      return `<p class="oo-sectionParagraph">${formatInlineStructure(
+        trimmed,
+      )}</p>`;
+    })
+    .join("");
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const succeeded = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return succeeded;
+    } catch {
+      return false;
+    }
+  }
+}
+
+const AI_INLINE_LABELS = [
+  "Bottom line",
+  "What this means",
+  "Why this matters",
+  "In practice",
+  "Key point",
+  "Takeaway",
+  "Next step",
+];
+
+function renderAuthorityPills(text: string): string {
+  return text
+    .replace(
+      /\*\*([0-9]+\/[0-9A-Z]+)\*\*/g,
+      '<span class="oo-aiAuthorityPill">$1</span>',
+    )
+    .replace(/\[([^\]]+)\]/g, (_match, inner: string) => {
+      const refs = inner
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      const validRefs = refs.filter((ref) => /^[0-9]+\/[0-9A-Z]+$/.test(ref));
+
+      if (validRefs.length === 0) {
+        return `[${inner}]`;
+      }
+
+      return validRefs
+        .map((ref) => `<span class="oo-aiAuthorityPill">${ref}</span>`)
+        .join(" ");
+    });
+}
+
+function renderInlineLeadLabel(text: string): string {
+  for (const label of AI_INLINE_LABELS) {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const colonPattern = new RegExp(`^(${escapedLabel})\\s*:\\s*`, "i");
+    if (colonPattern.test(text)) {
+      return text.replace(
+        colonPattern,
+        '<span class="oo-aiInlineLabel">$1</span><span class="oo-aiInlineLabelColon">:</span> ',
+      );
+    }
+
+    const barePattern = new RegExp(`^(${escapedLabel})(?=\\s|—|–|-)`, "i");
+    if (barePattern.test(text)) {
+      return text.replace(
+        barePattern,
+        '<span class="oo-aiInlineLabel">$1</span>',
+      );
+    }
+  }
+
+  return text;
+}
+
+function renderAnswerInline(text: string): string {
+  return renderInlineLeadLabel(renderAuthorityPills(text));
+}
+
+function stripTags(text: string): string {
+  return text.replace(/<[^>]+>/g, "").trim();
+}
+
+function normalizeHeadingText(text: string): string {
+  return text.replace(/\s*:\s*$/, "").trim();
+}
+
+function isBulletHeading(text: string): boolean {
+  const plain = normalizeHeadingText(stripTags(text));
+
+  if (!plain) return false;
+  if (plain.length > 56) return false;
+
+  return true;
+}
+
+export function renderAiAnswerHtml(answerText: string): string {
+  const escaped = escapeHtml(answerText);
+  const paragraphs = escaped
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const blocks: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (/^- /m.test(paragraph)) {
+      const rawItems = paragraph
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(/^- /, "").trim());
+
+      const groups: Array<{ heading: string | null; items: string[] }> = [];
+      let currentHeading: string | null = null;
+      let currentItems: string[] = [];
+
+      const flush = () => {
+        if (currentHeading || currentItems.length > 0) {
+          groups.push({
+            heading: currentHeading,
+            items: currentItems,
+          });
+        }
+        currentHeading = null;
+        currentItems = [];
+      };
+
+      for (const rawItem of rawItems) {
+        const renderedItem = renderAnswerInline(rawItem);
+
+        if (isBulletHeading(renderedItem)) {
+          flush();
+          currentHeading = normalizeHeadingText(renderedItem);
+        } else {
+          currentItems.push(renderedItem);
+        }
+      }
+
+      flush();
+
+      for (const group of groups) {
+        const headingHtml = group.heading
+          ? `<div class="oo-aiSectionHeading">${group.heading}</div>`
+          : "";
+
+        const listHtml =
+          group.items.length > 0
+            ? `<ul class="oo-aiList">${group.items
+                .map((item) => `<li class="oo-aiListItem">${item}</li>`)
+                .join("")}</ul>`
+            : "";
+
+        if (headingHtml || listHtml) {
+          blocks.push(
+            `<div class="oo-aiSectionGroup">${headingHtml}${listHtml}</div>`,
+          );
+        }
+      }
+
+      continue;
+    }
+
+    const renderedParagraph = renderAnswerInline(paragraph);
+    blocks.push(
+      `<div class="oo-aiSectionGroup"><p class="oo-aiParagraph">${renderedParagraph}</p></div>`,
+    );
+  }
+
+  return blocks.join('<hr class="oo-aiSectionRule" />');
+}
+
+export function formatMatchSignals(
+  signals: AiDiagnosticTopResult["matchSignals"],
+): string {
+  const parts: string[] = [];
+
+  if (signals.exactSectionKeyMatch) parts.push("exact section");
+  if (signals.exactCitationMatch) parts.push("exact citation");
+  if (signals.exactHeadingMatch) parts.push("exact heading");
+  if (signals.headingPhraseMatch) parts.push("heading phrase");
+  if (signals.bodyPhraseMatch) parts.push("body phrase");
+  if (signals.pathPhraseMatch) parts.push("path phrase");
+
+  return parts.length > 0 ? parts.join(", ") : "none";
+}
+
+export function formatAiDebugSnapshot(input: AiDiagnostics): string {
+  const searchQueries = input.plan?.searchQueries?.length
+    ? input.plan.searchQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
+    : "None";
+
+  const inferredConceptsText =
+    input.inferredConcepts.length > 0
+      ? input.inferredConcepts.map((c, i) => `${i + 1}. ${c}`).join("\n")
+      : "None";
+
+  const expandedQueriesText =
+    input.expandedQueries.length > 0
+      ? input.expandedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
+      : "None";
+
+  const retrievalsText =
+    input.retrievals.length > 0
+      ? input.retrievals
+          .map((retrieval, retrievalIndex) => {
+            const topResultsText =
+              retrieval.topResults.length > 0
+                ? retrieval.topResults
+                    .map((result, resultIndex) => {
+                      return [
+                        `    ${resultIndex + 1}. ${result.citationLabel}`,
+                        `       corpus: ${result.documentCorpus}`,
+                        `       title: ${result.documentTitle}`,
+                        `       heading: ${result.heading ?? "None"}`,
+                        `       sectionKey: ${result.sectionKey}`,
+                        `       rank: ${result.rank.toFixed(2)}`,
+                        `       sectionRank: ${result.sectionRank.toFixed(2)}`,
+                        `       pathRank: ${result.pathRank.toFixed(2)}`,
+                        `       bodyRank: ${result.bodyRank.toFixed(2)}`,
+                        `       chunkRank: ${
+                          result.chunkRank !== null
+                            ? result.chunkRank.toFixed(2)
+                            : "None"
+                        }`,
+                        `       clusterSupportCount: ${result.clusterSupportCount}`,
+                        `       matchSignals: ${formatMatchSignals(
+                          result.matchSignals,
+                        )}`,
+                      ].join("\n");
+                    })
+                    .join("\n")
+                : "    None";
+
+            return [
+              `${retrievalIndex + 1}. Query: ${retrieval.query}`,
+              `   Corpus: ${retrieval.corpus ?? "Auto"}`,
+              `   Result count: ${retrieval.resultCount}`,
+              `   Top results:`,
+              topResultsText,
+            ].join("\n");
+          })
+          .join("\n\n")
+      : "None";
+
+  const finalAuthoritySelectionText =
+    input.finalAuthoritySelection.length > 0
+      ? input.finalAuthoritySelection
+          .map((item, index) => {
+            const path = item.path?.length ? item.path.join(" > ") : "None";
+
+            return [
+              `${index + 1}. ${item.citationLabel}`,
+              `   query: ${item.query}`,
+              `   corpus: ${item.documentCorpus}`,
+              `   heading: ${item.heading ?? "None"}`,
+              `   baseRank: ${item.baseRank.toFixed(2)}`,
+              `   routeBoost: ${item.routeBoost.toFixed(2)}`,
+              `   adjustedRank: ${item.adjustedRank.toFixed(2)}`,
+              `   path: ${path}`,
+            ].join("\n");
+          })
+          .join("\n\n")
+      : "None";
+
+  const authoritiesText =
+    input.authorities.length > 0
+      ? input.authorities
+          .map((authority, index) => {
+            const path = authority.path?.length
+              ? authority.path.join(" > ")
+              : "None";
+
+            return [
+              `${index + 1}. ${authority.citationLabel}`,
+              `   corpus: ${authority.documentCorpus}`,
+              `   heading: ${authority.heading ?? "None"}`,
+              `   sectionKey: ${authority.sectionKey}`,
+              `   rank: ${authority.rank.toFixed(2)}`,
+              `   path: ${path}`,
+              `   sourceHref: ${authority.sourceHref ?? "None"}`,
+            ].join("\n");
+          })
+          .join("\n\n")
+      : "None";
+
+  return [
+    "OPEN ORDER AI DEBUG SNAPSHOT",
+    "============================",
+    "",
+    `Question: ${input.question || "None"}`,
+    `Requested corpus: ${input.requestedCorpus ?? "Auto"}`,
+    `Effective corpus: ${input.effectiveCorpus ?? "Auto"}`,
+    `Stage: ${input.stageLabel ?? "None"}`,
+    `Started at: ${input.startedAt ?? "None"}`,
+    `Latency ms: ${input.latencyMs ?? "Unknown"}`,
+    `Error: ${input.error ?? "None"}`,
+    "",
+    "PLAN",
+    "----",
+    `Intent: ${input.plan?.intent ?? "None"}`,
+    `Preferred corpus: ${input.plan?.preferredCorpus ?? "None"}`,
+    `Notes: ${input.plan?.notes ?? "None"}`,
+    "Planner search queries:",
+    searchQueries,
+    "",
+    "Inferred concepts:",
+    inferredConceptsText,
+    "",
+    "Expanded queries:",
+    expandedQueriesText,
+    "",
+    "RETRIEVALS",
+    "----------",
+    retrievalsText,
+    "",
+    "FINAL AUTHORITY SELECTION",
+    "-------------------------",
+    finalAuthoritySelectionText,
+    "",
+    "AUTHORITIES",
+    "-----------",
+    authoritiesText,
+    "",
+    "ANSWER",
+    "------",
+    input.answerText || "None",
+    "",
+  ].join("\n");
+}
+
+export function getAiProgressValue(
+  stageLabel: string | null,
+  isAiLoading: boolean,
+) {
+  if (!stageLabel && !isAiLoading) return 0;
+  if (!stageLabel && isAiLoading) return 6;
+
+  const stage = (stageLabel ?? "").toLowerCase();
+
+  if (stage.includes("complete")) return 100;
+  if (stage.includes("answer")) return 90;
+  if (stage.includes("synth")) return 82;
+  if (stage.includes("authorit")) return 72;
+  if (stage.includes("retriev")) return 58;
+  if (stage.includes("search")) return 42;
+  if (stage.includes("plan")) return 22;
+  if (stage.includes("start")) return 10;
+
+  return isAiLoading ? 14 : 100;
+}
+
+============================================================================================
+COMPLETE SOURCE — lib/procedural-search.ts
+============================================================================================
+// lib/procedural-search.ts
+import { db } from "@/lib/db";
+import {
+  buildSingularizedPhrase,
+  cleanQuery,
+  deriveExactCitationCompact,
+  deriveExactSectionKey,
+} from "@/lib/search-core";
+
+export type ProceduralSearchParams = {
+  q: string;
+  corpus?: string | null;
+  limit?: number;
+  offset?: number;
+  includeDebug?: boolean;
+};
+
+export type ProceduralSearchResult = {
+  sectionId: string;
+  sectionKey: string;
+  citationLabel: string;
+  heading: string | null;
+  path: string[];
+  pathText: string;
+  documentSlug: string;
+  documentTitle: string;
+  documentCorpus: string;
+  sourceUrl: string | null;
+  sourceAnchor: string | null;
+  rank: number;
+  sectionRank: number;
+  pathRank: number;
+  bodyRank: number;
+  chunkRank: number | null;
+  clusterSupportCount: number;
+  sectionContent: string;
+  matchSignals: {
+    exactSectionKeyMatch: boolean;
+    exactCitationMatch: boolean;
+    exactHeadingMatch: boolean;
+    headingPhraseMatch: boolean;
+    bodyPhraseMatch: boolean;
+    pathPhraseMatch: boolean;
+  };
+};
+
+export type ProceduralSearchDebug = {
+  tsQuery: string;
+  phraseQuery: string;
+  singularPhrase: string | null;
+  singularPhraseQuery: string | null;
+  queryLower: string;
+  exactSectionKey: string | null;
+  exactCitationCompact: string | null;
+  offset: number;
+  total: number;
+};
+
+export type ProceduralSearchResponse = {
+  query: string;
+  corpus: string | null;
+  limit: number;
+  offset: number;
+  total: number;
+  hasMore: boolean;
+  results: ProceduralSearchResult[];
+  debug?: ProceduralSearchDebug;
+};
+
+export async function searchProceduralAuthorities(
+  params: ProceduralSearchParams,
+): Promise<ProceduralSearchResponse> {
+  const normalizedQuery = cleanQuery(params.q);
+  const corpus = params.corpus ?? null;
+  const limit = Math.max(1, Math.min(params.limit ?? 8, 50));
+  const offset = Math.max(0, params.offset ?? 0);
+  const singularizedPhrase = buildSingularizedPhrase(normalizedQuery);
+  const exactSectionKey = deriveExactSectionKey(normalizedQuery);
+  const exactCitationCompact = deriveExactCitationCompact(normalizedQuery);
+
+  const tsQueryResult = await db.query<{
+    ts_query: string;
+    phrase_query: string;
+    singular_phrase_query: string | null;
+  }>(
+    `
+    select
+      websearch_to_tsquery('english', $1)::text as ts_query,
+      phraseto_tsquery('english', $1)::text as phrase_query,
+      case
+        when $2::text is not null and btrim($2::text) <> ''
+        then phraseto_tsquery('english', $2)::text
+        else null
+      end as singular_phrase_query
+    `,
+    [normalizedQuery, singularizedPhrase],
+  );
+
+  const tsQuery = tsQueryResult.rows[0]?.ts_query ?? "";
+  const phraseQuery = tsQueryResult.rows[0]?.phrase_query ?? "";
+  const singularPhraseQuery =
+    tsQueryResult.rows[0]?.singular_phrase_query ?? null;
+
+  const result = await db.query<{
+    section_id: string;
+    section_key: string;
+    citation_label: string;
+    heading: string | null;
+    section_content: string;
+    path: string[];
+    path_text: string;
+    document_slug: string;
+    document_title: string;
+    document_corpus: string;
+    source_url: string | null;
+    source_anchor: string | null;
+    section_rank: number;
+    heading_phrase_rank: number;
+    body_phrase_rank: number;
+    path_phrase_rank: number;
+    chunk_rank: number | null;
+    chunk_phrase_rank: number | null;
+    cluster_support_count: number;
+    overall_rank: number;
+    total_count: number;
+    exact_section_key_match: boolean;
+    exact_citation_match: boolean;
+    exact_heading_match: boolean;
+    heading_phrase_match: boolean;
+    body_phrase_match: boolean;
+    path_phrase_match: boolean;
+  }>(
+    `
+    with input as (
+      select
+        websearch_to_tsquery('english', $1) as ts_query,
+        phraseto_tsquery('english', $1) as phrase_ts_query,
+        case
+          when $2::text is not null and btrim($2::text) <> ''
+          then phraseto_tsquery('english', $2)
+          else null
+        end as singular_phrase_ts_query,
+        $3::text as corpus_filter,
+        $4::int as result_limit,
+        $5::int as result_offset,
+        $6::text as exact_section_key,
+        $7::text as exact_citation_compact,
+        lower(trim($1)) as query_lower,
+        cardinality(regexp_split_to_array(lower(trim($1)), E'\\s+')) as query_word_count
+    ),
+
+    section_candidates as (
+      select
+        s.id as section_id,
+        s.section_key,
+        s.citation_label,
+        s.heading,
+        s.content as section_content,
+        s.path,
+        array_to_string(s.path, ' > ') as path_text,
+        d.slug as document_slug,
+        d.title as document_title,
+        d.corpus as document_corpus,
+        s.source_url,
+        s.source_anchor,
+
+        case
+          when array_length(s.path, 1) is null then d.slug
+          when array_length(s.path, 1) <= 3 then array_to_string(s.path, ' > ')
+          else array_to_string(s.path[1:(array_length(s.path, 1) - 2)], ' > ')
+        end as cluster_key,
+
+        case
+          when i.ts_query::text <> '' then ts_rank_cd(s.search_tsv, i.ts_query)
+          else 0
+        end as section_rank,
+
+        case
+          when i.phrase_ts_query::text <> ''
+            and s.heading is not null
+            and to_tsvector('english', s.heading) @@ i.phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', s.heading), i.phrase_ts_query)
+          else 0
+        end as heading_phrase_rank_primary,
+
+        case
+          when i.singular_phrase_ts_query is not null
+            and s.heading is not null
+            and to_tsvector('english', s.heading) @@ i.singular_phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', s.heading), i.singular_phrase_ts_query)
+          else 0
+        end as heading_phrase_rank_singular,
+
+        case
+          when i.phrase_ts_query::text <> ''
+            and to_tsvector('english', s.content) @@ i.phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', s.content), i.phrase_ts_query)
+          else 0
+        end as body_phrase_rank_primary,
+
+        case
+          when i.singular_phrase_ts_query is not null
+            and to_tsvector('english', s.content) @@ i.singular_phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', s.content), i.singular_phrase_ts_query)
+          else 0
+        end as body_phrase_rank_singular,
+
+        case
+          when i.phrase_ts_query::text <> ''
+            and to_tsvector('english', array_to_string(s.path, ' ')) @@ i.phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', array_to_string(s.path, ' ')), i.phrase_ts_query)
+          else 0
+        end as path_phrase_rank_primary,
+
+        case
+          when i.singular_phrase_ts_query is not null
+            and to_tsvector('english', array_to_string(s.path, ' ')) @@ i.singular_phrase_ts_query
+          then ts_rank_cd(to_tsvector('english', array_to_string(s.path, ' ')), i.singular_phrase_ts_query)
+          else 0
+        end as path_phrase_rank_singular,
+
+        case
+          when i.exact_section_key is not null
+            and lower(s.section_key) = i.exact_section_key
+          then true else false
+        end as exact_section_key_match,
+
+        case
+          when i.exact_citation_compact is not null
+            and lower(regexp_replace(s.citation_label, '\\s+', '', 'g')) = i.exact_citation_compact
+          then true else false
+        end as exact_citation_match,
+
+        case
+          when i.query_lower <> ''
+            and lower(coalesce(s.heading, '')) = i.query_lower
+          then true else false
+        end as exact_heading_match,
+
+        case
+          when i.query_lower <> ''
+            and lower(coalesce(s.heading, '')) like '%' || i.query_lower || '%'
+          then true else false
+        end as heading_phrase_match,
+
+        case
+          when i.query_lower <> ''
+            and i.query_word_count = 1
+            and lower(s.content) like '%' || i.query_lower || '%'
+          then true else false
+        end as body_phrase_match,
+
+        case
+          when i.query_lower <> ''
+            and lower(array_to_string(s.path, ' > ')) like '%' || i.query_lower || '%'
+          then true else false
+        end as path_phrase_match
+
+      from sections s
+      join documents d on d.id = s.document_id
+      cross join input i
+      where (
+        (i.ts_query::text <> '' and s.search_tsv @@ i.ts_query)
+        or (
+          i.exact_section_key is not null
+          and lower(s.section_key) = i.exact_section_key
+        )
+        or (
+          i.exact_citation_compact is not null
+          and lower(regexp_replace(s.citation_label, '\\s+', '', 'g')) = i.exact_citation_compact
+        )
+        or (
+          i.query_lower <> ''
+          and lower(coalesce(s.heading, '')) = i.query_lower
+        )
+        or (
+          i.query_lower <> ''
+          and lower(coalesce(s.heading, '')) like '%' || i.query_lower || '%'
+        )
+        or (
+          i.query_word_count = 1
+          and i.query_lower <> ''
+          and lower(s.content) like '%' || i.query_lower || '%'
+        )
+        or (
+          i.query_lower <> ''
+          and lower(array_to_string(s.path, ' > ')) like '%' || i.query_lower || '%'
+        )
+      )
+      and (i.corpus_filter is null or d.corpus = i.corpus_filter)
+    ),
+
+    section_scored as (
+      select
+        sc.section_id,
+        sc.section_key,
+        sc.citation_label,
+        sc.heading,
+        sc.section_content,
+        sc.path,
+        sc.path_text,
+        sc.document_slug,
+        sc.document_title,
+        sc.document_corpus,
+        sc.source_url,
+        sc.source_anchor,
+        sc.cluster_key,
+        sc.section_rank,
+        greatest(sc.heading_phrase_rank_primary, sc.heading_phrase_rank_singular) as heading_phrase_rank,
+        greatest(sc.body_phrase_rank_primary, sc.body_phrase_rank_singular) as body_phrase_rank,
+        greatest(sc.path_phrase_rank_primary, sc.path_phrase_rank_singular) as path_phrase_rank,
+        sc.exact_section_key_match,
+        sc.exact_citation_match,
+        sc.exact_heading_match,
+        sc.heading_phrase_match,
+        sc.body_phrase_match,
+        sc.path_phrase_match
+      from section_candidates sc
+    ),
+
+    section_clustered as (
+      select
+        ss.*,
+        count(*) filter (
+          where
+            ss.exact_heading_match
+            or ss.heading_phrase_match
+            or ss.heading_phrase_rank > 0
+            or ss.body_phrase_rank > 0
+            or ss.path_phrase_rank > 0
+            or ss.path_phrase_match
+        ) over (
+          partition by ss.document_slug, ss.cluster_key
+        ) as cluster_support_count
+      from section_scored ss
+    ),
+
+    ranked as (
+      select
+        sc.section_id,
+        sc.section_key,
+        sc.citation_label,
+        sc.heading,
+        sc.section_content,
+        sc.path,
+        sc.path_text,
+        sc.document_slug,
+        sc.document_title,
+        sc.document_corpus,
+        sc.source_url,
+        sc.source_anchor,
+        sc.section_rank,
+        sc.heading_phrase_rank,
+        sc.body_phrase_rank,
+        sc.path_phrase_rank,
+        sc.cluster_support_count,
+        bc.chunk_rank,
+        bc.chunk_phrase_rank,
+        sc.exact_section_key_match,
+        sc.exact_citation_match,
+        sc.exact_heading_match,
+        sc.heading_phrase_match,
+        sc.body_phrase_match,
+        sc.path_phrase_match,
+
+        (
+          case when sc.exact_section_key_match then 1200 else 0 end +
+          case when sc.exact_citation_match then 1100 else 0 end +
+          case when sc.exact_heading_match then 240 else 0 end +
+          case when sc.heading_phrase_match then 80 else 0 end +
+          case when sc.path_phrase_match then 70 else 0 end +
+          case when sc.body_phrase_match then 2 else 0 end +
+          (sc.heading_phrase_rank * 650) +
+          (sc.path_phrase_rank * 280) +
+          (sc.body_phrase_rank * 110) +
+          (coalesce(bc.chunk_phrase_rank, 0) * 70) +
+          (sc.section_rank * 55) +
+          (coalesce(bc.chunk_rank, 0) * 10) +
+          case
+            when sc.cluster_support_count >= 2
+            then least((sc.cluster_support_count - 1) * 45, 135)
+            else 0
+          end
+        ) as overall_rank
+
+      from section_clustered sc
+      cross join input i
+      left join lateral (
+        select
+          case
+            when i.ts_query::text <> '' then ts_rank_cd(c.search_tsv, i.ts_query)
+            else 0
+          end as chunk_rank,
+
+          greatest(
+            case
+              when i.phrase_ts_query::text <> ''
+                and c.search_tsv @@ i.phrase_ts_query
+              then ts_rank_cd(c.search_tsv, i.phrase_ts_query)
+              else 0
+            end,
+            case
+              when i.singular_phrase_ts_query is not null
+                and c.search_tsv @@ i.singular_phrase_ts_query
+              then ts_rank_cd(c.search_tsv, i.singular_phrase_ts_query)
+              else 0
+            end
+          ) as chunk_phrase_rank
+        from chunks c
+        where c.section_id = sc.section_id
+        order by
+          greatest(
+            case
+              when i.phrase_ts_query::text <> ''
+                and c.search_tsv @@ i.phrase_ts_query
+              then ts_rank_cd(c.search_tsv, i.phrase_ts_query)
+              else 0
+            end,
+            case
+              when i.singular_phrase_ts_query is not null
+                and c.search_tsv @@ i.singular_phrase_ts_query
+              then ts_rank_cd(c.search_tsv, i.singular_phrase_ts_query)
+              else 0
+            end
+          ) desc,
+          case
+            when i.ts_query::text <> '' then ts_rank_cd(c.search_tsv, i.ts_query)
+            else 0
+          end desc,
+          c.chunk_index asc
+        limit 1
+      ) bc on true
+    ),
+
+    counted as (
+      select
+        r.*,
+        count(*) over() as total_count
+      from ranked r
+    )
+
+    select
+      section_id,
+      section_key,
+      citation_label,
+      heading,
+      section_content,
+      path,
+      path_text,
+      document_slug,
+      document_title,
+      document_corpus,
+      source_url,
+      source_anchor,
+      section_rank,
+      heading_phrase_rank,
+      body_phrase_rank,
+      path_phrase_rank,
+      chunk_rank,
+      chunk_phrase_rank,
+      cluster_support_count,
+      overall_rank,
+      total_count,
+      exact_section_key_match,
+      exact_citation_match,
+      exact_heading_match,
+      heading_phrase_match,
+      body_phrase_match,
+      path_phrase_match
+    from counted
+    order by
+      overall_rank desc,
+      exact_heading_match desc,
+      heading_phrase_rank desc,
+      path_phrase_rank desc,
+      cluster_support_count desc,
+      body_phrase_rank desc,
+      section_rank desc,
+      coalesce(chunk_phrase_rank, 0) desc,
+      coalesce(chunk_rank, 0) desc,
+      citation_label asc
+    limit $4
+    offset $5
+    `,
+    [
+      normalizedQuery,
+      singularizedPhrase,
+      corpus,
+      limit,
+      offset,
+      exactSectionKey,
+      exactCitationCompact,
+    ],
+  );
+
+  const total = result.rows[0]?.total_count ?? 0;
+
+  return {
+    query: normalizedQuery,
+    corpus,
+    limit,
+    offset,
+    total,
+    hasMore: offset + result.rows.length < total,
+    results: result.rows.map((row) => ({
+      sectionId: row.section_id,
+      sectionKey: row.section_key,
+      citationLabel: row.citation_label,
+      heading: row.heading,
+      path: row.path,
+      pathText: row.path_text,
+      documentSlug: row.document_slug,
+      documentTitle: row.document_title,
+      documentCorpus: row.document_corpus,
+      sourceUrl: row.source_url,
+      sourceAnchor: row.source_anchor,
+      rank: Number(row.overall_rank),
+      sectionRank: Number(row.section_rank),
+      pathRank: Number(row.path_phrase_rank),
+      bodyRank: Number(row.body_phrase_rank),
+      chunkRank: row.chunk_rank !== null ? Number(row.chunk_rank) : null,
+      clusterSupportCount: Number(row.cluster_support_count ?? 0),
+      sectionContent: row.section_content,
+      matchSignals: {
+        exactSectionKeyMatch: row.exact_section_key_match,
+        exactCitationMatch: row.exact_citation_match,
+        exactHeadingMatch: row.exact_heading_match,
+        headingPhraseMatch:
+          row.heading_phrase_match || row.heading_phrase_rank > 0,
+        bodyPhraseMatch: row.body_phrase_match || row.body_phrase_rank > 0,
+        pathPhraseMatch: row.path_phrase_match || row.path_phrase_rank > 0,
+      },
+    })),
+    ...(params.includeDebug
+      ? {
+          debug: {
+            tsQuery,
+            phraseQuery,
+            singularPhrase: singularizedPhrase,
+            singularPhraseQuery,
+            queryLower: normalizedQuery.toLowerCase(),
+            exactSectionKey,
+            exactCitationCompact,
+            offset,
+            total,
+          },
+        }
+      : {}),
+  };
+}
+
+============================================================================================
+COMPLETE SOURCE — lib/ai/gemini.ts
+============================================================================================
+// lib/ai/gemini.ts
+import { GoogleGenAI } from "@google/genai";
+
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+
+const GEMINI_MAX_RETRIES = 2;
+const GEMINI_INITIAL_BACKOFF_MS = 700;
+const GEMINI_MAX_BACKOFF_MS = 2500;
+
+export type AiErrorKind =
+  | "configuration"
+  | "rate_limited"
+  | "unavailable"
+  | "upstream"
+  | "parse"
+  | "unknown";
+
+export class AiProviderError extends Error {
+  kind: AiErrorKind;
+  statusCode: number | null;
+  retryable: boolean;
+  provider: string;
+  rawMessage?: string;
+
+  constructor(params: {
+    message: string;
+    kind: AiErrorKind;
+    statusCode?: number | null;
+    retryable?: boolean;
+    provider?: string;
+    rawMessage?: string;
+  }) {
+    super(params.message);
+    this.name = "AiProviderError";
+    this.kind = params.kind;
+    this.statusCode = params.statusCode ?? null;
+    this.retryable = params.retryable ?? false;
+    this.provider = params.provider ?? "gemini";
+    this.rawMessage = params.rawMessage;
+  }
+}
+
+function getApiKey(): string {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new AiProviderError({
+      message: "Missing GEMINI_API_KEY in server environment.",
+      kind: "configuration",
+      retryable: false,
+    });
+  }
+
+  return apiKey;
+}
+
+function getClient(): GoogleGenAI {
+  return new GoogleGenAI({ apiKey: getApiKey() });
+}
+
+function stripCodeFences(input: string): string {
+  return input
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function extractLikelyJson(input: string): string {
+  const cleaned = stripCodeFences(input);
+
+  const objectStart = cleaned.indexOf("{");
+  const objectEnd = cleaned.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return cleaned.slice(objectStart, objectEnd + 1);
+  }
+
+  const arrayStart = cleaned.indexOf("[");
+  const arrayEnd = cleaned.lastIndexOf("]");
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    return cleaned.slice(arrayStart, arrayEnd + 1);
+  }
+
+  return cleaned;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function computeBackoffMs(attempt: number): number {
+  const base = Math.min(
+    GEMINI_INITIAL_BACKOFF_MS * Math.pow(2, attempt),
+    GEMINI_MAX_BACKOFF_MS,
+  );
+
+  const jitter = Math.floor(Math.random() * 250);
+  return base + jitter;
+}
+
+function safeJsonParse(input: string): unknown | null {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return null;
+  }
+}
+
+function extractStatusCode(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+
+  const directStatus =
+    "status" in error && typeof error.status === "number" ? error.status : null;
+
+  if (directStatus) return directStatus;
+
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message
+      : "";
+
+  if (!message) return null;
+
+  const parsed = safeJsonParse(message);
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "error" in parsed &&
+    parsed.error &&
+    typeof parsed.error === "object" &&
+    "code" in parsed.error &&
+    typeof parsed.error.code === "number"
+  ) {
+    return parsed.error.code;
+  }
+
+  const codeMatch = message.match(/"code"\s*:\s*(\d{3})/);
+  if (codeMatch) {
+    return Number(codeMatch[1]);
+  }
+
+  return null;
+}
+
+function extractRawMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === "string") {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isRetryableStatus(statusCode: number | null): boolean {
+  return (
+    statusCode === 429 ||
+    statusCode === 500 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504
+  );
+}
+
+function classifyError(error: unknown): AiProviderError {
+  if (error instanceof AiProviderError) {
+    return error;
+  }
+
+  const rawMessage = extractRawMessage(error);
+  const statusCode = extractStatusCode(error);
+
+  if (statusCode === 429) {
+    return new AiProviderError({
+      message: "The AI model is temporarily rate limited. Please try again.",
+      kind: "rate_limited",
+      statusCode,
+      retryable: true,
+      rawMessage,
+    });
+  }
+
+  if (statusCode === 503) {
+    return new AiProviderError({
+      message:
+        "The AI model is temporarily unavailable due to high demand. Search still works, and you can retry in a moment.",
+      kind: "unavailable",
+      statusCode,
+      retryable: true,
+      rawMessage,
+    });
+  }
+
+  if (statusCode !== null && isRetryableStatus(statusCode)) {
+    return new AiProviderError({
+      message:
+        "The AI provider is temporarily unavailable. Search still works, and you can retry in a moment.",
+      kind: "upstream",
+      statusCode,
+      retryable: true,
+      rawMessage,
+    });
+  }
+
+  if (statusCode !== null) {
+    return new AiProviderError({
+      message:
+        statusCode === 404
+          ? `The configured Gemini model "${GEMINI_MODEL}" was not found or is not available to this API key.`
+          : `The AI provider returned an error${statusCode ? ` (${statusCode})` : ""}.`,
+      kind: "upstream",
+      statusCode,
+      retryable: false,
+      rawMessage,
+    });
+  }
+
+  if (
+    rawMessage.includes("Missing GEMINI_API_KEY") ||
+    rawMessage.includes("server environment")
+  ) {
+    return new AiProviderError({
+      message: "AI model configuration is missing on the server.",
+      kind: "configuration",
+      retryable: false,
+      rawMessage,
+    });
+  }
+
+  return new AiProviderError({
+    message: "An unexpected AI provider error occurred.",
+    kind: "unknown",
+    retryable: false,
+    rawMessage,
+  });
+}
+
+async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: AiProviderError | null = null;
+
+  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const classified = classifyError(error);
+      lastError = classified;
+
+      const shouldRetry = classified.retryable && attempt < GEMINI_MAX_RETRIES;
+
+      if (!shouldRetry) {
+        throw classified;
+      }
+
+      await sleep(computeBackoffMs(attempt));
+    }
+  }
+
+  throw (
+    lastError ??
+    new AiProviderError({
+      message: "The AI provider failed after retries.",
+      kind: "unknown",
+      retryable: false,
+    })
+  );
+}
+
+export async function generateJson<T>({
+  systemInstruction,
+  prompt,
+  temperature = 0.2,
+}: {
+  systemInstruction: string;
+  prompt: string;
+  temperature?: number;
+}): Promise<T> {
+  return withRetry(async () => {
+    const gemini = getClient();
+
+    const response = await gemini.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature,
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = response.text ?? "";
+    const jsonText = extractLikelyJson(text);
+
+    try {
+      return JSON.parse(jsonText) as T;
+    } catch (error) {
+      throw new AiProviderError({
+        message: "Failed to parse AI JSON response.",
+        kind: "parse",
+        retryable: false,
+        rawMessage: `Raw response:\n${text}\n\nParsed candidate:\n${jsonText}\n\nError: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  });
+}
+
+export async function streamText({
+  systemInstruction,
+  prompt,
+  temperature = 0.2,
+  onChunk,
+}: {
+  systemInstruction: string;
+  prompt: string;
+  temperature?: number;
+  onChunk?: (text: string) => void;
+}): Promise<string> {
+  return withRetry(async () => {
+    const gemini = getClient();
+
+    const response = await gemini.models.generateContentStream({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature,
+      },
+    });
+
+    let fullText = "";
+
+    for await (const chunk of response) {
+      const text = chunk.text ?? "";
+      if (!text) continue;
+
+      fullText += text;
+      onChunk?.(text);
+    }
+
+    return fullText;
+  });
+}
+
+============================================================================================
+COMPLETE CONFIG — package.json
+============================================================================================
+{
+  "name": "open-order",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open Order — evidence-first procedural retrieval for New Zealand parliamentary material.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint",
+    "db:check": "node --env-file=.env.local --import tsx scripts/db-check.ts",
+    "db:apply": "node --env-file=.env.local --import tsx scripts/apply-sql.ts",
+    "db:inspect": "node --env-file=.env.local --import tsx scripts/db-inspect.ts",
+    "db:seed-documents": "node --env-file=.env.local --import tsx scripts/seed-documents.ts",
+    "db:list-documents": "node --env-file=.env.local --import tsx scripts/list-documents.ts",
+    "db:ingest-speakers-rulings": "node --env-file=.env.local --import tsx scripts/ingest-speakers-rulings.ts",
+    "db:count-sections": "node --env-file=.env.local --import tsx scripts/count-sections.ts",
+    "db:sample-sections": "node --env-file=.env.local --import tsx scripts/sample-sections.ts",
+    "db:heading-stats": "node --env-file=.env.local --import tsx scripts/heading-stats.ts",
+    "db:chapter-stats": "node --env-file=.env.local --import tsx scripts/chapter-stats.ts",
+    "db:null-heading-samples": "node --env-file=.env.local --import tsx scripts/null-heading-samples.ts",
+    "db:tail-sections": "node --env-file=.env.local --import tsx scripts/tail-sections.ts",
+    "db:ingest-speakers-rulings-html": "node --env-file=.env.local --import tsx scripts/ingest-speakers-rulings-html.ts",
+    "db:ingest-standing-orders-html": "node --env-file=.env.local --import tsx scripts/ingest-standing-orders-html.ts",
+    "db:chunk-sections": "node --env-file=.env.local --import tsx scripts/chunk-sections.ts",
+    "db:count-chunks": "node --env-file=.env.local --import tsx scripts/count-chunks.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^1.48.0",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.1",
+    "next": "^16.2.2",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.12.0",
+    "playwright": "^1.59.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.27",
+    "eslint": "^9.14.0",
+    "eslint-config-next": "^16.2.2",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
+
+============================================================================================
+COMPLETE CONFIG — tsconfig.json
+============================================================================================
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "es2022"
+    ],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+
+============================================================================================
+COMPLETE CONFIG — eslint.config.mjs
+============================================================================================
+import nextVitals from 'eslint-config-next/core-web-vitals'
+
+const eslintConfig = [...nextVitals]
+
+export default eslintConfig
+
+============================================================================================
+COMPLETE CONFIG — next.config.mjs
+============================================================================================
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true
+}
+
+export default nextConfig
+
+============================================================================================
+IMPORT GRAPH — procedural reasoning
+============================================================================================
+exit=0
+app/api/ai/answer/route.ts:28:} from "@/lib/procedural-reasoning";
+lib/ai/prompts.ts:3:import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
+lib/concept-registry.ts:5:} from "@/lib/procedural-reasoning";
+
+============================================================================================
+IMPORT GRAPH — concept registry
+============================================================================================
+exit=0
+lib/procedural-reasoning.ts:9:} from "./concept-registry";
+
+============================================================================================
+IMPORT GRAPH — Open Order diagnostic types / formatter
+============================================================================================
+exit=0
+lib/open-order/types.ts:1:// lib/open-order/types.ts

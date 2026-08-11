@@ -16,6 +16,13 @@ export type ProceduralConceptId =
   | "ministerial_accountability"
   | "retrospective_discipline";
 
+export type AuthorityContextPreference = {
+  whenAnyConcepts?: ProceduralConceptId[];
+  whenAllConcepts?: ProceduralConceptId[];
+  textIncludes: string[];
+  bonusPerMatch?: number;
+};
+
 export type AuthoritySlotSpec = {
   key: string;
   classes?: AuthorityClass[];
@@ -24,6 +31,7 @@ export type AuthoritySlotSpec = {
   pathIncludes?: string[];
   preferredCorpora?: Array<"standing_orders" | "speakers_rulings">;
   preferredTextIncludes?: string[];
+  contextualTextPreferences?: AuthorityContextPreference[];
   maxMatches?: number;
 };
 
@@ -87,9 +95,23 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         classes: ["procedural_mechanism"],
         functions: ["procedure"],
         preferredTextIncludes: [
-          "transgressing the rules of debate",
-          "breach of the rules",
           "speaker can take action",
+        ],
+        contextualTextPreferences: [
+          {
+            whenAnyConcepts: [
+              "personal_reflection",
+              "allegation_of_racism",
+              "relevancy",
+            ],
+            textIncludes: [
+              "transgressing the rules of debate",
+              "breach of the rules",
+              "call the attention of the speaker",
+              "draw the speaker's attention",
+            ],
+            bonusPerMatch: 260,
+          },
         ],
         maxMatches: 1,
       },

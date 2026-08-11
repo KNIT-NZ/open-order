@@ -13,6 +13,7 @@ import {
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   buildAuthorityPayload,
+  buildAuthorityProfile,
   buildFallbackAnswer,
   expandPlannerQueries,
   extractAnswerClaims,
@@ -206,8 +207,11 @@ export async function POST(request: NextRequest) {
               baseRank: item.result.rank,
               routeBoost: item.routeBoost,
               slotBoost: item.slotBoost,
+              preferredTextBoost: item.preferredTextBoost,
+              bridgeBoost: item.bridgeBoost,
               adjustedRank: item.adjustedRank,
               matchedSlots: item.matchedSlotKeys,
+              authorityFunction: buildAuthorityProfile(item.result).authorityFunction,
               path: item.result.path,
             })),
             selectedSlotMatches: selected.selectedSlotMatches,
@@ -256,6 +260,7 @@ export async function POST(request: NextRequest) {
               prompt: buildGroundedAnswerPrompt({
                 question,
                 corpus: effectiveCorpus,
+                intent: plan.intent,
                 searches: [
                   {
                     query: "final_authority_pack",

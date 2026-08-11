@@ -106,7 +106,12 @@ export type AiDiagnosticFinalAuthority = {
   documentCorpus: string;
   baseRank: number;
   routeBoost: number;
+  slotBoost?: number;
+  preferredTextBoost?: number;
+  bridgeBoost?: number;
   adjustedRank: number;
+  matchedSlots?: string[];
+  authorityFunction?: string;
   path: string[];
 };
 

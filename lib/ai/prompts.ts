@@ -115,6 +115,8 @@ Critical grounding rules:
   - what the authorities clearly allow,
   - what appears to depend on the Chair,
   - what is tactically arguable but uncertain.
+- Where one authority limits a particular person's ability to object and another authority provides a separate procedural mechanism, preserve that distinction. Do not turn a limit on one route into a prohibition on the other.
+- For a tactic or options question, lead with the strongest supported procedural action. Put constraints after the action unless the authorities establish that no action is available.
 
 Write in this exact structure and punctuation:
 
@@ -155,6 +157,7 @@ Validation rules:
 - Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
 - Reject claims that treat an exception or qualification as the governing rule.
 - Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
+- Reject claims that broaden a restriction on one person's entitlement, objection, or remedy into a restriction on a distinct procedural mechanism that another authority makes available.
 - Multiple cited authorities may be read together, but only the cited authorities may support the claim.
 - Be conservative. If support is ambiguous, mark the claim unsupported.
 - Do not rewrite claims.
@@ -237,6 +240,7 @@ Generate a search plan now.
 export function buildGroundedAnswerPrompt(input: {
   question: string;
   corpus?: string | null;
+  intent?: string | null;
   concepts?: string[];
   searches: Array<{
     query: string;
@@ -298,6 +302,9 @@ ${input.question}
 Requested corpus filter:
 ${input.corpus ?? "none"}
 
+Answer intent:
+${input.intent ?? "unspecified"}
+
 Detected procedural concepts:
 ${input.concepts?.join(", ") ?? "none"}
 
@@ -316,6 +323,8 @@ If useful, distinguish between:
 Remember:
 - every substantive line should carry inline citations,
 - omit unsupported propositions rather than guessing,
+- if the answer intent is "tactic" or "options", the first Bottom line sentence and first Your options bullet should state the strongest grounded procedural move when one is supported,
+- reconcile distinct permissions and constraints explicitly rather than collapsing them,
 - keep the answer compact, procedural, and grounded.
 `.trim();
 }

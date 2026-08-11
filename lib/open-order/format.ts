@@ -441,6 +441,13 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
               `   heading: ${item.heading ?? "None"}`,
               `   baseRank: ${item.baseRank.toFixed(2)}`,
               `   routeBoost: ${item.routeBoost.toFixed(2)}`,
+              `   slotBoost: ${(item.slotBoost ?? 0).toFixed(2)}`,
+              `   preferredTextBoost: ${(item.preferredTextBoost ?? 0).toFixed(2)}`,
+              `   bridgeBoost: ${(item.bridgeBoost ?? 0).toFixed(2)}`,
+              `   authorityFunction: ${item.authorityFunction ?? "None"}`,
+              `   matchedSlots: ${
+                item.matchedSlots?.length ? item.matchedSlots.join(", ") : "None"
+              }`,
               `   adjustedRank: ${item.adjustedRank.toFixed(2)}`,
               `   path: ${path}`,
             ].join("\n");
