@@ -115,10 +115,23 @@ export type AiDiagnosticFinalAuthority = {
   path: string[];
 };
 
+export type AiDiagnosticSlotMatch = {
+  slotKey: string;
+  citationLabel: string;
+  heading: string | null;
+};
+
 export type AiDiagnosticsPayload = {
   effectiveCorpus: string | null;
   inferredConcepts?: string[];
   expandedQueries?: string[];
+  blueprintSlots?: string[];
+  requiredSlots?: string[];
+  optionalSlots?: string[];
+  satisfiedSlots?: string[];
+  missingRequiredSlots?: string[];
+  blueprintSatisfied?: boolean;
+  selectedSlotMatches?: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
 };
@@ -136,6 +149,13 @@ export type AiDiagnostics = {
   error: string | null;
   inferredConcepts: string[];
   expandedQueries: string[];
+  blueprintSlots: string[];
+  requiredSlots: string[];
+  optionalSlots: string[];
+  satisfiedSlots: string[];
+  missingRequiredSlots: string[];
+  blueprintSatisfied: boolean | null;
+  selectedSlotMatches: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection: AiDiagnosticFinalAuthority[];
 };
@@ -153,6 +173,13 @@ export const EMPTY_AI_DIAGNOSTICS: AiDiagnostics = {
   error: null,
   inferredConcepts: [],
   expandedQueries: [],
+  blueprintSlots: [],
+  requiredSlots: [],
+  optionalSlots: [],
+  satisfiedSlots: [],
+  missingRequiredSlots: [],
+  blueprintSatisfied: null,
+  selectedSlotMatches: [],
   retrievals: [],
   finalAuthoritySelection: [],
 };

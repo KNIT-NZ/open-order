@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai/prompts";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
+  answerSectionHasContent,
   buildAuthorityPayload,
   buildAuthorityProfile,
   buildFallbackAnswer,
@@ -20,6 +21,7 @@ import {
   inferConcepts,
   normalizeAnswerFormatting,
   pruneUnsupportedAnswerClaims,
+  removeEmptyAnswerSections,
   pruneValidatedAnswerContent,
   rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
@@ -178,6 +180,11 @@ export async function POST(request: NextRequest) {
             inferredConcepts: inferredConcepts.map((concept) => concept.id),
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,
+            requiredSlots: selected.requiredSlots,
+            optionalSlots: selected.optionalSlots,
+            satisfiedSlots: selected.satisfiedSlots,
+            missingRequiredSlots: selected.missingRequiredSlots,
+            blueprintSatisfied: selected.blueprintSatisfied,
             expandedQueries,
             retrievals: searches.map((search) => ({
               query: search.query,
@@ -216,6 +223,43 @@ export async function POST(request: NextRequest) {
             })),
             selectedSlotMatches: selected.selectedSlotMatches,
           });
+
+          if (!selected.blueprintSatisfied) {
+            const fallbackReason = `Required authority slots were not satisfied: ${selected.missingRequiredSlots.join(
+              ", ",
+            )}.`;
+
+            const fallbackAnswer = buildFallbackAnswer({
+              question,
+              planIntent: plan.intent,
+              authorities: finalAuthorities,
+              effectiveCorpus,
+              fallbackReason,
+            });
+
+            send("stage", {
+              key: "validating",
+              label: "Required authority evidence missing; returning grounded fallback",
+            });
+
+            send("answer_delta", { text: fallbackAnswer });
+
+            send("done", {
+              ok: true,
+              degraded: true,
+              question,
+              corpus: effectiveCorpus,
+              latencyMs: Date.now() - started,
+              plan,
+              answerText: fallbackAnswer,
+              authorities: authorityPayload,
+              fallbackReason,
+              missingRequiredSlots: selected.missingRequiredSlots,
+            });
+
+            controller.close();
+            return;
+          }
 
           if (finalAuthorities.length === 0) {
             const fallbackAnswer = buildFallbackAnswer({
@@ -548,10 +592,24 @@ export async function POST(request: NextRequest) {
                 unsupportedClaimIds,
               });
 
-              finalAnswer = normalizeAnswerFormatting(
-                semanticPrune.prunedText,
+              finalAnswer = removeEmptyAnswerSections(
+                normalizeAnswerFormatting(semanticPrune.prunedText),
               );
-              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+
+              const unsupportedReasons = semanticPrune.removedClaims
+                .map((claim) => {
+                  const reason =
+                    validationById.get(claim.id)?.reason ??
+                    "no supporting validation result";
+                  return `${claim.id}: ${reason}`;
+                })
+                .join(" | ");
+
+              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}${
+                unsupportedReasons ? ` (${unsupportedReasons})` : ""
+              }`;
+            } else {
+              finalAnswer = removeEmptyAnswerSections(finalAnswer);
             }
 
             const remainingClaims = extractAnswerClaims(finalAnswer);
@@ -564,13 +622,20 @@ export async function POST(request: NextRequest) {
               authorities: authorityPayload,
             });
 
+            const hasBottomLine = answerSectionHasContent(
+              finalAnswer,
+              "Bottom line:",
+            );
+
             if (
               remainingClaims.length === 0 ||
+              !hasBottomLine ||
               !finalCitationValidation.ok ||
               !finalMentionValidation.ok
             ) {
-              const fallbackReason =
-                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
+              const fallbackReason = !hasBottomLine
+                ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
+                : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
 
               const fallbackAnswer = buildFallbackAnswer({
                 question,

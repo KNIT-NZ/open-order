@@ -582,6 +582,18 @@ function corpusMatches(
   );
 }
 
+function requiredTextMatches(
+  result: ProceduralSearchResult,
+  requiredTextIncludes?: string[],
+): boolean {
+  if (!requiredTextIncludes || requiredTextIncludes.length === 0) return true;
+
+  const content = result.sectionContent.toLowerCase();
+  return requiredTextIncludes.some((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  );
+}
+
 function matchesSlot(
   result: ProceduralSearchResult,
   slot: AuthoritySlotSpec,
@@ -591,7 +603,8 @@ function matchesSlot(
     pathMatches(result, slot.pathIncludes) &&
     classMatches(result, slot.classes) &&
     functionMatches(result, slot.functions) &&
-    corpusMatches(result, slot.preferredCorpora)
+    corpusMatches(result, slot.preferredCorpora) &&
+    requiredTextMatches(result, slot.requiredTextIncludes)
   );
 }
 
@@ -708,6 +721,10 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
   }
 
   return slots;
+}
+
+function isRequiredSlot(slot: AuthoritySlotSpec): boolean {
+  return slot.requirement === "required";
 }
 
 function countTextMatches(
@@ -834,11 +851,18 @@ export function selectFinalAuthorities(input: {
   scoredAuthorities: ScoredAuthority[];
   activeConceptIds: string[];
   blueprintSlots: string[];
+  requiredSlots: string[];
+  optionalSlots: string[];
+  satisfiedSlots: string[];
+  missingRequiredSlots: string[];
+  blueprintSatisfied: boolean;
   selectedSlotMatches: SlotMatch[];
 } {
   const frame = deriveFrame(input.question, input.plannerQueries ?? []);
   const slots = buildBlueprintSlots(frame.activeConcepts);
-  const activeConceptIds = new Set(frame.activeConcepts.map((concept) => concept.id));
+  const activeConceptIds = new Set(
+    frame.activeConcepts.map((concept) => concept.id),
+  );
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
     (search, queryIndex) =>
@@ -891,10 +915,18 @@ export function selectFinalAuthorities(input: {
   const selected: ScoredAuthority[] = [];
   const seen = new Set<string>();
   const familyCounts = new Map<string, number>();
+  const satisfiedSlotKeys = new Set<string>();
   const selectedSlotMatches: SlotMatch[] = [];
 
+  const requiredSlots = slots
+    .filter(isRequiredSlot)
+    .map((slot) => slot.key);
+  const optionalSlots = slots
+    .filter((slot) => !isRequiredSlot(slot))
+    .map((slot) => slot.key);
+
   const defaultMaxAuthorities =
-    slots.length > 0 ? Math.max(2, Math.min(slots.length, 8)) : 4;
+    slots.length > 0 ? Math.max(1, Math.min(slots.length, 8)) : 4;
 
   const computedMaxAuthorities = Math.min(
     10,
@@ -919,6 +951,9 @@ export function selectFinalAuthorities(input: {
     familyCounts.set(key, (familyCounts.get(key) ?? 0) + 1);
 
     for (const slotKey of item.matchedSlotKeys) {
+      if (satisfiedSlotKeys.has(slotKey)) continue;
+
+      satisfiedSlotKeys.add(slotKey);
       selectedSlotMatches.push({
         slotKey,
         citationLabel: item.result.citationLabel,
@@ -927,18 +962,38 @@ export function selectFinalAuthorities(input: {
     }
   }
 
-  for (const slot of slots) {
+  const orderedSlots = [...slots].sort((a, b) => {
+    const aRequired = isRequiredSlot(a) ? 1 : 0;
+    const bRequired = isRequiredSlot(b) ? 1 : 0;
+    return bRequired - aRequired;
+  });
+
+  for (const slot of orderedSlots) {
+    if (selected.length >= computedMaxAuthorities) break;
+    if (satisfiedSlotKeys.has(slot.key)) continue;
+
     const candidate = deduped.find(
       (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
     );
+
     if (candidate) add(candidate);
   }
 
-  for (const item of deduped) {
-    if (selected.length >= computedMaxAuthorities) break;
-    if (!canAdd(item)) continue;
-    add(item);
+  if (slots.length === 0) {
+    for (const item of deduped) {
+      if (selected.length >= computedMaxAuthorities) break;
+      if (!canAdd(item)) continue;
+      add(item);
+    }
   }
+
+  const satisfiedSlots = slots
+    .map((slot) => slot.key)
+    .filter((slotKey) => satisfiedSlotKeys.has(slotKey));
+
+  const missingRequiredSlots = requiredSlots.filter(
+    (slotKey) => !satisfiedSlotKeys.has(slotKey),
+  );
 
   return {
     finalAuthorities: selected.map((item) => ({
@@ -946,8 +1001,13 @@ export function selectFinalAuthorities(input: {
       rank: item.adjustedRank,
     })),
     scoredAuthorities: selected,
-    activeConceptIds: frame.activeConcepts.map((c) => c.id),
+    activeConceptIds: frame.activeConcepts.map((concept) => concept.id),
     blueprintSlots: slots.map((slot) => slot.key),
+    requiredSlots,
+    optionalSlots,
+    satisfiedSlots,
+    missingRequiredSlots,
+    blueprintSatisfied: missingRequiredSlots.length === 0,
     selectedSlotMatches,
   };
 }
@@ -972,6 +1032,66 @@ export function normalizeAnswerFormatting(text: string): string {
     (acc, [pattern, replacement]) => acc.replace(pattern, replacement),
     normalized,
   );
+}
+
+export function removeEmptyAnswerSections(answerText: string): string {
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const output: string[] = [];
+
+  for (let index = 0; index < lines.length; ) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!isStructuralHeading(trimmed)) {
+      output.push(line);
+      index += 1;
+      continue;
+    }
+
+    let nextHeadingIndex = index + 1;
+    while (
+      nextHeadingIndex < lines.length &&
+      !isStructuralHeading(lines[nextHeadingIndex].trim())
+    ) {
+      nextHeadingIndex += 1;
+    }
+
+    const sectionBody = lines
+      .slice(index + 1, nextHeadingIndex)
+      .filter((candidate) => candidate.trim().length > 0);
+
+    if (sectionBody.length > 0) {
+      output.push(line, ...lines.slice(index + 1, nextHeadingIndex));
+    }
+
+    index = nextHeadingIndex;
+  }
+
+  return output
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function answerSectionHasContent(
+  answerText: string,
+  heading: string,
+): boolean {
+  const normalizedHeading = heading.trim();
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const headingIndex = lines.findIndex(
+    (line) => line.trim() === normalizedHeading,
+  );
+
+  if (headingIndex < 0) return false;
+
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (isStructuralHeading(trimmed)) break;
+    if (trimmed) return true;
+  }
+
+  return false;
 }
 
 function extractInlineCitations(answerText: string): string[] {

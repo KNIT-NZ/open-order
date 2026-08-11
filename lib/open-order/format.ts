@@ -385,6 +385,43 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ? input.expandedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
       : "None";
 
+  const blueprintSlotsText =
+    input.blueprintSlots.length > 0
+      ? input.blueprintSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const requiredSlotsText =
+    input.requiredSlots.length > 0
+      ? input.requiredSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const optionalSlotsText =
+    input.optionalSlots.length > 0
+      ? input.optionalSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const satisfiedSlotsText =
+    input.satisfiedSlots.length > 0
+      ? input.satisfiedSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const missingRequiredSlotsText =
+    input.missingRequiredSlots.length > 0
+      ? input.missingRequiredSlots
+          .map((slot, i) => `${i + 1}. ${slot}`)
+          .join("\n")
+      : "None";
+
+  const selectedSlotMatchesText =
+    input.selectedSlotMatches.length > 0
+      ? input.selectedSlotMatches
+          .map(
+            (match, index) =>
+              `${index + 1}. ${match.slotKey} -> ${match.citationLabel} (${match.heading ?? "None"})`,
+          )
+          .join("\n")
+      : "None";
+
   const retrievalsText =
     input.retrievals.length > 0
       ? input.retrievals
@@ -501,6 +538,33 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     "",
     "Expanded queries:",
     expandedQueriesText,
+    "",
+    "BLUEPRINT COVERAGE",
+    "------------------",
+    `Satisfied: ${
+      input.blueprintSatisfied === null
+        ? "Unknown"
+        : input.blueprintSatisfied
+          ? "Yes"
+          : "No"
+    }`,
+    "Blueprint slots:",
+    blueprintSlotsText,
+    "",
+    "Required slots:",
+    requiredSlotsText,
+    "",
+    "Optional slots:",
+    optionalSlotsText,
+    "",
+    "Satisfied slots:",
+    satisfiedSlotsText,
+    "",
+    "Missing required slots:",
+    missingRequiredSlotsText,
+    "",
+    "Selected slot matches:",
+    selectedSlotMatchesText,
     "",
     "RETRIEVALS",
     "----------",
