@@ -79,6 +79,17 @@ type SlotMatch = {
   heading: string | null;
 };
 
+export type RecoverySearchRequest = {
+  slotKey: string;
+  query: string;
+  corpus: "standing_orders" | "speakers_rulings" | null;
+};
+
+export type MissingEvidenceGap = {
+  slotKey: string;
+  description: string;
+};
+
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -721,6 +732,86 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
   }
 
   return slots;
+}
+
+export function buildMissingSlotRecoveryRequests(input: {
+  question: string;
+  plannerQueries?: string[];
+  missingRequiredSlots: string[];
+  requestedCorpus?: "standing_orders" | "speakers_rulings" | null;
+  maxRequests?: number;
+}): RecoverySearchRequest[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
+  const missing = new Set(input.missingRequiredSlots);
+  const seen = new Set<string>();
+  const output: RecoverySearchRequest[] = [];
+  const maxRequests = Math.max(1, Math.min(input.maxRequests ?? 4, 8));
+
+  for (const slot of slots) {
+    if (!missing.has(slot.key)) continue;
+
+    const queries =
+      slot.recoveryQueries?.length
+        ? slot.recoveryQueries
+        : slot.requiredTextIncludes ?? [];
+
+    const corpora: Array<"standing_orders" | "speakers_rulings" | null> =
+      input.requestedCorpus
+        ? [input.requestedCorpus]
+        : slot.recoveryCorpora?.length
+          ? slot.recoveryCorpora
+          : slot.preferredCorpora?.length
+            ? slot.preferredCorpora
+            : [null];
+
+    for (const query of queries) {
+      for (const corpus of corpora) {
+        const normalizedQuery = cleanQuery(query);
+        if (!normalizedQuery) continue;
+
+        const key = `${slot.key}::${corpus ?? "auto"}::${normalizedQuery.toLowerCase()}`;
+        if (seen.has(key)) continue;
+
+        seen.add(key);
+        output.push({
+          slotKey: slot.key,
+          query: normalizedQuery,
+          corpus,
+        });
+
+        if (output.length >= maxRequests) {
+          return output;
+        }
+      }
+    }
+  }
+
+  return output;
+}
+
+function humanizeSlotKey(slotKey: string): string {
+  return slotKey.replace(/_/g, " ");
+}
+
+export function describeMissingAuthoritySlots(input: {
+  question: string;
+  plannerQueries?: string[];
+  missingRequiredSlots: string[];
+}): MissingEvidenceGap[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
+  const slotByKey = new Map(slots.map((slot) => [slot.key, slot]));
+
+  return input.missingRequiredSlots.map((slotKey) => {
+    const slot = slotByKey.get(slotKey);
+    return {
+      slotKey,
+      description:
+        slot?.evidenceGapDescription ??
+        `the required evidence for ${humanizeSlotKey(slotKey)}`,
+    };
+  });
 }
 
 function isRequiredSlot(slot: AuthoritySlotSpec): boolean {
@@ -1401,6 +1492,33 @@ export function pruneUnsupportedAnswerClaims(input: {
     prunedText,
     removedClaims,
   };
+}
+
+export function appendEvidenceGapSection(
+  answerText: string,
+  evidenceGaps: string[],
+): string {
+  const gaps = evidenceGaps
+    .map((gap) => normalizeWhitespace(gap))
+    .filter(Boolean);
+
+  if (gaps.length === 0) {
+    return normalizeAnswerFormatting(answerText);
+  }
+
+  const rendered = gaps.map(
+    (gap) =>
+      `- Open Order did not retrieve authority establishing ${gap}. That unresolved point should not be treated as proved either way.`,
+  );
+
+  return [
+    normalizeAnswerFormatting(answerText),
+    "",
+    "Evidence gap:",
+    ...rendered,
+  ]
+    .join("\n")
+    .trim();
 }
 
 function classifyOption(result: ProceduralSearchResult): string {

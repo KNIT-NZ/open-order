@@ -13,9 +13,12 @@ import {
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
+  appendEvidenceGapSection,
   buildAuthorityPayload,
   buildAuthorityProfile,
   buildFallbackAnswer,
+  buildMissingSlotRecoveryRequests,
+  describeMissingAuthoritySlots,
   expandPlannerQueries,
   extractAnswerClaims,
   inferConcepts,
@@ -161,15 +164,92 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          const selected = selectFinalAuthorities({
+          let selected = selectFinalAuthorities({
             searches,
             question,
             plannerQueries: plan.searchQueries,
           });
 
+          const recoveryAttempts: Array<{
+            slotKey: string;
+            query: string;
+            corpus: string | null;
+            resultCount: number;
+          }> = [];
+
+          if (!selected.blueprintSatisfied) {
+            send("stage", {
+              key: "retrieving",
+              label: "Recovering missing authority evidence",
+            });
+
+            const recoveryRequests = buildMissingSlotRecoveryRequests({
+              question,
+              plannerQueries: plan.searchQueries,
+              missingRequiredSlots: selected.missingRequiredSlots,
+              requestedCorpus: corpus,
+              maxRequests: 4,
+            });
+
+            const existingSearchKeys = new Set(
+              searches.map(
+                (search) =>
+                  `${search.corpus ?? "auto"}::${search.query.toLowerCase()}`,
+              ),
+            );
+
+            for (const recovery of recoveryRequests) {
+              const searchKey = `${recovery.corpus ?? "auto"}::${recovery.query.toLowerCase()}`;
+              if (existingSearchKeys.has(searchKey)) continue;
+
+              const searchResponse = await searchProceduralAuthorities({
+                q: recovery.query,
+                corpus: recovery.corpus,
+                limit: 10,
+                offset: 0,
+              });
+
+              searches.push({
+                query: recovery.query,
+                corpus: recovery.corpus,
+                results: searchResponse.results,
+              });
+              existingSearchKeys.add(searchKey);
+
+              recoveryAttempts.push({
+                slotKey: recovery.slotKey,
+                query: recovery.query,
+                corpus: recovery.corpus,
+                resultCount: searchResponse.results.length,
+              });
+            }
+
+            if (recoveryAttempts.length > 0) {
+              selected = selectFinalAuthorities({
+                searches,
+                question,
+                plannerQueries: plan.searchQueries,
+              });
+            }
+          }
+
+          const evidenceGaps = describeMissingAuthoritySlots({
+            question,
+            plannerQueries: plan.searchQueries,
+            missingRequiredSlots: selected.missingRequiredSlots,
+          });
+
           const finalAuthorities = selected.finalAuthorities;
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
+
+          const finalAuthorityCorpora = [
+            ...new Set(finalAuthorities.map((authority) => authority.documentCorpus)),
+          ];
+          const finalAuthorityCorpus =
+            finalAuthorityCorpora.length === 1
+              ? finalAuthorityCorpora[0]
+              : null;
 
           send("authorities", {
             authorities: authorityPayload,
@@ -186,6 +266,8 @@ export async function POST(request: NextRequest) {
             missingRequiredSlots: selected.missingRequiredSlots,
             blueprintSatisfied: selected.blueprintSatisfied,
             expandedQueries,
+            recoveryAttempts,
+            evidenceGaps,
             retrievals: searches.map((search) => ({
               query: search.query,
               corpus: search.corpus,
@@ -223,43 +305,6 @@ export async function POST(request: NextRequest) {
             })),
             selectedSlotMatches: selected.selectedSlotMatches,
           });
-
-          if (!selected.blueprintSatisfied) {
-            const fallbackReason = `Required authority slots were not satisfied: ${selected.missingRequiredSlots.join(
-              ", ",
-            )}.`;
-
-            const fallbackAnswer = buildFallbackAnswer({
-              question,
-              planIntent: plan.intent,
-              authorities: finalAuthorities,
-              effectiveCorpus,
-              fallbackReason,
-            });
-
-            send("stage", {
-              key: "validating",
-              label: "Required authority evidence missing; returning grounded fallback",
-            });
-
-            send("answer_delta", { text: fallbackAnswer });
-
-            send("done", {
-              ok: true,
-              degraded: true,
-              question,
-              corpus: effectiveCorpus,
-              latencyMs: Date.now() - started,
-              plan,
-              answerText: fallbackAnswer,
-              authorities: authorityPayload,
-              fallbackReason,
-              missingRequiredSlots: selected.missingRequiredSlots,
-            });
-
-            controller.close();
-            return;
-          }
 
           if (finalAuthorities.length === 0) {
             const fallbackAnswer = buildFallbackAnswer({
@@ -303,12 +348,13 @@ export async function POST(request: NextRequest) {
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
                 question,
-                corpus: effectiveCorpus,
+                corpus: finalAuthorityCorpus ?? effectiveCorpus,
                 intent: plan.intent,
+                evidenceGaps: evidenceGaps.map((gap) => gap.description),
                 searches: [
                   {
                     query: "final_authority_pack",
-                    corpus: effectiveCorpus,
+                    corpus: finalAuthorityCorpus,
                     results: finalAuthorities,
                   },
                 ],
@@ -668,11 +714,18 @@ export async function POST(request: NextRequest) {
               return;
             }
 
+            if (evidenceGaps.length > 0) {
+              finalAnswer = appendEvidenceGapSection(
+                finalAnswer,
+                evidenceGaps.map((gap) => gap.description),
+              );
+            }
+
             send("answer_delta", { text: finalAnswer });
 
             send("done", {
               ok: true,
-              degraded: false,
+              degraded: evidenceGaps.length > 0,
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
@@ -682,6 +735,9 @@ export async function POST(request: NextRequest) {
               rewriteNote,
               pruneNote,
               claimValidationNote,
+              recoveryAttempts,
+              evidenceGaps,
+              missingRequiredSlots: selected.missingRequiredSlots,
             });
 
             controller.close();

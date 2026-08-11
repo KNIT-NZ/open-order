@@ -117,6 +117,8 @@ Critical grounding rules:
   - what is tactically arguable but uncertain.
 - Where one authority limits a particular person's ability to object and another authority provides a separate procedural mechanism, preserve that distinction. Do not turn a limit on one route into a prohibition on the other.
 - For a tactic or options question, lead with the strongest supported procedural action. Put constraints after the action unless the authorities establish that no action is available.
+- If the prompt identifies an unresolved evidence gap, do not treat that gap as proving the user's preferred conclusion or its opposite.
+- When a decisive proposition is unsupported but other procedural steps are supported, answer those supported steps directly and leave the unsupported proposition unresolved.
 
 Write in this exact structure and punctuation:
 
@@ -242,6 +244,7 @@ export function buildGroundedAnswerPrompt(input: {
   corpus?: string | null;
   intent?: string | null;
   concepts?: string[];
+  evidenceGaps?: string[];
   searches: Array<{
     query: string;
     corpus: string | null;
@@ -308,6 +311,13 @@ ${input.intent ?? "unspecified"}
 Detected procedural concepts:
 ${input.concepts?.join(", ") ?? "none"}
 
+Known evidence gaps:
+${
+  input.evidenceGaps?.length
+    ? input.evidenceGaps.map((gap) => `- ${gap}`).join("\n")
+    : "none"
+}
+
 Retrieved authorities:
 ${renderedSearches}
 
@@ -325,6 +335,8 @@ Remember:
 - omit unsupported propositions rather than guessing,
 - if the answer intent is "tactic" or "options", the first Bottom line sentence and first Your options bullet should state the strongest grounded procedural move when one is supported,
 - reconcile distinct permissions and constraints explicitly rather than collapsing them,
+- if a known evidence gap is listed above, do not make the missing proposition the Bottom line; instead lead with the strongest supported procedural move and keep the missing proposition expressly unresolved,
+- do not claim that absence of retrieved authority proves that a power does or does not exist,
 - keep the answer compact, procedural, and grounded.
 `.trim();
 }

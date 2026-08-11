@@ -32,6 +32,9 @@ export type AuthoritySlotSpec = {
   pathIncludes?: string[];
   preferredCorpora?: Array<"standing_orders" | "speakers_rulings">;
   requiredTextIncludes?: string[];
+  recoveryQueries?: string[];
+  recoveryCorpora?: Array<"standing_orders" | "speakers_rulings">;
+  evidenceGapDescription?: string;
   preferredTextIncludes?: string[];
   contextualTextPreferences?: AuthorityContextPreference[];
   maxMatches?: number;
@@ -317,7 +320,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         key: "retrospective_timing_rule",
         requirement: "required",
         pathIncludes: ["rules of debate", "maintenance of order"],
-        preferredCorpora: ["speakers_rulings"],
+        preferredCorpora: ["standing_orders", "speakers_rulings"],
         requiredTextIncludes: [
           "previous sitting",
           "earlier sitting",
@@ -326,6 +329,14 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
           "at an earlier sitting",
           "at a previous sitting",
         ],
+        recoveryQueries: [
+          "previous sitting",
+          "earlier sitting",
+          "previous day",
+        ],
+        recoveryCorpora: ["speakers_rulings", "standing_orders"],
+        evidenceGapDescription:
+          "whether the Speaker may require withdrawal or an apology for conduct from an earlier sitting",
         maxMatches: 1,
       },
     ],
