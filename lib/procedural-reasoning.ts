@@ -8,9 +8,32 @@ import {
   type ProceduralConcept,
 } from "./concept-registry";
 
+export type QueryProvenance =
+  | "planner"
+  | "user_term"
+  | "registry_expansion"
+  | "recovery";
+
+export type SearchDimension = {
+  query: string;
+  provenance: QueryProvenance;
+};
+
+export type DiscoveredProceduralDimension = {
+  conceptId: string;
+  query: string;
+  provenance: QueryProvenance;
+  status: "promoted" | "rejected" | "covered_by_static";
+  validation: string;
+  heading: string | null;
+  evidenceCount: number;
+  slotKey: string | null;
+};
+
 export type SearchExecution = {
   query: string;
   corpus: string | null;
+  provenance?: QueryProvenance;
   results: ProceduralSearchResult[];
 };
 
@@ -342,37 +365,44 @@ function canonicalizeProceduralQuery(query: string): string[] {
   return [query];
 }
 
-function uniqQueries(queries: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
+function addSearchDimension(
+  output: SearchDimension[],
+  seen: Set<string>,
+  rawQuery: string,
+  provenance: QueryProvenance,
+): void {
+  const query = cleanQuery(rawQuery);
+  if (!query) return;
 
-  for (const raw of queries) {
-    const canonicalized = canonicalizeProceduralQuery(raw);
+  const key = query.toLowerCase();
+  if (seen.has(key)) return;
 
-    for (const candidate of canonicalized) {
-      const query = cleanQuery(candidate);
-      if (!query) continue;
-
-      const key = query.toLowerCase();
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      output.push(query);
-    }
-  }
-
-  return output;
+  seen.add(key);
+  output.push({ query, provenance });
 }
 
-export function expandPlannerQueries(input: {
+function addCanonicalExpansions(
+  output: SearchDimension[],
+  seen: Set<string>,
+  rawQuery: string,
+): void {
+  const literal = cleanQuery(rawQuery).toLowerCase();
+
+  for (const candidate of canonicalizeProceduralQuery(rawQuery)) {
+    const normalized = cleanQuery(candidate);
+    if (!normalized || normalized.toLowerCase() === literal) continue;
+    addSearchDimension(output, seen, normalized, "registry_expansion");
+  }
+}
+
+export function buildProceduralQueryPlan(input: {
   question: string;
   plannerQueries: string[];
+  salientTerms?: string[];
   effectiveCorpus: string | null;
-}): string[] {
+}): SearchDimension[] {
   const frame = deriveFrame(input.question, input.plannerQueries);
-  const seedQueries = [...input.plannerQueries];
   const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
-
   const additions: string[] = [];
 
   if (frame.closure) {
@@ -414,11 +444,41 @@ export function expandPlannerQueries(input: {
     additions.push("withdrawal", "procedure");
   }
 
-  return uniqQueries([...seedQueries, ...conceptQueries, ...additions]).slice(
-    0,
-    6,
-  );
+  const output: SearchDimension[] = [];
+  const seen = new Set<string>();
+
+  for (const query of input.plannerQueries) {
+    addSearchDimension(output, seen, query, "planner");
+  }
+
+  for (const term of input.salientTerms ?? []) {
+    addSearchDimension(output, seen, term, "user_term");
+  }
+
+  for (const query of input.plannerQueries) {
+    addCanonicalExpansions(output, seen, query);
+  }
+
+  for (const term of input.salientTerms ?? []) {
+    addCanonicalExpansions(output, seen, term);
+  }
+
+  for (const query of [...conceptQueries, ...additions]) {
+    addSearchDimension(output, seen, query, "registry_expansion");
+  }
+
+  return output.slice(0, 8);
 }
+
+export function expandPlannerQueries(input: {
+  question: string;
+  plannerQueries: string[];
+  salientTerms?: string[];
+  effectiveCorpus: string | null;
+}): string[] {
+  return buildProceduralQueryPlan(input).map((dimension) => dimension.query);
+}
+
 
 export function buildAuthorityProfile(
   result: ProceduralSearchResult,
@@ -716,7 +776,251 @@ function dedupeScoredAuthorities(
   return output;
 }
 
-function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
+const DYNAMIC_DISCOVERY_STOP_QUERIES = new Set([
+  "procedure",
+  "procedures",
+  "rule",
+  "rules",
+  "house",
+  "debate",
+  "member",
+  "speaker",
+  "chair",
+]);
+
+function normalizedStaticConceptTerms(
+  concept: ProceduralConcept,
+): Set<string> {
+  return new Set(
+    [
+      ...concept.aliases,
+      ...(concept.plannerTriggers ?? []),
+      ...concept.preferredQueries,
+    ]
+      .map(normalizeConceptTrigger)
+      .filter(Boolean),
+  );
+}
+
+function searchDimensionCoveredByStaticConcept(
+  search: SearchExecution,
+  concepts: ProceduralConcept[],
+): boolean {
+  const query = normalizeConceptTrigger(search.query);
+  if (!query) return false;
+
+  return concepts.some((concept) =>
+    normalizedStaticConceptTerms(concept).has(query),
+  );
+}
+
+function discoveryKey(text: string): string {
+  return cleanQuery(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+function normalizeHeadingForDiscovery(heading: string): string {
+  return normalizeWhitespace(heading).toLowerCase();
+}
+
+type HeadingEvidenceGroup = {
+  heading: string;
+  results: ProceduralSearchResult[];
+  exactHeadingCount: number;
+  headingPhraseCount: number;
+  maxRank: number;
+};
+
+function strongestHeadingEvidence(
+  results: ProceduralSearchResult[],
+): HeadingEvidenceGroup | null {
+  const groups = new Map<string, HeadingEvidenceGroup>();
+
+  for (const result of results) {
+    const heading = result.heading?.trim();
+    if (!heading) continue;
+    if (
+      !result.matchSignals.exactHeadingMatch &&
+      !result.matchSignals.headingPhraseMatch
+    ) {
+      continue;
+    }
+
+    const key = normalizeHeadingForDiscovery(heading);
+    const existing = groups.get(key) ?? {
+      heading,
+      results: [],
+      exactHeadingCount: 0,
+      headingPhraseCount: 0,
+      maxRank: 0,
+    };
+
+    existing.results.push(result);
+    if (result.matchSignals.exactHeadingMatch) existing.exactHeadingCount += 1;
+    if (result.matchSignals.headingPhraseMatch) existing.headingPhraseCount += 1;
+    existing.maxRank = Math.max(existing.maxRank, result.rank);
+    groups.set(key, existing);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    if (b.exactHeadingCount !== a.exactHeadingCount) {
+      return b.exactHeadingCount - a.exactHeadingCount;
+    }
+    if (b.results.length !== a.results.length) {
+      return b.results.length - a.results.length;
+    }
+    return b.maxRank - a.maxRank;
+  })[0] ?? null;
+}
+
+export function discoverProceduralDimensions(input: {
+  searches: SearchExecution[];
+  concepts: ProceduralConcept[];
+}): DiscoveredProceduralDimension[] {
+  const output: DiscoveredProceduralDimension[] = [];
+
+  for (const search of input.searches) {
+    const provenance = search.provenance ?? "registry_expansion";
+    if (provenance !== "planner" && provenance !== "user_term") continue;
+
+    const query = cleanQuery(search.query);
+    const normalizedQuery = query.toLowerCase();
+
+    if (searchDimensionCoveredByStaticConcept(search, input.concepts)) {
+      output.push({
+        conceptId: `static:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "covered_by_static",
+        validation: "A static registry concept already owns this search dimension.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+      });
+      continue;
+    }
+
+    if (DYNAMIC_DISCOVERY_STOP_QUERIES.has(normalizedQuery)) {
+      output.push({
+        conceptId: `rejected:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "rejected",
+        validation: "The search dimension is too generic to create a runtime procedural concept.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+      });
+      continue;
+    }
+
+    const evidence = strongestHeadingEvidence(search.results);
+    if (!evidence) {
+      output.push({
+        conceptId: `rejected:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "rejected",
+        validation: "No heading-level corpus evidence supported promotion.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+      });
+      continue;
+    }
+
+    const promotedByExactHeading =
+      evidence.exactHeadingCount >= 1 &&
+      (evidence.maxRank >= 120 || evidence.results.length >= 2);
+    const promotedByHeadingCluster =
+      evidence.headingPhraseCount >= 2 && evidence.maxRank >= 180;
+    const promoted = promotedByExactHeading || promotedByHeadingCluster;
+    const key = discoveryKey(evidence.heading || query);
+
+    output.push({
+      conceptId: promoted ? `discovered:${key}` : `rejected:${discoveryKey(query)}`,
+      query,
+      provenance,
+      status: promoted ? "promoted" : "rejected",
+      validation: promoted
+        ? evidence.exactHeadingCount > 0
+          ? `Promoted from heading-level corpus evidence: ${evidence.exactHeadingCount} exact-heading match(es), ${evidence.results.length} coherent heading match(es).`
+          : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results.`
+        : "Heading evidence was present but did not meet the promotion threshold.",
+      heading: evidence.heading,
+      evidenceCount: evidence.results.length,
+      slotKey: promoted ? `discovered_${key}` : null,
+    });
+  }
+
+  return output;
+}
+
+function buildDiscoveredSlots(
+  discoveries: DiscoveredProceduralDimension[],
+  searches: SearchExecution[],
+): AuthoritySlotSpec[] {
+  const seen = new Set<string>();
+  const slots: AuthoritySlotSpec[] = [];
+
+  for (const discovery of discoveries) {
+    if (
+      discovery.status !== "promoted" ||
+      !discovery.heading ||
+      !discovery.slotKey ||
+      seen.has(discovery.slotKey)
+    ) {
+      continue;
+    }
+
+    seen.add(discovery.slotKey);
+
+    const sourceSearch = searches.find(
+      (search) =>
+        cleanQuery(search.query).toLowerCase() ===
+        cleanQuery(discovery.query).toLowerCase(),
+    );
+    const corpus =
+      sourceSearch?.corpus === "standing_orders" ||
+      sourceSearch?.corpus === "speakers_rulings"
+        ? sourceSearch.corpus
+        : null;
+
+    const discoveryHeading = normalizeHeadingForDiscovery(discovery.heading);
+    const linkedUserTerms = searches
+      .filter((search) => search.provenance === "user_term")
+      .filter((search) =>
+        search.results.some(
+          (result) =>
+            result.heading &&
+            normalizeHeadingForDiscovery(result.heading) === discoveryHeading &&
+            result.matchSignals.bodyPhraseMatch,
+        ),
+      )
+      .map((search) => cleanQuery(search.query))
+      .filter(Boolean);
+
+    slots.push({
+      key: discovery.slotKey,
+      requirement: "required",
+      headings: [discovery.heading],
+      preferredCorpora: corpus ? [corpus] : undefined,
+      preferredTextIncludes:
+        linkedUserTerms.length > 0 ? linkedUserTerms : undefined,
+      maxMatches: 1,
+    });
+  }
+
+  return slots;
+}
+
+function buildBlueprintSlots(
+  concepts: ProceduralConcept[],
+  discoveredSlots: AuthoritySlotSpec[] = [],
+): AuthoritySlotSpec[] {
   const seen = new Set<string>();
   const superseded = new Set(
     concepts.flatMap((concept) => concept.supersedesSlots ?? []),
@@ -729,6 +1033,12 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
       seen.add(slot.key);
       slots.push(slot);
     }
+  }
+
+  for (const slot of discoveredSlots) {
+    if (seen.has(slot.key)) continue;
+    seen.add(slot.key);
+    slots.push(slot);
   }
 
   return slots;
@@ -948,12 +1258,25 @@ export function selectFinalAuthorities(input: {
   missingRequiredSlots: string[];
   blueprintSatisfied: boolean;
   selectedSlotMatches: SlotMatch[];
+  discoveredDimensions: DiscoveredProceduralDimension[];
 } {
   const frame = deriveFrame(input.question, input.plannerQueries ?? []);
-  const slots = buildBlueprintSlots(frame.activeConcepts);
-  const activeConceptIds = new Set(
-    frame.activeConcepts.map((concept) => concept.id),
+  const discoveredDimensions = discoverProceduralDimensions({
+    searches: input.searches,
+    concepts: frame.activeConcepts,
+  });
+  const discoveredSlots = buildDiscoveredSlots(
+    discoveredDimensions,
+    input.searches,
   );
+  const slots = buildBlueprintSlots(frame.activeConcepts, discoveredSlots);
+  const promotedConceptIds = discoveredDimensions
+    .filter((dimension) => dimension.status === "promoted")
+    .map((dimension) => dimension.conceptId);
+  const activeConceptIds = new Set([
+    ...frame.activeConcepts.map((concept) => concept.id),
+    ...promotedConceptIds,
+  ]);
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
     (search, queryIndex) =>
@@ -1092,7 +1415,7 @@ export function selectFinalAuthorities(input: {
       rank: item.adjustedRank,
     })),
     scoredAuthorities: selected,
-    activeConceptIds: frame.activeConcepts.map((concept) => concept.id),
+    activeConceptIds: [...activeConceptIds],
     blueprintSlots: slots.map((slot) => slot.key),
     requiredSlots,
     optionalSlots,
@@ -1100,6 +1423,7 @@ export function selectFinalAuthorities(input: {
     missingRequiredSlots,
     blueprintSatisfied: missingRequiredSlots.length === 0,
     selectedSlotMatches,
+    discoveredDimensions,
   };
 }
 

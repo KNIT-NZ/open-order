@@ -18,8 +18,8 @@ import {
   buildAuthorityProfile,
   buildFallbackAnswer,
   buildMissingSlotRecoveryRequests,
+  buildProceduralQueryPlan,
   describeMissingAuthoritySlots,
-  expandPlannerQueries,
   extractAnswerClaims,
   inferConcepts,
   normalizeAnswerFormatting,
@@ -50,6 +50,7 @@ const searchPlanSchema = z.object({
   ]),
   preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
   searchQueries: z.array(z.string().min(1)).min(1).max(3),
+  salientTerms: z.array(z.string().min(1)).max(4).default([]),
   notes: z.string(),
 });
 
@@ -141,25 +142,28 @@ export async function POST(request: NextRequest) {
             label: "Retrieving authorities",
           });
 
-          const expandedQueries = expandPlannerQueries({
+          const queryPlan = buildProceduralQueryPlan({
             question,
             plannerQueries: plan.searchQueries,
+            salientTerms: plan.salientTerms,
             effectiveCorpus,
           });
+          const expandedQueries = queryPlan.map((dimension) => dimension.query);
 
           const searches: SearchExecution[] = [];
 
-          for (const query of expandedQueries) {
+          for (const dimension of queryPlan) {
             const searchResponse = await searchProceduralAuthorities({
-              q: query,
+              q: dimension.query,
               corpus: effectiveCorpus,
               limit: 10,
               offset: 0,
             });
 
             searches.push({
-              query,
+              query: dimension.query,
               corpus: effectiveCorpus,
+              provenance: dimension.provenance,
               results: searchResponse.results,
             });
           }
@@ -212,6 +216,7 @@ export async function POST(request: NextRequest) {
               searches.push({
                 query: recovery.query,
                 corpus: recovery.corpus,
+                provenance: "recovery",
                 results: searchResponse.results,
               });
               existingSearchKeys.add(searchKey);
@@ -255,9 +260,18 @@ export async function POST(request: NextRequest) {
             authorities: authorityPayload,
           });
 
+          const diagnosticConcepts = [
+            ...new Set([
+              ...inferredConcepts.map((concept) => concept.id),
+              ...selected.discoveredDimensions
+                .filter((dimension) => dimension.status === "promoted")
+                .map((dimension) => dimension.conceptId),
+            ]),
+          ];
+
           send("diagnostics", {
             effectiveCorpus,
-            inferredConcepts: inferredConcepts.map((concept) => concept.id),
+            inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,
             requiredSlots: selected.requiredSlots,
@@ -268,11 +282,21 @@ export async function POST(request: NextRequest) {
             expandedQueries,
             recoveryAttempts,
             evidenceGaps,
-            retrievals: searches.map((search) => ({
-              query: search.query,
-              corpus: search.corpus,
-              resultCount: search.results.length,
-              topResults: search.results.slice(0, 6).map((result) => ({
+            retrievals: searches.map((search) => {
+              const discovery = selected.discoveredDimensions.find(
+                (dimension) =>
+                  dimension.query.toLowerCase() === search.query.toLowerCase() &&
+                  dimension.provenance ===
+                    (search.provenance ?? "registry_expansion"),
+              );
+
+              return {
+                query: search.query,
+                corpus: search.corpus,
+                provenance: search.provenance ?? "registry_expansion",
+                discovery,
+                resultCount: search.results.length,
+                topResults: search.results.slice(0, 6).map((result) => ({
                 sectionId: result.sectionId,
                 sectionKey: result.sectionKey,
                 citationLabel: result.citationLabel,
@@ -285,9 +309,10 @@ export async function POST(request: NextRequest) {
                 bodyRank: result.bodyRank,
                 chunkRank: result.chunkRank,
                 clusterSupportCount: result.clusterSupportCount,
-                matchSignals: result.matchSignals,
-              })),
-            })),
+                  matchSignals: result.matchSignals,
+                })),
+              };
+            }),
             finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
               query: item.query,
               citationLabel: item.result.citationLabel,

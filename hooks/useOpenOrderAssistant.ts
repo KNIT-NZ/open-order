@@ -149,8 +149,26 @@ export function useOpenOrderAssistant() {
                 payload.effectiveCorpus === null
                   ? payload.effectiveCorpus
                   : current.effectiveCorpus,
-              inferredConcepts: payload.inferredConcepts ?? current.inferredConcepts,
-              expandedQueries: payload.expandedQueries ?? current.expandedQueries,
+              inferredConcepts:
+                payload.inferredConcepts ?? current.inferredConcepts,
+              expandedQueries:
+                payload.expandedQueries ?? current.expandedQueries,
+              blueprintSlots:
+                payload.blueprintSlots ?? current.blueprintSlots,
+              requiredSlots:
+                payload.requiredSlots ?? current.requiredSlots,
+              optionalSlots:
+                payload.optionalSlots ?? current.optionalSlots,
+              satisfiedSlots:
+                payload.satisfiedSlots ?? current.satisfiedSlots,
+              missingRequiredSlots:
+                payload.missingRequiredSlots ?? current.missingRequiredSlots,
+              blueprintSatisfied:
+                typeof payload.blueprintSatisfied === "boolean"
+                  ? payload.blueprintSatisfied
+                  : current.blueprintSatisfied,
+              selectedSlotMatches:
+                payload.selectedSlotMatches ?? current.selectedSlotMatches,
               retrievals: payload.retrievals ?? current.retrievals,
               finalAuthoritySelection:
                 payload.finalAuthoritySelection ??

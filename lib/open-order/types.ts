@@ -50,6 +50,7 @@ export type AiPlan = {
     | "clarification";
   preferredCorpus: "standing_orders" | "speakers_rulings" | null;
   searchQueries: string[];
+  salientTerms?: string[];
   notes: string;
 };
 
@@ -92,9 +93,28 @@ export type AiDiagnosticTopResult = {
   };
 };
 
+export type AiQueryProvenance =
+  | "planner"
+  | "user_term"
+  | "registry_expansion"
+  | "recovery";
+
+export type AiDiagnosticDiscovery = {
+  conceptId: string;
+  query: string;
+  provenance: AiQueryProvenance;
+  status: "promoted" | "rejected" | "covered_by_static";
+  validation: string;
+  heading: string | null;
+  evidenceCount: number;
+  slotKey: string | null;
+};
+
 export type AiDiagnosticRetrieval = {
   query: string;
   corpus: string | null;
+  provenance?: AiQueryProvenance;
+  discovery?: AiDiagnosticDiscovery;
   resultCount: number;
   topResults: AiDiagnosticTopResult[];
 };

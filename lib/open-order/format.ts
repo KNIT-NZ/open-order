@@ -375,6 +375,10 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     ? input.plan.searchQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
     : "None";
 
+  const salientTermsText = input.plan?.salientTerms?.length
+    ? input.plan.salientTerms.map((term, i) => `${i + 1}. ${term}`).join("\n")
+    : "None";
+
   const inferredConceptsText =
     input.inferredConcepts.length > 0
       ? input.inferredConcepts.map((c, i) => `${i + 1}. ${c}`).join("\n")
@@ -454,9 +458,22 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
                     .join("\n")
                 : "    None";
 
+            const discoveryText = retrieval.discovery
+              ? [
+                  `   Discovery status: ${retrieval.discovery.status}`,
+                  `   Discovery concept: ${retrieval.discovery.conceptId}`,
+                  `   Discovery heading: ${retrieval.discovery.heading ?? "None"}`,
+                  `   Discovery evidence count: ${retrieval.discovery.evidenceCount}`,
+                  `   Discovery slot: ${retrieval.discovery.slotKey ?? "None"}`,
+                  `   Discovery validation: ${retrieval.discovery.validation}`,
+                ]
+              : ["   Discovery status: not evaluated"];
+
             return [
               `${retrievalIndex + 1}. Query: ${retrieval.query}`,
               `   Corpus: ${retrieval.corpus ?? "Auto"}`,
+              `   Provenance: ${retrieval.provenance ?? "unknown"}`,
+              ...discoveryText,
               `   Result count: ${retrieval.resultCount}`,
               `   Top results:`,
               topResultsText,
@@ -532,6 +549,9 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     `Notes: ${input.plan?.notes ?? "None"}`,
     "Planner search queries:",
     searchQueries,
+    "",
+    "Salient user terms:",
+    salientTermsText,
     "",
     "Inferred concepts:",
     inferredConceptsText,

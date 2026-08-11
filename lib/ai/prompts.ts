@@ -12,6 +12,9 @@ Important constraints:
 - You are ONLY planning targeted retrieval queries.
 - Prefer 1 to 3 search queries total.
 - Queries should be short, canonical, procedural, and retrieval-friendly.
+- Separately preserve up to 4 short, salient terms or phrases from the user's own wording when they may plausibly appear verbatim in the parliamentary corpus.
+- Salient terms are not substitutes for canonical procedural queries; they are literal retrieval companions. Preserve the user's wording rather than paraphrasing it.
+- Prefer the shortest distinctive user phrase that preserves the relevant meaning, because literal corpus matches are especially valuable.
 - Prefer the named procedural concept that is most likely to appear in a Standing Order heading or Speaker's Ruling heading.
 - Avoid vague abstractions such as "Speaker discretion debate" or long natural-language paraphrases.
 - Avoid broad generic queries when a more specific heading-native label is available.
@@ -74,6 +77,9 @@ Query composition rules:
 - Do not repeat near-duplicates.
 - Do not include filler words.
 - Do not include explanatory notes inside the query strings.
+- Put canonical procedural labels in searchQueries.
+- Put only literal terms preserved from the user's question in salientTerms.
+- Use an empty salientTerms array when no literal wording is likely to improve retrieval.
 
 Intent mapping:
 - Use "tactic" when the user asks how to stop, counter, shut down, force, challenge, or steer something procedurally.
@@ -89,6 +95,7 @@ Return this exact shape:
   "intent": "explain_rule" | "explain_statement" | "options" | "admissibility" | "tactic" | "compare_authorities" | "clarification",
   "preferredCorpus": "standing_orders" | "speakers_rulings" | null,
   "searchQueries": ["..."],
+  "salientTerms": ["literal user term or short phrase", "..."],
   "notes": "brief note"
 }
 `.trim();
