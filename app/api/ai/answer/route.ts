@@ -15,6 +15,7 @@ import {
   expandPlannerQueries,
   inferConcepts,
   normalizeAnswerFormatting,
+  pruneValidatedAnswerContent,
   rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
   type SearchExecution,
@@ -147,13 +148,6 @@ export async function POST(request: NextRequest) {
           const selected = selectFinalAuthorities({
             searches,
             question,
-            maxAuthorities:
-              question.toLowerCase().includes("racist") ||
-              question.toLowerCase().includes("racism") ||
-              question.toLowerCase().includes("country of origin") ||
-              question.toLowerCase().includes("unparliamentary")
-                ? 6
-                : 10,
           });
 
           const finalAuthorities = selected.finalAuthorities;
@@ -167,6 +161,8 @@ export async function POST(request: NextRequest) {
           send("diagnostics", {
             effectiveCorpus,
             inferredConcepts: inferredConcepts.map((concept) => concept.id),
+            activeConcepts: selected.activeConceptIds,
+            blueprintSlots: selected.blueprintSlots,
             expandedQueries,
             retrievals: searches.map((search) => ({
               query: search.query,
@@ -195,9 +191,12 @@ export async function POST(request: NextRequest) {
               documentCorpus: item.result.documentCorpus,
               baseRank: item.result.rank,
               routeBoost: item.routeBoost,
+              slotBoost: item.slotBoost,
               adjustedRank: item.adjustedRank,
+              matchedSlots: item.matchedSlotKeys,
               path: item.result.path,
             })),
+            selectedSlotMatches: selected.selectedSlotMatches,
           });
 
           if (finalAuthorities.length === 0) {
@@ -237,10 +236,8 @@ export async function POST(request: NextRequest) {
             label: "Drafting answer",
           });
 
-          let fullAnswer = "";
-
           try {
-            fullAnswer = await streamText({
+            const draftedAnswer = await streamText({
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
                 question,
@@ -257,12 +254,11 @@ export async function POST(request: NextRequest) {
               temperature: 0.2,
             });
 
-            fullAnswer = normalizeAnswerFormatting(fullAnswer);
-
-            let finalAnswer = fullAnswer;
+            let finalAnswer = normalizeAnswerFormatting(draftedAnswer);
             let rewriteNote: string | null = null;
+            let pruneNote: string | null = null;
 
-            if (!fullAnswer.trim()) {
+            if (!finalAnswer.trim()) {
               const fallbackReason = "The AI draft was empty.";
 
               const fallbackAnswer = buildFallbackAnswer({
@@ -296,8 +292,53 @@ export async function POST(request: NextRequest) {
               return;
             }
 
+            const initialPrune = pruneValidatedAnswerContent({
+              answerText: finalAnswer,
+              authorities: authorityPayload,
+            });
+
+            finalAnswer = normalizeAnswerFormatting(initialPrune.prunedText);
+            if (initialPrune.removedLines.length > 0) {
+              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+            }
+
+            if (!finalAnswer.trim()) {
+              const fallbackReason =
+                "The AI draft could not be validated after pruning unsupported content.";
+
+              const fallbackAnswer = buildFallbackAnswer({
+                question,
+                planIntent: plan.intent,
+                authorities: finalAuthorities,
+                effectiveCorpus,
+                fallbackReason,
+              });
+
+              send("stage", {
+                key: "validating",
+                label: "Draft empty after pruning; returning grounded fallback",
+              });
+
+              send("answer_delta", { text: fallbackAnswer });
+
+              send("done", {
+                ok: true,
+                degraded: true,
+                question,
+                corpus: effectiveCorpus,
+                latencyMs: Date.now() - started,
+                plan,
+                answerText: fallbackAnswer,
+                authorities: authorityPayload,
+                fallbackReason,
+              });
+
+              controller.close();
+              return;
+            }
+
             const citationValidation = validateAnswerCitations({
-              answerText: fullAnswer,
+              answerText: finalAnswer,
               authorities: authorityPayload,
             });
 
@@ -351,19 +392,39 @@ export async function POST(request: NextRequest) {
 
               finalAnswer = normalizeAnswerFormatting(rewrite.rewrittenText);
 
-              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
-                ", ",
-              )}`;
-
-              const recheck = validateAnswerAuthorityMentions({
+              const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
                 authorities: authorityPayload,
               });
 
-              if (!recheck.ok) {
-                const fallbackReason = `The AI draft mentioned authorities that could not be grounded: ${authorityMentionValidation.invalidAuthorityMentions.join(
-                  ", ",
-                )}`;
+              finalAnswer = normalizeAnswerFormatting(secondPrune.prunedText);
+
+              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
+                ", ",
+              )}${
+                secondPrune.removedLines.length > 0
+                  ? `; pruned additional lines: ${secondPrune.removedLines.length}`
+                  : ""
+              }`;
+
+              const recheckMentions = validateAnswerAuthorityMentions({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              const recheckCitations = validateAnswerCitations({
+                answerText: finalAnswer,
+                authorities: authorityPayload,
+              });
+
+              if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
+                const fallbackReason = `The AI draft mentioned or cited authorities that could not be grounded: ${
+                  recheckMentions.ok
+                    ? recheckCitations.ok
+                      ? "unknown validation failure"
+                      : recheckCitations.invalidCitations.join(", ")
+                    : recheckMentions.invalidAuthorityMentions.join(", ")
+                }`;
 
                 const fallbackAnswer = buildFallbackAnswer({
                   question,
@@ -390,8 +451,6 @@ export async function POST(request: NextRequest) {
                   answerText: fallbackAnswer,
                   authorities: authorityPayload,
                   fallbackReason,
-                  invalidAuthorityMentions:
-                    authorityMentionValidation.invalidAuthorityMentions,
                 });
 
                 controller.close();
@@ -411,6 +470,7 @@ export async function POST(request: NextRequest) {
               answerText: finalAnswer,
               authorities: authorityPayload,
               rewriteNote,
+              pruneNote,
             });
 
             controller.close();

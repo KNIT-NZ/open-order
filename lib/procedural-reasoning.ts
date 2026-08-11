@@ -1,93 +1,12 @@
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
-
-import { CONCEPT_REGISTRY, type ProceduralConcept } from "./concept-registry";
-
-export function inferConcepts(question: string): ProceduralConcept[] {
-  const q = question.toLowerCase();
-  const context = detectQuestionContext(question);
-  const matched = new Map<string, ProceduralConcept>();
-
-  for (const concept of CONCEPT_REGISTRY) {
-    if (concept.aliases.some((alias) => q.includes(alias))) {
-      matched.set(concept.id, concept);
-    }
-  }
-
-  if (context.closure) {
-    const concept = CONCEPT_REGISTRY.find((c) => c.id === "closure_motion");
-    if (concept) matched.set(concept.id, concept);
-  }
-
-  if (context.pointOfOrder) {
-    const concept = CONCEPT_REGISTRY.find((c) => c.id === "point_of_order");
-    if (concept) matched.set(concept.id, concept);
-  }
-
-  if (context.memberConduct) {
-    const personalReflection = CONCEPT_REGISTRY.find(
-      (c) => c.id === "personal_reflection",
-    );
-    if (personalReflection)
-      matched.set(personalReflection.id, personalReflection);
-
-    if (context.racismOrRacist || context.nationalityOrOriginAttack) {
-      const racism = CONCEPT_REGISTRY.find(
-        (c) => c.id === "allegation_of_racism",
-      );
-      if (racism) matched.set(racism.id, racism);
-    }
-  }
-
-  if (context.relevancy) {
-    const relevancy = CONCEPT_REGISTRY.find((c) => c.id === "relevancy");
-    if (relevancy) matched.set(relevancy.id, relevancy);
-  }
-
-  if (context.committeeOfWhole) {
-    const committee = CONCEPT_REGISTRY.find(
-      (c) => c.id === "committee_of_whole",
-    );
-    if (committee) matched.set(committee.id, committee);
-
-    const chair = CONCEPT_REGISTRY.find((c) => c.id === "chair_control");
-    if (chair) matched.set(chair.id, chair);
-  }
-
-  if (context.ministerialAccountability) {
-    const accountability = CONCEPT_REGISTRY.find(
-      (c) => c.id === "ministerial_accountability",
-    );
-    if (accountability) matched.set(accountability.id, accountability);
-  }
-
-  if (context.retrospectiveDiscipline) {
-    const retrospective = CONCEPT_REGISTRY.find(
-      (c) => c.id === "retrospective_discipline",
-    );
-    if (retrospective) matched.set(retrospective.id, retrospective);
-
-    const withdrawal = CONCEPT_REGISTRY.find(
-      (c) => c.id === "withdrawal_and_apology",
-    );
-    if (withdrawal) matched.set(withdrawal.id, withdrawal);
-  }
-
-  return [...matched.values()];
-}
-
-export type QuestionContext = {
-  committeeOfWhole: boolean;
-  memberConduct: boolean;
-  nationalityOrOriginAttack: boolean;
-  racismOrRacist: boolean;
-  closure: boolean;
-  relevancy: boolean;
-  pointOfOrder: boolean;
-  ministerialAccountability: boolean;
-  retrospectiveDiscipline: boolean;
-};
+import {
+  CONCEPT_REGISTRY,
+  type AuthorityExclusionSpec,
+  type AuthoritySlotSpec,
+  type ProceduralConcept,
+} from "./concept-registry";
 
 export type SearchExecution = {
   query: string;
@@ -127,7 +46,25 @@ export type ScoredAuthority = {
   query: string;
   queryIndex: number;
   routeBoost: number;
+  slotBoost: number;
   adjustedRank: number;
+  matchedSlotKeys: string[];
+};
+
+type DerivedFrame = {
+  activeConcepts: ProceduralConcept[];
+  committeeOfWhole: boolean;
+  memberConduct: boolean;
+  closure: boolean;
+  relevancy: boolean;
+  ministerialAccountability: boolean;
+  retrospectiveDiscipline: boolean;
+};
+
+type SlotMatch = {
+  slotKey: string;
+  citationLabel: string;
+  heading: string | null;
 };
 
 function normalizeWhitespace(text: string): string {
@@ -187,61 +124,119 @@ export function buildAuthorityPayload(results: ProceduralSearchResult[]) {
   }));
 }
 
-export function detectQuestionContext(question: string): QuestionContext {
+function hasAlias(question: string, concept: ProceduralConcept): boolean {
   const q = question.toLowerCase();
+  return concept.aliases.some((alias) => q.includes(alias));
+}
+
+function getConceptById(id: ProceduralConcept["id"]): ProceduralConcept | null {
+  return CONCEPT_REGISTRY.find((c) => c.id === id) ?? null;
+}
+
+export function inferConcepts(question: string): ProceduralConcept[] {
+  const q = question.toLowerCase();
+  const matched = new Map<string, ProceduralConcept>();
+
+  for (const concept of CONCEPT_REGISTRY) {
+    if (hasAlias(q, concept)) {
+      matched.set(concept.id, concept);
+    }
+  }
+
+  if (
+    q.includes("question to be put") ||
+    q.includes("question be put") ||
+    q.includes("premature")
+  ) {
+    const concept = getConceptById("closure_motion");
+    if (concept) matched.set(concept.id, concept);
+  }
+
+  if (q.includes("point of order")) {
+    const concept = getConceptById("point_of_order");
+    if (concept) matched.set(concept.id, concept);
+  }
+
+  if (
+    q.includes("committee of the whole") ||
+    q.includes("committee stage")
+  ) {
+    const committee = getConceptById("committee_of_whole");
+    if (committee) matched.set(committee.id, committee);
+
+    const chair = getConceptById("chair_control");
+    if (chair) matched.set(chair.id, chair);
+  }
+
+  if (
+    q.includes("racist") ||
+    q.includes("racism") ||
+    q.includes("country of origin") ||
+    q.includes("right to speak") ||
+    q.includes("ethnicity") ||
+    q.includes("nationality")
+  ) {
+    const personal = getConceptById("personal_reflection");
+    if (personal) matched.set(personal.id, personal);
+
+    const racism = getConceptById("allegation_of_racism");
+    if (racism) matched.set(racism.id, racism);
+  }
+
+  if (
+    q.includes("evasive") ||
+    q.includes("relevancy") ||
+    q.includes("relevant") ||
+    q.includes("back on track")
+  ) {
+    const relevancy = getConceptById("relevancy");
+    if (relevancy) matched.set(relevancy.id, relevancy);
+  }
+
+  if (
+    q.includes("accountability to the house") ||
+    q.includes("account to the house") ||
+    q.includes("avoid directly answering") ||
+    q.includes("non-answer")
+  ) {
+    const accountability = getConceptById("ministerial_accountability");
+    if (accountability) matched.set(accountability.id, accountability);
+  }
+
+  if (
+    q.includes("yesterday") ||
+    q.includes("previous sitting") ||
+    q.includes("require an apology") ||
+    q.includes("require a member to apologise")
+  ) {
+    const retrospective = getConceptById("retrospective_discipline");
+    if (retrospective) matched.set(retrospective.id, retrospective);
+
+    const withdrawal = getConceptById("withdrawal_and_apology");
+    if (withdrawal) matched.set(withdrawal.id, withdrawal);
+  }
+
+  return [...matched.values()];
+}
+
+function deriveFrame(question: string): DerivedFrame {
+  const activeConcepts = inferConcepts(question);
+  const ids = new Set(activeConcepts.map((c) => c.id));
 
   return {
-    committeeOfWhole:
-      q.includes("committee of the whole") || q.includes("committee stage"),
+    activeConcepts,
+    committeeOfWhole: ids.has("committee_of_whole"),
     memberConduct:
-      q.includes("unparliamentary") ||
-      q.includes("racist") ||
-      q.includes("racism") ||
-      q.includes("right to speak") ||
-      q.includes("personal reflection") ||
-      q.includes("country of origin") ||
-      q.includes("origin of another member") ||
-      q.includes("ethnicity") ||
-      q.includes("nationality"),
-    nationalityOrOriginAttack:
-      q.includes("country of origin") ||
-      q.includes("origin of another member") ||
-      q.includes("right to speak"),
-    racismOrRacist:
-      q.includes("racist") ||
-      q.includes("racism") ||
-      q.includes("borderline racist"),
-    closure:
-      q.includes("question to be put") ||
-      q.includes("question be put") ||
-      q.includes("closure") ||
-      q.includes("debate is nowhere near finished") ||
-      q.includes("premature"),
-    relevancy:
-      q.includes("relevant") ||
-      q.includes("relevancy") ||
-      q.includes("evasive") ||
-      q.includes("back on track"),
-    pointOfOrder: q.includes("point of order"),
-    ministerialAccountability:
-      q.includes("areas of responsibility") ||
-      q.includes("account to the house") ||
-      q.includes("accountability to the house") ||
-      q.includes("avoid directly answering") ||
-      q.includes("abdication of responsibility") ||
-      q.includes("non-answer"),
-    retrospectiveDiscipline:
-      q.includes("yesterday") ||
-      q.includes("previous sitting") ||
-      q.includes("require a member to apologise") ||
-      q.includes("require an apology") ||
-      q.includes("something that happened in the house yesterday"),
+      ids.has("personal_reflection") || ids.has("allegation_of_racism"),
+    closure: ids.has("closure_motion"),
+    relevancy: ids.has("relevancy"),
+    ministerialAccountability: ids.has("ministerial_accountability"),
+    retrospectiveDiscipline: ids.has("retrospective_discipline"),
   };
 }
 
 function canonicalizeProceduralQuery(query: string): string[] {
   const q = cleanQuery(query).toLowerCase();
-
   if (!q) return [];
 
   const aliases: Record<string, string[]> = {
@@ -269,9 +264,7 @@ function canonicalizeProceduralQuery(query: string): string[] {
     "relevancy committee of the whole": ["relevancy", "chairperson"],
   };
 
-  if (aliases[q]) {
-    return aliases[q];
-  }
+  if (aliases[q]) return aliases[q];
 
   if (
     q.includes("committee of the whole") &&
@@ -319,104 +312,54 @@ export function expandPlannerQueries(input: {
   plannerQueries: string[];
   effectiveCorpus: string | null;
 }): string[] {
-  const inferredConcepts = inferConcepts(input.question);
-  const context = detectQuestionContext(input.question);
+  const frame = deriveFrame(input.question);
   const seedQueries = [...input.plannerQueries];
-
-  const rewritten = seedQueries.flatMap((query) => {
-    const q = query.toLowerCase();
-
-    if (q === "speaker's discretion closure") {
-      return ["closure motion", "acceptance of closure motion"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "procedure" &&
-      context.memberConduct
-    ) {
-      return ["personal reflections procedure"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "chairperson" &&
-      context.committeeOfWhole
-    ) {
-      return ["chairperson"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "relevancy committee of the whole"
-    ) {
-      return ["relevancy", "chairperson"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "chairperson relevancy"
-    ) {
-      return ["chairperson", "relevancy"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "point of order relevancy"
-    ) {
-      return ["point of order", "relevancy"];
-    }
-
-    if (
-      input.effectiveCorpus === "speakers_rulings" &&
-      q === "committee of the whole chairperson"
-    ) {
-      return ["chairperson"];
-    }
-
-    return [query];
-  });
+  const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
 
   const additions: string[] = [];
 
-  if (context.closure) {
+  if (frame.closure) {
     additions.push("closure motion", "acceptance of closure motion");
-    additions.push("point of order");
-    if (input.effectiveCorpus !== "standing_orders") {
-      additions.push("closure of debate");
-    }
   }
 
-  if (context.memberConduct) {
+  if (frame.memberConduct) {
     additions.push("personal reflections", "against members");
-    if (context.racismOrRacist || context.nationalityOrOriginAttack) {
+    if (
+      frame.activeConcepts.some((c) => c.id === "allegation_of_racism")
+    ) {
       additions.push("allegations of racism");
     }
-    if (input.effectiveCorpus === "speakers_rulings") {
-      additions.push("personal reflections procedure");
-    }
   }
 
-  if (context.committeeOfWhole) {
+  if (frame.committeeOfWhole) {
     additions.push("chairperson");
   }
 
-  if (context.relevancy) {
+  if (frame.relevancy) {
     additions.push("relevancy");
-    if (input.effectiveCorpus === "speakers_rulings") {
-      additions.push("point of order");
-    }
   }
 
-  if (context.pointOfOrder) {
+  if (
+    frame.activeConcepts.some((c) => c.id === "point_of_order") ||
+    frame.closure ||
+    frame.committeeOfWhole ||
+    frame.ministerialAccountability ||
+    frame.retrospectiveDiscipline
+  ) {
     additions.push("point of order");
   }
 
-  const conceptQueries = inferredConcepts.flatMap((c) => c.preferredQueries);
+  if (frame.ministerialAccountability) {
+    additions.push("accountability to the House", "form of reply");
+  }
 
-  return uniqQueries([...rewritten, ...additions, ...conceptQueries]).slice(
+  if (frame.retrospectiveDiscipline) {
+    additions.push("withdrawal", "procedure");
+  }
+
+  return uniqQueries([...seedQueries, ...conceptQueries, ...additions]).slice(
     0,
-    5,
+    6,
   );
 }
 
@@ -434,7 +377,7 @@ export function buildAuthorityProfile(
   const isAgainstMembers = heading === "against members";
   const isAllegationsOfRacism = heading === "allegations of racism";
   const isChairperson = heading === "chairperson";
-  const isPointsOfOrder = heading === "points of order";
+  const isPointsOfOrder = heading === "points of order" || heading === "point of order";
   const isRelevancy = heading === "relevancy" || pathText.includes("relevancy");
   const isSelectCommitteeChairpersons =
     pathText.includes("chairpersons of select committees") ||
@@ -460,7 +403,7 @@ export function buildAuthorityProfile(
     isClosure
   ) {
     authorityClass = "governing_rule";
-  } else if (isAcceptance || isEffect || heading === "procedure") {
+  } else if (isAcceptance || isEffect || heading === "procedure" || heading === "form of reply" || heading === "withdrawal") {
     authorityClass = "constraint_or_qualification";
   } else if (isRulesOfDebate || isCommitteeStage || isPersonalReflections) {
     authorityClass = "analogy_or_support";
@@ -486,117 +429,135 @@ export function buildAuthorityProfile(
   };
 }
 
-function isRouteExcluded(
+function headingMatches(
   result: ProceduralSearchResult,
-  question: string,
+  headings?: string[],
 ): boolean {
-  const context = detectQuestionContext(question);
+  if (!headings || headings.length === 0) return true;
+  const heading = (result.heading ?? "").toLowerCase();
+  return headings.some((candidate) => heading === candidate.toLowerCase());
+}
+
+function pathMatches(
+  result: ProceduralSearchResult,
+  pathIncludes?: string[],
+): boolean {
+  if (!pathIncludes || pathIncludes.length === 0) return true;
+  const pathText = result.path.join(" > ").toLowerCase();
+  return pathIncludes.some((candidate) =>
+    pathText.includes(candidate.toLowerCase()),
+  );
+}
+
+function classMatches(
+  result: ProceduralSearchResult,
+  classes?: AuthorityClass[],
+): boolean {
+  if (!classes || classes.length === 0) return true;
   const profile = buildAuthorityProfile(result);
+  return classes.includes(profile.authorityClass);
+}
 
-  if (context.committeeOfWhole && context.relevancy) {
-    if (profile.isSelectCommitteeChairpersons) return true;
-  }
+function corpusMatches(
+  result: ProceduralSearchResult,
+  preferredCorpora?: Array<"standing_orders" | "speakers_rulings">,
+): boolean {
+  if (!preferredCorpora || preferredCorpora.length === 0) return true;
+  return preferredCorpora.includes(
+    result.documentCorpus as "standing_orders" | "speakers_rulings",
+  );
+}
 
-  if (context.memberConduct) {
-    if (profile.pathText.includes("judiciary")) return true;
-    if (profile.pathText.includes("questions to ministers and members"))
-      return true;
-  }
+function matchesSlot(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+): boolean {
+  return (
+    headingMatches(result, slot.headings) &&
+    pathMatches(result, slot.pathIncludes) &&
+    classMatches(result, slot.classes) &&
+    corpusMatches(result, slot.preferredCorpora)
+  );
+}
 
-  return false;
+function matchesExclusion(
+  result: ProceduralSearchResult,
+  exclusion: AuthorityExclusionSpec,
+): boolean {
+  return (
+    headingMatches(result, exclusion.headings) &&
+    pathMatches(result, exclusion.pathIncludes)
+  );
+}
+
+function isExcludedByConcepts(
+  result: ProceduralSearchResult,
+  concepts: ProceduralConcept[],
+): boolean {
+  return concepts.some((concept) =>
+    (concept.exclusions ?? []).some((exclusion) =>
+      matchesExclusion(result, exclusion),
+    ),
+  );
 }
 
 function scoreContextualAuthority(input: {
   result: ProceduralSearchResult;
   query: string;
-  question: string;
+  frame: DerivedFrame;
 }): number {
-  const context = detectQuestionContext(input.question);
   const profile = buildAuthorityProfile(input.result);
   const query = input.query.toLowerCase();
 
   let boost = 0;
 
-  if (context.committeeOfWhole) {
-    if (profile.isCommitteeOfWhole) boost += 420;
-    if (profile.isChairperson && profile.isCommitteeOfWhole) boost += 260;
-    if (profile.isRulesOfDebate && profile.isRelevancy) boost += 180;
-    if (profile.isCommitteeStage && profile.isRelevancy) boost += 40;
-    if (profile.isCommitteeStage && !query.includes("amendment")) boost -= 120;
-    if (profile.isSelectCommitteeChairpersons) boost -= 520;
+  if (input.frame.committeeOfWhole) {
+    if (profile.isCommitteeOfWhole) boost += 120;
+    if (profile.isChairperson && profile.isCommitteeOfWhole) boost += 140;
+    if (profile.isSelectCommitteeChairpersons) boost -= 260;
   }
 
-  if (context.memberConduct) {
-    if (profile.isPersonalReflections) boost += 420;
-    if (profile.isAgainstMembers) boost += 280;
-    if (profile.isAllegationsOfRacism) boost += 320;
+  if (input.frame.memberConduct) {
+    if (profile.isPersonalReflections) boost += 140;
+    if (profile.isAgainstMembers) boost += 160;
+    if (profile.isAllegationsOfRacism) boost += 180;
     if (profile.heading === "procedure" && profile.isPersonalReflections)
-      boost += 220;
-    if (profile.pathText.includes("unparliamentary language")) boost += 60;
-    if (profile.pathText.includes("judiciary")) boost -= 320;
+      boost += 120;
+    if (profile.pathText.includes("judiciary")) boost -= 180;
     if (profile.pathText.includes("questions to ministers and members"))
-      boost -= 260;
+      boost -= 180;
   }
 
-  if (context.closure) {
-    if (profile.heading.includes("closure")) boost += 240;
-    if (profile.pathText.includes("closure of debate")) boost += 220;
-    if (
-      input.result.documentCorpus === "standing_orders" &&
-      profile.heading.includes("closure")
-    ) {
-      boost += 120;
-    }
+  if (input.frame.closure) {
+    if (profile.heading.includes("closure")) boost += 140;
+    if (profile.pathText.includes("closure of debate")) boost += 120;
+    if (profile.isPointsOfOrder) boost += 60;
+  }
+
+  if (input.frame.relevancy) {
+    if (profile.isRelevancy) boost += 130;
+    if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 100;
+  }
+
+  if (input.frame.ministerialAccountability) {
+    if (profile.heading === "accountability to the house") boost += 170;
+    if (profile.heading === "form of reply") boost += 150;
     if (profile.isPointsOfOrder) boost += 80;
   }
 
-  if (context.relevancy) {
-    if (profile.isRelevancy) boost += 180;
-    if (profile.isRulesOfDebate && profile.isRelevancy) boost += 140;
-    if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 200;
-    if (
-      profile.isCommitteeStage &&
-      profile.isRelevancy &&
-      !query.includes("amendment")
-    ) {
-      boost -= 80;
-    }
+  if (input.frame.retrospectiveDiscipline) {
+    if (profile.heading === "withdrawal") boost += 170;
+    if (profile.heading === "procedure") boost += 130;
+    if (profile.isPointsOfOrder) boost += 70;
   }
 
-  if (query.includes("committee of the whole") && profile.isCommitteeOfWhole) {
-    boost += 180;
-  }
-
-  if (query.includes("against members") && profile.isAgainstMembers) {
-    boost += 260;
-  }
-
-  if (
-    query.includes("allegations of racism") &&
-    profile.isAllegationsOfRacism
-  ) {
-    boost += 300;
-  }
-
-  if (query.includes("personal reflections") && profile.isPersonalReflections) {
-    boost += 220;
-  }
-
-  if (
-    query.includes("chairperson") &&
-    profile.isChairperson &&
-    profile.isCommitteeOfWhole
-  ) {
-    boost += 220;
-  }
-
-  if (query.includes("point of order") && profile.isPointsOfOrder) {
-    boost += 180;
-  }
-
-  if (query.includes("relevancy") && profile.isRelevancy) {
-    boost += 160;
-  }
+  if (query.includes("point of order") && profile.isPointsOfOrder) boost += 100;
+  if (query.includes("relevancy") && profile.isRelevancy) boost += 90;
+  if (query.includes("chairperson") && profile.isChairperson) boost += 90;
+  if (query.includes("against members") && profile.isAgainstMembers) boost += 110;
+  if (query.includes("allegations of racism") && profile.isAllegationsOfRacism)
+    boost += 120;
+  if (query.includes("closure motion") && profile.isClosure) boost += 100;
 
   return boost;
 }
@@ -616,6 +577,60 @@ function dedupeScoredAuthorities(
   return output;
 }
 
+function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
+  const seen = new Set<string>();
+  const slots: AuthoritySlotSpec[] = [];
+
+  for (const concept of concepts) {
+    for (const slot of concept.slots) {
+      if (seen.has(slot.key)) continue;
+      seen.add(slot.key);
+      slots.push(slot);
+    }
+  }
+
+  return slots;
+}
+
+function scoreSlotMatches(
+  result: ProceduralSearchResult,
+  slots: AuthoritySlotSpec[],
+): { matchedSlotKeys: string[]; slotBoost: number } {
+  const matchedSlotKeys = slots
+    .filter((slot) => matchesSlot(result, slot))
+    .map((slot) => slot.key);
+
+  const slotBoost = matchedSlotKeys.length * 180;
+
+  return { matchedSlotKeys, slotBoost };
+}
+
+function profileFamilyKey(item: ScoredAuthority): string {
+  const heading = (item.result.heading ?? "none").toLowerCase();
+  const pathTail = item.result.path.slice(-2).join(" > ").toLowerCase();
+  return `${heading}::${pathTail}`;
+}
+
+function slotMaxForItem(
+  item: ScoredAuthority,
+  slots: AuthoritySlotSpec[],
+): number {
+  const matched = slots.find((slot) => item.matchedSlotKeys.includes(slot.key));
+  return matched?.maxMatches ?? 2;
+}
+
+function passesMinimumThreshold(item: ScoredAuthority): boolean {
+  if (item.slotBoost > 0) return true;
+  if (item.routeBoost > 0) return true;
+  if (item.adjustedRank >= 120) return true;
+  if (item.result.matchSignals.exactSectionKeyMatch) return true;
+  if (item.result.matchSignals.exactCitationMatch) return true;
+  if (item.result.matchSignals.exactHeadingMatch) return true;
+  if (item.result.matchSignals.headingPhraseMatch) return true;
+  if (item.result.matchSignals.pathPhraseMatch) return true;
+  return false;
+}
+
 export function selectFinalAuthorities(input: {
   searches: SearchExecution[];
   question: string;
@@ -623,9 +638,12 @@ export function selectFinalAuthorities(input: {
 }): {
   finalAuthorities: ProceduralSearchResult[];
   scoredAuthorities: ScoredAuthority[];
+  activeConceptIds: string[];
+  blueprintSlots: string[];
+  selectedSlotMatches: SlotMatch[];
 } {
-  const inferredConcepts = inferConcepts(input.question);
-  const context = detectQuestionContext(input.question);
+  const frame = deriveFrame(input.question);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
     (search, queryIndex) =>
@@ -633,15 +651,19 @@ export function selectFinalAuthorities(input: {
         const routeBoost = scoreContextualAuthority({
           result,
           query: search.query,
-          question: input.question,
+          frame,
         });
+
+        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
 
         return {
           result,
           query: search.query,
           queryIndex,
           routeBoost,
-          adjustedRank: result.rank + routeBoost,
+          slotBoost,
+          adjustedRank: result.rank + routeBoost + slotBoost,
+          matchedSlotKeys,
         };
       }),
   );
@@ -649,6 +671,7 @@ export function selectFinalAuthorities(input: {
   const sorted = [...flattened].sort((a, b) => {
     if (b.adjustedRank !== a.adjustedRank)
       return b.adjustedRank - a.adjustedRank;
+    if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
     if (b.routeBoost !== a.routeBoost) return b.routeBoost - a.routeBoost;
     if (b.result.rank !== a.result.rank) return b.result.rank - a.result.rank;
     return a.result.citationLabel.localeCompare(b.result.citationLabel);
@@ -657,323 +680,58 @@ export function selectFinalAuthorities(input: {
   const deduped = dedupeScoredAuthorities(sorted);
   const selected: ScoredAuthority[] = [];
   const seen = new Set<string>();
-  const headingPathCounts = new Map<string, number>();
-  const classCounts = new Map<AuthorityClass, number>();
-  const maxAuthorities = input.maxAuthorities ?? 10;
+  const familyCounts = new Map<string, number>();
+  const selectedSlotMatches: SlotMatch[] = [];
 
-  function profileKey(item: ScoredAuthority): string {
-    const heading = (item.result.heading ?? "none").toLowerCase();
-    const pathTail = item.result.path.slice(-2).join(" > ").toLowerCase();
-    return `${heading}::${pathTail}`;
-  }
-
-  function maxPerFamily(item: ScoredAuthority): number {
-    const profile = buildAuthorityProfile(item.result);
-
-    if (context.memberConduct) {
-      if (profile.isAgainstMembers) return 1;
-      if (profile.isAllegationsOfRacism) return 1;
-      if (profile.isPersonalReflections && profile.heading === "procedure")
-        return 1;
-    }
-
-    if (context.committeeOfWhole && context.relevancy) {
-      if (profile.isCommitteeOfWhole && profile.isChairperson) return 1;
-      if (profile.isRulesOfDebate && profile.isRelevancy) return 2;
-      if (profile.isCommitteeStage && profile.isRelevancy) return 1;
-      if (profile.isPointsOfOrder) return 1;
-    }
-
-    if (context.closure) {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      const path = item.result.path.join(" > ").toLowerCase();
-      if (heading.includes("closure") || path.includes("closure of debate"))
-        return 3;
-      if (profile.isPointsOfOrder) return 1;
-    }
-
-    if (context.ministerialAccountability) {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      if (heading === "accountability to the house") return 1;
-      if (heading === "form of reply") return 1;
-      if (profile.isPointsOfOrder) return 1;
-    }
-
-    if (context.retrospectiveDiscipline) {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      if (heading === "withdrawal") return 1;
-      if (heading === "procedure") return 1;
-      if (profile.isPointsOfOrder) return 1;
-    }
-
-    return 2;
-  }
-
-  function passesMinimumThreshold(item: ScoredAuthority): boolean {
-    if (item.routeBoost > 0) return true;
-    if (item.adjustedRank >= 120) return true;
-    if (item.result.matchSignals.exactSectionKeyMatch) return true;
-    if (item.result.matchSignals.exactCitationMatch) return true;
-    if (item.result.matchSignals.exactHeadingMatch) return true;
-    if (item.result.matchSignals.headingPhraseMatch) return true;
-    if (item.result.matchSignals.pathPhraseMatch) return true;
-    return false;
-  }
+  const computedMaxAuthorities = Math.min(
+    10,
+    Math.max(
+      4,
+      input.maxAuthorities ??
+        frame.activeConcepts.reduce(
+          (sum, concept) => sum + (concept.defaultPackContribution ?? 0),
+          2,
+        ),
+    ),
+  );
 
   function canAdd(item: ScoredAuthority): boolean {
     if (seen.has(item.result.sectionId)) return false;
-    if (isRouteExcluded(item.result, input.question)) return false;
+    if (isExcludedByConcepts(item.result, frame.activeConcepts)) return false;
     if (!passesMinimumThreshold(item)) return false;
 
-    const key = profileKey(item);
-    const count = headingPathCounts.get(key) ?? 0;
-    return count < maxPerFamily(item);
+    const key = profileFamilyKey(item);
+    const count = familyCounts.get(key) ?? 0;
+    return count < slotMaxForItem(item, slots);
   }
 
   function add(item: ScoredAuthority) {
     selected.push(item);
     seen.add(item.result.sectionId);
-    const key = profileKey(item);
-    headingPathCounts.set(key, (headingPathCounts.get(key) ?? 0) + 1);
 
-    const profile = buildAuthorityProfile(item.result);
-    classCounts.set(
-      profile.authorityClass,
-      (classCounts.get(profile.authorityClass) ?? 0) + 1,
+    const key = profileFamilyKey(item);
+    familyCounts.set(key, (familyCounts.get(key) ?? 0) + 1);
+
+    for (const slotKey of item.matchedSlotKeys) {
+      selectedSlotMatches.push({
+        slotKey,
+        citationLabel: item.result.citationLabel,
+        heading: item.result.heading,
+      });
+    }
+  }
+
+  for (const slot of slots) {
+    const candidate = deduped.find(
+      (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
     );
+    if (candidate) add(candidate);
   }
 
-  function take(
-    predicate: (item: ScoredAuthority) => boolean,
-    maxToTake: number,
-  ) {
-    for (const item of deduped) {
-      if (selected.length >= maxAuthorities) break;
-      if (maxToTake <= 0) break;
-      if (!predicate(item)) continue;
-      if (!canAdd(item)) continue;
-
-      add(item);
-      maxToTake -= 1;
-    }
-  }
-
-  function takeByClass(
-    authorityClass: AuthorityClass,
-    maxToTake: number,
-    extraPredicate?: (item: ScoredAuthority) => boolean,
-  ) {
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      if (profile.authorityClass !== authorityClass) return false;
-      return extraPredicate ? extraPredicate(item) : true;
-    }, maxToTake);
-  }
-
-  function hasAuthority(
-    predicate: (item: ScoredAuthority) => boolean,
-  ): boolean {
-    return selected.some(predicate);
-  }
-
-  function blueprintSatisfied(): boolean {
-    if (context.closure) {
-      const hasClosureRule = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isClosure && profile.authorityClass === "governing_rule";
-      });
-
-      const hasClosureQualification = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isAcceptance || profile.isEffect;
-      });
-
-      const hasPointOfOrder = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isPointsOfOrder;
-      });
-
-      return hasClosureRule && hasClosureQualification && hasPointOfOrder;
-    }
-
-    if (context.memberConduct) {
-      const hasAgainstMembers = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isAgainstMembers;
-      });
-
-      const hasRacism = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isAllegationsOfRacism;
-      });
-
-      const hasProcedure = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isPersonalReflections && profile.heading === "procedure";
-      });
-
-      return hasAgainstMembers && hasRacism && hasProcedure;
-    }
-
-    if (context.committeeOfWhole && context.relevancy) {
-      const hasChairperson = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isCommitteeOfWhole && profile.isChairperson;
-      });
-
-      const hasRelevancy = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return (
-          profile.isRelevancy && profile.authorityClass === "governing_rule"
-        );
-      });
-
-      const hasPointOfOrder = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isPointsOfOrder;
-      });
-
-      return hasChairperson && hasRelevancy && hasPointOfOrder;
-    }
-
-    if (context.ministerialAccountability) {
-      const hasAccountability = hasAuthority((item) => {
-        const heading = (item.result.heading ?? "").toLowerCase();
-        return heading === "accountability to the house";
-      });
-
-      const hasFormOfReply = hasAuthority((item) => {
-        const heading = (item.result.heading ?? "").toLowerCase();
-        return heading === "form of reply";
-      });
-
-      const hasPointOfOrder = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isPointsOfOrder;
-      });
-
-      return hasAccountability && hasFormOfReply && hasPointOfOrder;
-    }
-
-    if (context.retrospectiveDiscipline) {
-      const hasWithdrawal = hasAuthority((item) => {
-        const heading = (item.result.heading ?? "").toLowerCase();
-        return heading === "withdrawal";
-      });
-
-      const hasProcedure = hasAuthority((item) => {
-        const heading = (item.result.heading ?? "").toLowerCase();
-        return heading === "procedure";
-      });
-
-      const hasPointOfOrder = hasAuthority((item) => {
-        const profile = buildAuthorityProfile(item.result);
-        return profile.isPointsOfOrder;
-      });
-
-      return hasWithdrawal && hasProcedure && hasPointOfOrder;
-    }
-
-    return false;
-  }
-
-  if (context.closure) {
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isClosure && profile.authorityClass === "governing_rule";
-    }, 1);
-
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isAcceptance || profile.isEffect;
-    }, 1);
-
-    takeByClass("procedural_mechanism", 1, (item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isPointsOfOrder;
-    });
-
-    takeByClass("chair_control", 1);
-  }
-
-  if (context.memberConduct) {
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isAgainstMembers;
-    }, 1);
-
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isAllegationsOfRacism;
-    }, 1);
-
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isPersonalReflections && profile.heading === "procedure";
-    }, 1);
-
-    takeByClass("chair_control", 1);
-  }
-
-  if (context.committeeOfWhole && context.relevancy) {
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isCommitteeOfWhole && profile.isChairperson;
-    }, 1);
-
-    take((item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isRelevancy && profile.authorityClass === "governing_rule";
-    }, 1);
-
-    takeByClass("procedural_mechanism", 1, (item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isPointsOfOrder;
-    });
-
-    takeByClass("constraint_or_qualification", 1);
-  }
-
-  if (context.ministerialAccountability) {
-    take((item) => {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      return heading === "accountability to the house";
-    }, 1);
-
-    take((item) => {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      return heading === "form of reply";
-    }, 1);
-
-    takeByClass("procedural_mechanism", 1, (item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isPointsOfOrder;
-    });
-  }
-
-  if (context.retrospectiveDiscipline) {
-    take((item) => {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      return heading === "withdrawal";
-    }, 1);
-
-    take((item) => {
-      const heading = (item.result.heading ?? "").toLowerCase();
-      return heading === "procedure";
-    }, 1);
-
-    takeByClass("procedural_mechanism", 1, (item) => {
-      const profile = buildAuthorityProfile(item.result);
-      return profile.isPointsOfOrder;
-    });
-  }
-
-  if (!blueprintSatisfied()) {
-    for (const item of deduped) {
-      if (selected.length >= maxAuthorities) break;
-      if (!canAdd(item)) continue;
-      add(item);
-    }
+  for (const item of deduped) {
+    if (selected.length >= computedMaxAuthorities) break;
+    if (!canAdd(item)) continue;
+    add(item);
   }
 
   return {
@@ -982,16 +740,32 @@ export function selectFinalAuthorities(input: {
       rank: item.adjustedRank,
     })),
     scoredAuthorities: selected,
+    activeConceptIds: frame.activeConcepts.map((c) => c.id),
+    blueprintSlots: slots.map((slot) => slot.key),
+    selectedSlotMatches,
   };
 }
 
 export function normalizeAnswerFormatting(text: string): string {
-  return text
+  const normalized = text
     .replace(/^\*\s+/gm, "- ")
     .replace(/^\*\*\s+/gm, "- ")
     .replace(/^\*\s{2,}/gm, "- ")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
+
+  const headingMap: Array<[RegExp, string]> = [
+    [/^Bottom line\s*:?$/im, "Bottom line:"],
+    [/^What this means\s*:?$/im, "What this means:"],
+    [/^Your options\s*:?$/im, "Your options:"],
+    [/^Risks(?: or)? constraints\s*:?$/im, "Risks or constraints:"],
+    [/^Best authorities to inspect(?: or cite)?\s*:?$/im, "Best authorities to inspect or cite:"],
+  ];
+
+  return headingMap.reduce(
+    (acc, [pattern, replacement]) => acc.replace(pattern, replacement),
+    normalized,
+  );
 }
 
 function extractInlineCitations(answerText: string): string[] {
@@ -1082,20 +856,17 @@ export function rewriteForbiddenAuthorityMentions(input: {
   );
 
   const pattern = /\b(?:standing order|so)\s+\d+[a-z]?|\b\d+\/\d+\b/gi;
-
   const removed: string[] = [];
 
   const rewritten = input.answerText.replace(pattern, (match) => {
     const normalized = normalizeAuthorityMention(match);
 
     if (allowed.has(normalized)) {
-      return match; // keep valid
+      return match;
     }
 
     removed.push(match);
-
-    // rewrite strategy: soften instead of delete abruptly
-    return "that authority";
+    return "the retrieved authority";
   });
 
   return {
@@ -1137,6 +908,101 @@ export function validateAnswerCitations(input: {
   return { ok: true };
 }
 
+function isStructuralHeading(line: string): boolean {
+  return [
+    "Bottom line:",
+    "What this means:",
+    "Your options:",
+    "Risks or constraints:",
+    "Best authorities to inspect or cite:",
+  ].includes(line.trim());
+}
+
+function isSubstantiveSection(section: string | null): boolean {
+  return (
+    section === "Bottom line:" ||
+    section === "What this means:" ||
+    section === "Your options:" ||
+    section === "Risks or constraints:"
+  );
+}
+
+function lineHasAllowedCitation(
+  line: string,
+  allowedLabels: Set<string>,
+): boolean {
+  const citations = extractInlineCitations(line);
+  if (citations.length === 0) return false;
+  return citations.every((citation) => isCitationAllowed(citation, allowedLabels));
+}
+
+function isLikelyBestAuthorityLine(line: string): boolean {
+  return /^\-\s*\[[^\]]+\]/.test(line.trim()) || /^\-\s*\S+/.test(line.trim());
+}
+
+export function pruneValidatedAnswerContent(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): {
+  prunedText: string;
+  removedLines: string[];
+} {
+  const allowedLabels = new Set(
+    input.authorities.map((authority) => authority.citationLabel),
+  );
+
+  const lines = normalizeAnswerFormatting(input.answerText).split("\n");
+  const kept: string[] = [];
+  const removedLines: string[] = [];
+  let currentSection: string | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimRight();
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      kept.push("");
+      continue;
+    }
+
+    if (isStructuralHeading(trimmed)) {
+      currentSection = trimmed;
+      kept.push(trimmed);
+      continue;
+    }
+
+    if (currentSection === "Best authorities to inspect or cite:") {
+      if (isLikelyBestAuthorityLine(trimmed)) {
+        kept.push(line);
+      } else {
+        removedLines.push(line);
+      }
+      continue;
+    }
+
+    if (isSubstantiveSection(currentSection)) {
+      if (lineHasAllowedCitation(trimmed, allowedLabels)) {
+        kept.push(line);
+      } else {
+        removedLines.push(line);
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  const prunedText = kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    prunedText,
+    removedLines,
+  };
+}
+
 function classifyConstraint(result: ProceduralSearchResult): string | null {
   const heading = (result.heading ?? "").toLowerCase();
   const path = result.path.join(" > ").toLowerCase();
@@ -1147,18 +1013,19 @@ function classifyConstraint(result: ProceduralSearchResult): string | null {
     heading.includes("speaker") ||
     text.includes("if the speaker accepts") ||
     text.includes("speaker accepts") ||
-    path.includes("speaker")
+    path.includes("chairperson")
   ) {
-    return `${result.citationLabel}: this appears to depend on whether the Chair accepts the procedural step.`;
+    return `This appears to depend on whether the Chair accepts the procedural step [${result.citationLabel}].`;
   }
 
   if (
     heading.includes("effect") ||
-    text.includes("if ") ||
     text.includes("unless ") ||
-    text.includes("except ")
+    text.includes("except ") ||
+    heading === "form of reply" ||
+    heading === "withdrawal"
   ) {
-    return `${result.citationLabel}: this provision appears to describe conditions or consequences that may constrain what happens next.`;
+    return `This authority states conditions or consequences that may constrain what happens next [${result.citationLabel}].`;
   }
 
   return null;
@@ -1166,7 +1033,7 @@ function classifyConstraint(result: ProceduralSearchResult): string | null {
 
 function classifyOption(result: ProceduralSearchResult): string {
   const heading = result.heading ?? "Relevant authority";
-  return `Inspect ${result.citationLabel} (${heading}) to test whether it directly governs the tactic in issue.`;
+  return `Inspect or cite ${heading} to test whether it directly governs the step in issue [${result.citationLabel}].`;
 }
 
 export function buildFallbackAnswer(input: {
@@ -1176,14 +1043,21 @@ export function buildFallbackAnswer(input: {
   effectiveCorpus: string | null;
   fallbackReason: string;
 }): string {
-  const context = detectQuestionContext(input.question);
+  const frame = deriveFrame(input.question);
   const top = input.authorities.slice(0, 6);
   const best = top.length > 0 ? top : [];
+  const cite = (index: number) =>
+    best[index] ? `[${best[index].citationLabel}]` : "";
 
   let bottomLine =
-    "The retrieved authorities are too thin to give a confident procedural answer.";
+    `The retrieved authorities are too thin to give a confident procedural answer ${cite(
+      0,
+    )}`.trim();
+
   let whatThisMeans =
-    "The retrieval plan ran, but the result set was not strong enough to support a reliable grounded answer.";
+    `The retrieval plan ran, but the result set was not strong enough to support a reliable grounded answer ${cite(
+      0,
+    )}`.trim();
 
   let options: string[] =
     best.length > 0
@@ -1196,55 +1070,96 @@ export function buildFallbackAnswer(input: {
     .slice(0, 2);
 
   if (best.length > 0) {
-    if (context.closure) {
+    if (frame.closure) {
       bottomLine =
-        "Yes. The grounded position is that a member can use a point of order to argue that accepting a closure motion would be unreasonable at that stage of debate.";
+        `A member can argue by point of order that accepting a closure motion would be unreasonable at that stage, but the Chair decides whether closure is accepted [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       whatThisMeans =
-        "The retrieved authorities point to the closure-motion rules plus the general point-of-order mechanism. That does not let a member conclusively rule that debate is unfinished, but it does let them put the objection squarely before the Chair.";
+        `The strongest grounded pack combines the closure rule, the acceptance constraint, and the point-of-order mechanism, rather than a freestanding rule that debate must continue [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       options = [
-        "Wait for a closure motion to be formally moved, then immediately take a point of order and argue that accepting it would be unreasonable at this stage.",
-        "Anchor the objection in the Chair’s judgment about whether closure should be accepted, rather than claiming there is a freestanding rule that debate must continue.",
-        "Keep the objection procedural and brief so it is clearly a point of order rather than further debate.",
+        `Wait for a closure motion to be formally moved, then immediately take a point of order and argue that accepting it would be unreasonable at that stage [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
+        `Frame the objection around whether closure should be accepted, not around a claimed absolute right to continue debating [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 2)
+          .join("] [")}].`,
       ];
+
       constraints = [
-        "The Standing Orders do not create a separate test called 'debate is nowhere near finished'; the issue is whether the Chair treats closure as reasonable.",
-        "If members are merely shouting for the question informally, there may be nothing formally before the Chair until a closure motion is actually moved.",
+        `The Chair retains the acceptance judgment, so the move is arguable but not self-executing [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 2)
+          .join("] [")}].`,
       ];
-    } else if (context.memberConduct) {
+    } else if (frame.memberConduct) {
       bottomLine =
-        "The strongest grounded move is to raise the matter immediately as a personal reflection against a member and press the Chair to intervene.";
+        `The strongest grounded move is to frame the issue as a personal reflection against a member and ask the Chair to intervene [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       whatThisMeans =
-        "The retrieved authorities cluster under Personal reflections, especially Against members and Allegations of racism. That suggests the best procedural framing is not a vague complaint about tone, but a direct objection to a personal reflection on a member.";
+        `The most on-point authorities are the personal-reflections rulings, especially Against members, Procedure, and, where relevant, Allegations of racism [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       options = [
-        "Rise immediately on a point of order and frame the conduct as a personal reflection against a member.",
-        "Press the Chair to require the offending remark to be withdrawn or stopped, rather than arguing the broader politics of the exchange.",
-        "If the language crosses into accusations of racism or identity-based attack, use that framing carefully but keep the complaint tied to the House’s rules on personal reflections.",
+        `Rise immediately on a point of order and frame the conduct as a personal reflection against a member [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
+        `Ask the Chair to require the remark to be withdrawn or checked procedurally rather than debating the politics of the remark itself [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
       ];
+
       constraints = [
-        "The strongest route is procedural discipline through the Chair, not a substantive rebuttal in debate.",
-        "Overstating the complaint can weaken it; the safest framing is that the member’s remarks improperly reflect on another member and their standing to speak.",
+        `The safest path is procedural intervention through the Chair, not a broad substantive argument about motives [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
       ];
-    } else if (context.committeeOfWhole && context.relevancy) {
+    } else if (frame.committeeOfWhole && frame.relevancy) {
       bottomLine =
-        "The grounded position is that the Chair can be asked, by point of order, to require the Minister to stay relevant in committee of the whole.";
+        `The grounded position is that the Chair can be asked, by point of order, to require relevance in committee of the whole [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       whatThisMeans =
-        "The retrieved authorities point to Relevancy rulings and the Chairperson's control of proceedings in committee. The safest procedural move is to frame the complaint as one of relevance and ask the Chair to bring the Minister back to the matter before the committee.";
+        `The strongest pack combines the Chairperson ruling, Relevancy, and the point-of-order mechanism, all directed to the matter before the committee [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`;
+
       options = [
-        "Take a point of order and ask the Chair to require the Minister to address the matter actually before the committee.",
-        "Frame the intervention as a relevance complaint, not a complaint about tone or quality of answer.",
-        "If needed, repeat the point in more pointed but still procedural language: the Minister is not engaging with the issue before the committee.",
+        `Take a point of order and ask the Chair to require the member or Minister to address the matter before the committee [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
+        `Frame the intervention as one of relevance and committee control, not merely dissatisfaction with the quality of the answer [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
       ];
+
       constraints = [
-        "The Chair has control of proceedings in committee, so the practical issue is persuading the Chair to act.",
-        "The safest route is relevance; broader accusations of evasiveness may sound political unless tied back to the subject before the committee.",
+        `The Chair controls proceedings in committee, so the practical question is whether the Chair accepts the relevance point [${best
+          .map((a) => a.citationLabel)
+          .slice(0, 3)
+          .join("] [")}].`,
       ];
-    } else {
-      bottomLine = `The safest grounded view is that this issue should be analysed through ${best
-        .slice(0, 3)
-        .map((authority) => `[${authority.citationLabel}]`)
-        .join(", ")}.`;
-      whatThisMeans =
-        "The retrieved authorities are relevant, but not strong enough to support a sharper synthesis. Treat the leading authorities as indicating what the rules most likely establish, what may depend on the Chair, and where the position remains uncertain.";
     }
   }
 
@@ -1298,31 +1213,32 @@ export function buildFallbackAnswer(input: {
 
             const why = authority.heading?.trim()
               ? authority.heading
-              : (authority.path[authority.path.length - 1] ??
-                "Relevant authority");
+              : authority.path[authority.path.length - 1] ?? "Relevant authority";
 
-            return `- ${authority.citationLabel}: ${why} (${label})`;
+            return `- [${authority.citationLabel}] ${why} (${label})`;
           })
           .join("\n")
       : "- No strong authorities were retrieved.";
 
   return [
-    "Bottom line",
+    "Bottom line:",
     bottomLine,
     "",
-    "What this means",
+    "What this means:",
     whatThisMeans,
     "",
-    "Your options",
+    "Your options:",
     optionsText || "- No clearly relevant authority was retrieved.",
     "",
-    "Risks or constraints",
+    "Risks or constraints:",
     constraintsText ||
-      "- This fallback cannot confidently synthesise constraints beyond the retrieved authorities.",
+      `- This fallback cannot confidently synthesise constraints beyond the retrieved authorities ${
+        cite(0) || ""
+      }`.trim(),
     "",
-    "Best authorities to inspect",
+    "Best authorities to inspect or cite:",
     inspect,
     "",
-    `Fallback note: the AI draft was not trusted. Reason: ${input.fallbackReason}`,
+    `- Fallback note: the AI draft was not trusted because validation failed (${input.fallbackReason}).`,
   ].join("\n");
 }

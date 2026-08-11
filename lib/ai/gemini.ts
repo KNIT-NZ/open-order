@@ -1,6 +1,7 @@
+// lib/ai/gemini.ts
 import { GoogleGenAI } from "@google/genai";
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 const GEMINI_MAX_RETRIES = 2;
 const GEMINI_INITIAL_BACKOFF_MS = 700;
@@ -109,9 +110,7 @@ function extractStatusCode(error: unknown): number | null {
   if (!error || typeof error !== "object") return null;
 
   const directStatus =
-    "status" in error && typeof error.status === "number"
-      ? error.status
-      : null;
+    "status" in error && typeof error.status === "number" ? error.status : null;
 
   if (directStatus) return directStatus;
 
@@ -161,7 +160,13 @@ function extractRawMessage(error: unknown): string {
 }
 
 function isRetryableStatus(statusCode: number | null): boolean {
-  return statusCode === 429 || statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504;
+  return (
+    statusCode === 429 ||
+    statusCode === 500 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504
+  );
 }
 
 function classifyError(error: unknown): AiProviderError {
@@ -206,7 +211,10 @@ function classifyError(error: unknown): AiProviderError {
 
   if (statusCode !== null) {
     return new AiProviderError({
-      message: `The AI provider returned an error${statusCode ? ` (${statusCode})` : ""}.`,
+      message:
+        statusCode === 404
+          ? `The configured Gemini model "${GEMINI_MODEL}" was not found or is not available to this API key.`
+          : `The AI provider returned an error${statusCode ? ` (${statusCode})` : ""}.`,
       kind: "upstream",
       statusCode,
       retryable: false,
@@ -244,8 +252,7 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
       const classified = classifyError(error);
       lastError = classified;
 
-      const shouldRetry =
-        classified.retryable && attempt < GEMINI_MAX_RETRIES;
+      const shouldRetry = classified.retryable && attempt < GEMINI_MAX_RETRIES;
 
       if (!shouldRetry) {
         throw classified;
