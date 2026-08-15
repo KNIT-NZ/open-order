@@ -24,7 +24,7 @@ export type DiscoveredProceduralDimension = {
   conceptId: string;
   query: string;
   provenance: QueryProvenance;
-  status: "promoted" | "rejected" | "covered_by_static";
+  status: "promoted" | "rejected" | "covered_by_static" | "bound_to_promoted";
   validation: string;
   heading: string | null;
   evidenceCount: number;
@@ -850,6 +850,33 @@ function normalizeHeadingForDiscovery(heading: string): string {
   return normalizeWhitespace(heading).toLowerCase();
 }
 
+function strongestEligibleCorpusBreadcrumb(
+  search: SearchExecution,
+  concepts: ProceduralConcept[],
+): ProceduralSearchResult | null {
+  return (
+    search.results.slice(0, 3).find((result) => {
+      const heading = result.heading?.trim();
+      if (!heading) return false;
+
+      const normalizedHeading = normalizeHeadingForDiscovery(heading);
+      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
+      if (normalizedHeading === normalizeConceptTrigger(search.query)) {
+        return false;
+      }
+
+      const headingSearch: SearchExecution = {
+        query: heading,
+        corpus: result.documentCorpus,
+        provenance: "corpus_bridge",
+        results: [],
+      };
+
+      return !searchDimensionCoveredByStaticConcept(headingSearch, concepts);
+    }) ?? null
+  );
+}
+
 type HeadingEvidenceGroup = {
   heading: string;
   results: ProceduralSearchResult[];
@@ -1020,7 +1047,58 @@ export function discoverProceduralDimensions(input: {
     });
   }
 
-  return output;
+  const promotedByHeading = new Map(
+    output
+      .filter(
+        (dimension) =>
+          dimension.status === "promoted" && Boolean(dimension.heading),
+      )
+      .map((dimension) => [
+        normalizeHeadingForDiscovery(dimension.heading ?? ""),
+        dimension,
+      ]),
+  );
+
+  return output.map((dimension) => {
+    if (
+      dimension.status !== "rejected" ||
+      (dimension.provenance !== "planner" &&
+        dimension.provenance !== "user_term")
+    ) {
+      return dimension;
+    }
+
+    const sourceSearch = input.searches.find(
+      (search) =>
+        (search.provenance ?? "registry_expansion") === dimension.provenance &&
+        normalizeConceptTrigger(search.query) ===
+          normalizeConceptTrigger(dimension.query),
+    );
+    if (!sourceSearch) return dimension;
+
+    const breadcrumb = strongestEligibleCorpusBreadcrumb(
+      sourceSearch,
+      input.concepts,
+    );
+    if (!breadcrumb?.heading) return dimension;
+
+    const promoted = promotedByHeading.get(
+      normalizeHeadingForDiscovery(breadcrumb.heading),
+    );
+    if (!promoted?.heading || !promoted.slotKey) return dimension;
+
+    return {
+      ...dimension,
+      conceptId: promoted.conceptId,
+      status: "bound_to_promoted",
+      validation: `Strongest corpus breadcrumb ${breadcrumb.citationLabel} maps to already-promoted heading "${promoted.heading}". Bound to that concept; no additional bridge search is needed.`,
+      heading: promoted.heading,
+      evidenceCount: 1,
+      slotKey: promoted.slotKey,
+      bridgeSourceQuery: dimension.query,
+      bridgeSourceCitationLabel: breadcrumb.citationLabel,
+    };
+  });
 }
 
 export function buildCorpusBridgeSearchRequests(input: {
@@ -1062,39 +1140,10 @@ export function buildCorpusBridgeSearchRequests(input: {
     if (!discovery || discovery.status !== "rejected") continue;
     if (search.results.length === 0) continue;
 
-    const breadcrumb = search.results.slice(0, 3).find((result) => {
-      const heading = result.heading?.trim();
-      if (!heading) return false;
-
-      const normalizedHeading = normalizeHeadingForDiscovery(heading);
-      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
-      if (normalizedHeading === normalizeConceptTrigger(search.query)) {
-        return false;
-      }
-
-      const headingSearch: SearchExecution = {
-        query: heading,
-        corpus: result.documentCorpus,
-        provenance: "corpus_bridge",
-        results: [],
-      };
-      if (
-        searchDimensionCoveredByStaticConcept(
-          headingSearch,
-          frame.activeConcepts,
-        )
-      ) {
-        return false;
-      }
-
-      const corpus =
-        result.documentCorpus === "standing_orders" ||
-        result.documentCorpus === "speakers_rulings"
-          ? result.documentCorpus
-          : null;
-      const key = `${corpus ?? "auto"}::${normalizeConceptTrigger(heading)}`;
-      return !existingSearchKeys.has(key);
-    });
+    const breadcrumb = strongestEligibleCorpusBreadcrumb(
+      search,
+      frame.activeConcepts,
+    );
 
     if (!breadcrumb?.heading) continue;
 
@@ -1106,6 +1155,13 @@ export function buildCorpusBridgeSearchRequests(input: {
             search.corpus === "speakers_rulings"
           ? search.corpus
           : null;
+
+    const headingSearchKey = `${corpus ?? "auto"}::${normalizeConceptTrigger(
+      breadcrumb.heading,
+    )}`;
+    if (existingSearchKeys.has(headingSearchKey)) {
+      continue;
+    }
 
     candidates.push({
       request: {
@@ -1378,9 +1434,16 @@ function scoreDiscoveryBreadcrumb(
     : null;
 
   return discoveries.reduce((score, discovery) => {
+    const isValidatedBridgeBreadcrumb =
+      discovery.status === "promoted" &&
+      discovery.provenance === "corpus_bridge";
+    const isBoundBreadcrumb =
+      discovery.status === "bound_to_promoted" &&
+      (discovery.provenance === "planner" ||
+        discovery.provenance === "user_term");
+
     if (
-      discovery.status !== "promoted" ||
-      discovery.provenance !== "corpus_bridge" ||
+      (!isValidatedBridgeBreadcrumb && !isBoundBreadcrumb) ||
       !discovery.heading ||
       !discovery.bridgeSourceCitationLabel ||
       discovery.bridgeSourceCitationLabel !== result.citationLabel ||
@@ -1390,9 +1453,10 @@ function scoreDiscoveryBreadcrumb(
       return score;
     }
 
-    // Once the heading family has independently passed bridge validation,
-    // prefer the original semantic breadcrumb within that validated family.
-    return score + 260;
+    // Once a heading family is independently validated, prefer the strongest
+    // semantic breadcrumb that led the user into that family. Use a fixed
+    // affinity rather than stacking duplicate bridge/binding evidence.
+    return Math.max(score, 260);
   }, 0);
 }
 

@@ -104,7 +104,7 @@ export type AiDiagnosticDiscovery = {
   conceptId: string;
   query: string;
   provenance: AiQueryProvenance;
-  status: "promoted" | "rejected" | "covered_by_static";
+  status: "promoted" | "rejected" | "covered_by_static" | "bound_to_promoted";
   validation: string;
   heading: string | null;
   evidenceCount: number;
