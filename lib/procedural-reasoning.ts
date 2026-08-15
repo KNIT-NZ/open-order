@@ -12,6 +12,7 @@ export type QueryProvenance =
   | "planner"
   | "user_term"
   | "registry_expansion"
+  | "corpus_bridge"
   | "recovery";
 
 export type SearchDimension = {
@@ -28,12 +29,16 @@ export type DiscoveredProceduralDimension = {
   heading: string | null;
   evidenceCount: number;
   slotKey: string | null;
+  bridgeSourceQuery: string | null;
+  bridgeSourceCitationLabel: string | null;
 };
 
 export type SearchExecution = {
   query: string;
   corpus: string | null;
   provenance?: QueryProvenance;
+  bridgeSourceQuery?: string;
+  bridgeSourceCitationLabel?: string;
   results: ProceduralSearchResult[];
 };
 
@@ -82,6 +87,7 @@ export type ScoredAuthority = {
   slotBoost: number;
   preferredTextBoost: number;
   bridgeBoost: number;
+  discoveryBoost: number;
   adjustedRank: number;
   matchedSlotKeys: string[];
 };
@@ -100,6 +106,14 @@ type SlotMatch = {
   slotKey: string;
   citationLabel: string;
   heading: string | null;
+};
+
+export type CorpusBridgeSearchRequest = {
+  query: string;
+  corpus: "standing_orders" | "speakers_rulings" | null;
+  sourceQuery: string;
+  sourceProvenance: "planner" | "user_term";
+  sourceCitationLabel: string;
 };
 
 export type RecoverySearchRequest = {
@@ -788,6 +802,16 @@ const DYNAMIC_DISCOVERY_STOP_QUERIES = new Set([
   "chair",
 ]);
 
+const CORPUS_BRIDGE_STOP_HEADINGS = new Set([
+  ...DYNAMIC_DISCOVERY_STOP_QUERIES,
+  "general",
+  "general procedures",
+  "maintenance of order",
+  "parliament house",
+  "questions",
+  "motions",
+]);
+
 function normalizedStaticConceptTerms(
   concept: ProceduralConcept,
 ): Set<string> {
@@ -832,6 +856,7 @@ type HeadingEvidenceGroup = {
   exactHeadingCount: number;
   headingPhraseCount: number;
   maxRank: number;
+  maxClusterSupportCount: number;
 };
 
 function strongestHeadingEvidence(
@@ -856,12 +881,17 @@ function strongestHeadingEvidence(
       exactHeadingCount: 0,
       headingPhraseCount: 0,
       maxRank: 0,
+      maxClusterSupportCount: 0,
     };
 
     existing.results.push(result);
     if (result.matchSignals.exactHeadingMatch) existing.exactHeadingCount += 1;
     if (result.matchSignals.headingPhraseMatch) existing.headingPhraseCount += 1;
     existing.maxRank = Math.max(existing.maxRank, result.rank);
+    existing.maxClusterSupportCount = Math.max(
+      existing.maxClusterSupportCount,
+      result.clusterSupportCount,
+    );
     groups.set(key, existing);
   }
 
@@ -884,10 +914,18 @@ export function discoverProceduralDimensions(input: {
 
   for (const search of input.searches) {
     const provenance = search.provenance ?? "registry_expansion";
-    if (provenance !== "planner" && provenance !== "user_term") continue;
+    if (
+      provenance !== "planner" &&
+      provenance !== "user_term" &&
+      provenance !== "corpus_bridge"
+    ) {
+      continue;
+    }
 
     const query = cleanQuery(search.query);
     const normalizedQuery = query.toLowerCase();
+    const bridgeSourceQuery = search.bridgeSourceQuery ?? null;
+    const bridgeSourceCitationLabel = search.bridgeSourceCitationLabel ?? null;
 
     if (searchDimensionCoveredByStaticConcept(search, input.concepts)) {
       output.push({
@@ -899,6 +937,8 @@ export function discoverProceduralDimensions(input: {
         heading: null,
         evidenceCount: 0,
         slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
       });
       continue;
     }
@@ -913,6 +953,8 @@ export function discoverProceduralDimensions(input: {
         heading: null,
         evidenceCount: 0,
         slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
       });
       continue;
     }
@@ -928,6 +970,8 @@ export function discoverProceduralDimensions(input: {
         heading: null,
         evidenceCount: 0,
         slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
       });
       continue;
     }
@@ -937,7 +981,21 @@ export function discoverProceduralDimensions(input: {
       (evidence.maxRank >= 120 || evidence.results.length >= 2);
     const promotedByHeadingCluster =
       evidence.headingPhraseCount >= 2 && evidence.maxRank >= 180;
-    const promoted = promotedByExactHeading || promotedByHeadingCluster;
+
+    // A corpus bridge begins with a weak semantic breadcrumb. Searching the
+    // breadcrumb heading will necessarily create an exact-heading match, so
+    // exactness alone would be circular evidence. Require a coherent
+    // multi-authority heading family before a bridge may create a concept.
+    const promotedByCorpusBridge =
+      evidence.results.length >= 2 &&
+      evidence.maxClusterSupportCount >= 2 &&
+      evidence.maxRank >= 180 &&
+      (evidence.exactHeadingCount >= 2 || evidence.headingPhraseCount >= 2);
+
+    const promoted =
+      provenance === "corpus_bridge"
+        ? promotedByCorpusBridge
+        : promotedByExactHeading || promotedByHeadingCluster;
     const key = discoveryKey(evidence.heading || query);
 
     output.push({
@@ -946,14 +1004,140 @@ export function discoverProceduralDimensions(input: {
       provenance,
       status: promoted ? "promoted" : "rejected",
       validation: promoted
-        ? evidence.exactHeadingCount > 0
-          ? `Promoted from heading-level corpus evidence: ${evidence.exactHeadingCount} exact-heading match(es), ${evidence.results.length} coherent heading match(es).`
-          : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results.`
-        : "Heading evidence was present but did not meet the promotion threshold.",
+        ? provenance === "corpus_bridge"
+          ? `Promoted after corpus-bridge validation: ${evidence.results.length} coherent heading matches with cluster support ${evidence.maxClusterSupportCount}.`
+          : evidence.exactHeadingCount > 0
+            ? `Promoted from heading-level corpus evidence: ${evidence.exactHeadingCount} exact-heading match(es), ${evidence.results.length} coherent heading match(es).`
+            : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results.`
+        : provenance === "corpus_bridge"
+          ? "The breadcrumb heading did not show enough independent multi-authority corpus support to create a runtime concept."
+          : "Heading evidence was present but did not meet the promotion threshold.",
       heading: evidence.heading,
       evidenceCount: evidence.results.length,
       slotKey: promoted ? `discovered_${key}` : null,
+      bridgeSourceQuery,
+      bridgeSourceCitationLabel,
     });
+  }
+
+  return output;
+}
+
+export function buildCorpusBridgeSearchRequests(input: {
+  searches: SearchExecution[];
+  question: string;
+  plannerQueries?: string[];
+  maxRequests?: number;
+}): CorpusBridgeSearchRequest[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const discoveries = discoverProceduralDimensions({
+    searches: input.searches,
+    concepts: frame.activeConcepts,
+  });
+  const discoveryBySearch = new Map(
+    discoveries.map((dimension) => [
+      `${dimension.provenance}::${normalizeConceptTrigger(dimension.query)}`,
+      dimension,
+    ]),
+  );
+  const existingSearchKeys = new Set(
+    input.searches.map(
+      (search) =>
+        `${search.corpus ?? "auto"}::${normalizeConceptTrigger(search.query)}`,
+    ),
+  );
+  const candidates: Array<{
+    request: CorpusBridgeSearchRequest;
+    sourceRank: number;
+    sourcePriority: number;
+  }> = [];
+
+  for (const search of input.searches) {
+    const provenance = search.provenance ?? "registry_expansion";
+    if (provenance !== "planner" && provenance !== "user_term") continue;
+
+    const discovery = discoveryBySearch.get(
+      `${provenance}::${normalizeConceptTrigger(search.query)}`,
+    );
+    if (!discovery || discovery.status !== "rejected") continue;
+    if (search.results.length === 0) continue;
+
+    const breadcrumb = search.results.slice(0, 3).find((result) => {
+      const heading = result.heading?.trim();
+      if (!heading) return false;
+
+      const normalizedHeading = normalizeHeadingForDiscovery(heading);
+      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
+      if (normalizedHeading === normalizeConceptTrigger(search.query)) {
+        return false;
+      }
+
+      const headingSearch: SearchExecution = {
+        query: heading,
+        corpus: result.documentCorpus,
+        provenance: "corpus_bridge",
+        results: [],
+      };
+      if (
+        searchDimensionCoveredByStaticConcept(
+          headingSearch,
+          frame.activeConcepts,
+        )
+      ) {
+        return false;
+      }
+
+      const corpus =
+        result.documentCorpus === "standing_orders" ||
+        result.documentCorpus === "speakers_rulings"
+          ? result.documentCorpus
+          : null;
+      const key = `${corpus ?? "auto"}::${normalizeConceptTrigger(heading)}`;
+      return !existingSearchKeys.has(key);
+    });
+
+    if (!breadcrumb?.heading) continue;
+
+    const corpus =
+      breadcrumb.documentCorpus === "standing_orders" ||
+      breadcrumb.documentCorpus === "speakers_rulings"
+        ? breadcrumb.documentCorpus
+        : search.corpus === "standing_orders" ||
+            search.corpus === "speakers_rulings"
+          ? search.corpus
+          : null;
+
+    candidates.push({
+      request: {
+        query: cleanQuery(breadcrumb.heading),
+        corpus,
+        sourceQuery: cleanQuery(search.query),
+        sourceProvenance: provenance,
+        sourceCitationLabel: breadcrumb.citationLabel,
+      },
+      sourceRank: breadcrumb.rank,
+      sourcePriority: provenance === "user_term" ? 1 : 0,
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (b.sourcePriority !== a.sourcePriority) {
+      return b.sourcePriority - a.sourcePriority;
+    }
+    return b.sourceRank - a.sourceRank;
+  });
+
+  const maxRequests = Math.max(1, Math.min(input.maxRequests ?? 2, 2));
+  const seen = new Set<string>();
+  const output: CorpusBridgeSearchRequest[] = [];
+
+  for (const candidate of candidates) {
+    const key = `${candidate.request.corpus ?? "auto"}::${normalizeConceptTrigger(candidate.request.query)}`;
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    output.push(candidate.request);
+    if (output.length >= maxRequests) break;
   }
 
   return output;
@@ -981,7 +1165,8 @@ function buildDiscoveredSlots(
     const sourceSearch = searches.find(
       (search) =>
         cleanQuery(search.query).toLowerCase() ===
-        cleanQuery(discovery.query).toLowerCase(),
+          cleanQuery(discovery.query).toLowerCase() &&
+        (search.provenance ?? "registry_expansion") === discovery.provenance,
     );
     const corpus =
       sourceSearch?.corpus === "standing_orders" ||
@@ -1184,6 +1369,33 @@ function scoreContextualBridgeText(
   }, 0);
 }
 
+function scoreDiscoveryBreadcrumb(
+  result: ProceduralSearchResult,
+  discoveries: DiscoveredProceduralDimension[],
+): number {
+  const resultHeading = result.heading
+    ? normalizeHeadingForDiscovery(result.heading)
+    : null;
+
+  return discoveries.reduce((score, discovery) => {
+    if (
+      discovery.status !== "promoted" ||
+      discovery.provenance !== "corpus_bridge" ||
+      !discovery.heading ||
+      !discovery.bridgeSourceCitationLabel ||
+      discovery.bridgeSourceCitationLabel !== result.citationLabel ||
+      !resultHeading ||
+      resultHeading !== normalizeHeadingForDiscovery(discovery.heading)
+    ) {
+      return score;
+    }
+
+    // Once the heading family has independently passed bridge validation,
+    // prefer the original semantic breadcrumb within that validated family.
+    return score + 260;
+  }, 0);
+}
+
 function scoreSlotMatches(
   result: ProceduralSearchResult,
   slots: AuthoritySlotSpec[],
@@ -1293,6 +1505,10 @@ export function selectFinalAuthorities(input: {
           preferredTextBoost,
           bridgeBoost,
         } = scoreSlotMatches(result, slots, activeConceptIds);
+        const discoveryBoost = scoreDiscoveryBreadcrumb(
+          result,
+          discoveredDimensions,
+        );
 
         return {
           result,
@@ -1302,12 +1518,14 @@ export function selectFinalAuthorities(input: {
           slotBoost,
           preferredTextBoost,
           bridgeBoost,
+          discoveryBoost,
           adjustedRank:
             result.rank +
             routeBoost +
             slotBoost +
             preferredTextBoost +
-            bridgeBoost,
+            bridgeBoost +
+            discoveryBoost,
           matchedSlotKeys,
         };
       }),
@@ -1316,6 +1534,8 @@ export function selectFinalAuthorities(input: {
   const sorted = [...flattened].sort((a, b) => {
     if (b.adjustedRank !== a.adjustedRank)
       return b.adjustedRank - a.adjustedRank;
+    if (b.discoveryBoost !== a.discoveryBoost)
+      return b.discoveryBoost - a.discoveryBoost;
     if (b.bridgeBoost !== a.bridgeBoost) return b.bridgeBoost - a.bridgeBoost;
     if (b.preferredTextBoost !== a.preferredTextBoost)
       return b.preferredTextBoost - a.preferredTextBoost;

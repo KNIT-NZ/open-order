@@ -465,6 +465,8 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
                   `   Discovery heading: ${retrieval.discovery.heading ?? "None"}`,
                   `   Discovery evidence count: ${retrieval.discovery.evidenceCount}`,
                   `   Discovery slot: ${retrieval.discovery.slotKey ?? "None"}`,
+                  `   Discovery bridge source query: ${retrieval.discovery.bridgeSourceQuery ?? "None"}`,
+                  `   Discovery bridge source authority: ${retrieval.discovery.bridgeSourceCitationLabel ?? "None"}`,
                   `   Discovery validation: ${retrieval.discovery.validation}`,
                 ]
               : ["   Discovery status: not evaluated"];
@@ -498,6 +500,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
               `   slotBoost: ${(item.slotBoost ?? 0).toFixed(2)}`,
               `   preferredTextBoost: ${(item.preferredTextBoost ?? 0).toFixed(2)}`,
               `   bridgeBoost: ${(item.bridgeBoost ?? 0).toFixed(2)}`,
+              `   discoveryBoost: ${(item.discoveryBoost ?? 0).toFixed(2)}`,
               `   authorityFunction: ${item.authorityFunction ?? "None"}`,
               `   matchedSlots: ${
                 item.matchedSlots?.length ? item.matchedSlots.join(", ") : "None"

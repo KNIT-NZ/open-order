@@ -97,6 +97,7 @@ export type AiQueryProvenance =
   | "planner"
   | "user_term"
   | "registry_expansion"
+  | "corpus_bridge"
   | "recovery";
 
 export type AiDiagnosticDiscovery = {
@@ -108,6 +109,8 @@ export type AiDiagnosticDiscovery = {
   heading: string | null;
   evidenceCount: number;
   slotKey: string | null;
+  bridgeSourceQuery?: string | null;
+  bridgeSourceCitationLabel?: string | null;
 };
 
 export type AiDiagnosticRetrieval = {
@@ -129,6 +132,7 @@ export type AiDiagnosticFinalAuthority = {
   slotBoost?: number;
   preferredTextBoost?: number;
   bridgeBoost?: number;
+  discoveryBoost?: number;
   adjustedRank: number;
   matchedSlots?: string[];
   authorityFunction?: string;

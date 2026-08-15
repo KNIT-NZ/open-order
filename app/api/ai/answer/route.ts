@@ -16,6 +16,7 @@ import {
   appendEvidenceGapSection,
   buildAuthorityPayload,
   buildAuthorityProfile,
+  buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
   buildMissingSlotRecoveryRequests,
   buildProceduralQueryPlan,
@@ -174,6 +175,59 @@ export async function POST(request: NextRequest) {
             plannerQueries: plan.searchQueries,
           });
 
+          const bridgeRequests = buildCorpusBridgeSearchRequests({
+            searches,
+            question,
+            plannerQueries: plan.searchQueries,
+            maxRequests: 2,
+          });
+
+          if (bridgeRequests.length > 0) {
+            send("stage", {
+              key: "retrieving",
+              label: "Following corpus-native procedural breadcrumbs",
+            });
+
+            const existingBridgeSearchKeys = new Set(
+              searches.map(
+                (search) =>
+                  `${search.corpus ?? "auto"}::${search.query.toLowerCase()}`,
+              ),
+            );
+            let bridgeSearchCount = 0;
+
+            for (const bridge of bridgeRequests) {
+              const searchKey = `${bridge.corpus ?? "auto"}::${bridge.query.toLowerCase()}`;
+              if (existingBridgeSearchKeys.has(searchKey)) continue;
+
+              const searchResponse = await searchProceduralAuthorities({
+                q: bridge.query,
+                corpus: bridge.corpus,
+                limit: 10,
+                offset: 0,
+              });
+
+              searches.push({
+                query: bridge.query,
+                corpus: bridge.corpus,
+                provenance: "corpus_bridge",
+                bridgeSourceQuery: bridge.sourceQuery,
+                bridgeSourceCitationLabel: bridge.sourceCitationLabel,
+                results: searchResponse.results,
+              });
+              existingBridgeSearchKeys.add(searchKey);
+              bridgeSearchCount += 1;
+            }
+
+            if (bridgeSearchCount > 0) {
+              selected = selectFinalAuthorities({
+                searches,
+                question,
+                plannerQueries: plan.searchQueries,
+              });
+            }
+          }
+
           const recoveryAttempts: Array<{
             slotKey: string;
             query: string;
@@ -323,6 +377,7 @@ export async function POST(request: NextRequest) {
               slotBoost: item.slotBoost,
               preferredTextBoost: item.preferredTextBoost,
               bridgeBoost: item.bridgeBoost,
+              discoveryBoost: item.discoveryBoost,
               adjustedRank: item.adjustedRank,
               matchedSlots: item.matchedSlotKeys,
               authorityFunction: buildAuthorityProfile(item.result).authorityFunction,
