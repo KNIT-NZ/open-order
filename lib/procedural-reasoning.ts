@@ -528,13 +528,6 @@ export function buildAuthorityProfile(
   } else if (isChairperson) {
     authorityClass = "chair_control";
   } else if (
-    isAgainstMembers ||
-    isAllegationsOfRacism ||
-    isRelevancy ||
-    isClosure
-  ) {
-    authorityClass = "governing_rule";
-  } else if (
     isAcceptance ||
     isEffect ||
     heading === "procedure" ||
@@ -542,6 +535,14 @@ export function buildAuthorityProfile(
     heading === "withdrawal"
   ) {
     authorityClass = "constraint_or_qualification";
+  } else if (
+    isAgainstMembers ||
+    isAllegationsOfRacism ||
+    isRelevancy ||
+    isClosure ||
+    heading === "accountability to the house"
+  ) {
+    authorityClass = "governing_rule";
   } else if (isRulesOfDebate || isCommitteeStage || isPersonalReflections) {
     authorityClass = "analogy_or_support";
   }
@@ -812,6 +813,73 @@ const CORPUS_BRIDGE_STOP_HEADINGS = new Set([
   "motions",
 ]);
 
+const GENERIC_DISCOVERY_HEADINGS = new Set([
+  ...CORPUS_BRIDGE_STOP_HEADINGS,
+  "example",
+  "examples",
+]);
+
+const DISCOVERY_TOKEN_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "at",
+  "be",
+  "being",
+  "by",
+  "chamber",
+  "for",
+  "from",
+  "house",
+  "in",
+  "into",
+  "is",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "were",
+  "with",
+]);
+
+function discoveryTokens(text: string): Set<string> {
+  const tokens = cleanQuery(text)
+    .toLowerCase()
+    .match(/[a-z0-9]+/g) ?? [];
+
+  return new Set(
+    tokens
+      .filter((token) => token.length >= 3)
+      .filter((token) => !DISCOVERY_TOKEN_STOP_WORDS.has(token)),
+  );
+}
+
+function hasMeaningfulHeadingAffinity(query: string, heading: string): boolean {
+  if (normalizeConceptTrigger(query) === normalizeHeadingForDiscovery(heading)) {
+    return true;
+  }
+
+  const queryTokens = discoveryTokens(query);
+  const headingTokens = discoveryTokens(heading);
+
+  if (queryTokens.size === 0 || headingTokens.size === 0) return false;
+
+  const sharedTokenCount = [...queryTokens].filter((token) =>
+    headingTokens.has(token),
+  ).length;
+
+  if (queryTokens.size === 1 && headingTokens.size === 1) {
+    return sharedTokenCount === 1;
+  }
+
+  return sharedTokenCount >= 2;
+}
+
 function normalizedStaticConceptTerms(
   concept: ProceduralConcept,
 ): Set<string> {
@@ -860,7 +928,7 @@ function strongestEligibleCorpusBreadcrumb(
       if (!heading) return false;
 
       const normalizedHeading = normalizeHeadingForDiscovery(heading);
-      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
+      if (GENERIC_DISCOVERY_HEADINGS.has(normalizedHeading)) return false;
       if (normalizedHeading === normalizeConceptTrigger(search.query)) {
         return false;
       }
@@ -1003,17 +1071,33 @@ export function discoverProceduralDimensions(input: {
       continue;
     }
 
+    const normalizedEvidenceHeading = normalizeHeadingForDiscovery(
+      evidence.heading,
+    );
+    const genericHeading =
+      GENERIC_DISCOVERY_HEADINGS.has(normalizedEvidenceHeading);
+    const hasHeadingAffinity = hasMeaningfulHeadingAffinity(
+      query,
+      evidence.heading,
+    );
+
     const promotedByExactHeading =
+      !genericHeading &&
+      hasHeadingAffinity &&
       evidence.exactHeadingCount >= 1 &&
       (evidence.maxRank >= 120 || evidence.results.length >= 2);
     const promotedByHeadingCluster =
-      evidence.headingPhraseCount >= 2 && evidence.maxRank >= 180;
+      !genericHeading &&
+      hasHeadingAffinity &&
+      evidence.headingPhraseCount >= 2 &&
+      evidence.maxRank >= 180;
 
     // A corpus bridge begins with a weak semantic breadcrumb. Searching the
     // breadcrumb heading will necessarily create an exact-heading match, so
     // exactness alone would be circular evidence. Require a coherent
     // multi-authority heading family before a bridge may create a concept.
     const promotedByCorpusBridge =
+      !genericHeading &&
       evidence.results.length >= 2 &&
       evidence.maxClusterSupportCount >= 2 &&
       evidence.maxRank >= 180 &&
@@ -1025,6 +1109,14 @@ export function discoverProceduralDimensions(input: {
         : promotedByExactHeading || promotedByHeadingCluster;
     const key = discoveryKey(evidence.heading || query);
 
+    const rejectionReason = genericHeading
+      ? `Heading "${evidence.heading}" is structurally generic and cannot create a runtime procedural concept.`
+      : provenance !== "corpus_bridge" && !hasHeadingAffinity
+        ? `Heading evidence for "${evidence.heading}" lacked enough meaningful lexical affinity to the search dimension "${query}".`
+        : provenance === "corpus_bridge"
+          ? "The breadcrumb heading did not show enough independent multi-authority corpus support to create a runtime concept."
+          : "Heading evidence was present but did not meet the promotion threshold.";
+
     output.push({
       conceptId: promoted ? `discovered:${key}` : `rejected:${discoveryKey(query)}`,
       query,
@@ -1035,10 +1127,8 @@ export function discoverProceduralDimensions(input: {
           ? `Promoted after corpus-bridge validation: ${evidence.results.length} coherent heading matches with cluster support ${evidence.maxClusterSupportCount}.`
           : evidence.exactHeadingCount > 0
             ? `Promoted from heading-level corpus evidence: ${evidence.exactHeadingCount} exact-heading match(es), ${evidence.results.length} coherent heading match(es).`
-            : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results.`
-        : provenance === "corpus_bridge"
-          ? "The breadcrumb heading did not show enough independent multi-authority corpus support to create a runtime concept."
-          : "Heading evidence was present but did not meet the promotion threshold.",
+            : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results with meaningful lexical affinity.`
+        : rejectionReason,
       heading: evidence.heading,
       evidenceCount: evidence.results.length,
       slotKey: promoted ? `discovered_${key}` : null,
@@ -1202,6 +1292,7 @@ export function buildCorpusBridgeSearchRequests(input: {
 function buildDiscoveredSlots(
   discoveries: DiscoveredProceduralDimension[],
   searches: SearchExecution[],
+  requirement: "required" | "optional",
 ): AuthoritySlotSpec[] {
   const seen = new Set<string>();
   const slots: AuthoritySlotSpec[] = [];
@@ -1246,7 +1337,7 @@ function buildDiscoveredSlots(
 
     slots.push({
       key: discovery.slotKey,
-      requirement: "required",
+      requirement,
       headings: [discovery.heading],
       preferredCorpora: corpus ? [corpus] : undefined,
       preferredTextIncludes:
@@ -1541,9 +1632,14 @@ export function selectFinalAuthorities(input: {
     searches: input.searches,
     concepts: frame.activeConcepts,
   });
+  const staticSlots = buildBlueprintSlots(frame.activeConcepts);
+  const discoveredRequirement = staticSlots.some(isRequiredSlot)
+    ? "optional"
+    : "required";
   const discoveredSlots = buildDiscoveredSlots(
     discoveredDimensions,
     input.searches,
+    discoveredRequirement,
   );
   const slots = buildBlueprintSlots(frame.activeConcepts, discoveredSlots);
   const promotedConceptIds = discoveredDimensions
@@ -1711,6 +1807,65 @@ export function selectFinalAuthorities(input: {
   };
 }
 
+function normalizeCandidateCitationLabel(citation: string): string {
+  return normalizeWhitespace(citation).replace(
+    /^standing order\s+/i,
+    "SO ",
+  );
+}
+
+function citationParentLabel(
+  citation: string,
+  allowedLabels: string[],
+): string | null {
+  const normalized = normalizeCandidateCitationLabel(citation);
+  const exact = allowedLabels.find(
+    (label) => label.toLowerCase() === normalized.toLowerCase(),
+  );
+  if (exact) return exact;
+
+  for (const label of allowedLabels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const childPattern = new RegExp(
+      `^${escaped}(?:\\([^()]+\\))+$`,
+      "i",
+    );
+    if (childPattern.test(normalized)) {
+      return label;
+    }
+  }
+
+  return null;
+}
+
+export function normalizeAnswerCitationLabels(input: {
+  answerText: string;
+  authorities: Array<{ citationLabel: string }>;
+}): string {
+  const allowedLabels = input.authorities.map(
+    (authority) => authority.citationLabel,
+  );
+
+  return input.answerText.replace(
+    /\[([^\]]+)\]/g,
+    (match, inner: string) => {
+      const parts = inner
+        .split(/[;,]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (parts.length === 0) return match;
+
+      const rewritten = parts.map((part) => {
+        const parent = citationParentLabel(part, allowedLabels);
+        return `[${parent ?? part}]`;
+      });
+
+      return [...new Set(rewritten)].join(" ");
+    },
+  );
+}
+
 export function normalizeAnswerFormatting(text: string): string {
   const normalized = text
     .replace(/^\*\s+/gm, "- ")
@@ -1804,9 +1959,7 @@ function looksLikeEmbeddedAuthorityReference(citation: string): boolean {
   return (
     lower.includes("mentioned in") ||
     lower.includes("referred to in") ||
-    lower.includes("cited in") ||
-    /\bso\s+\d+/i.test(citation) ||
-    /\bstanding order\s+\d+/i.test(citation)
+    lower.includes("cited in")
   );
 }
 

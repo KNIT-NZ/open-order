@@ -1,374 +1,57 @@
-============================================================================================
-BUNDLE METADATA
-============================================================================================
-OPEN ORDER PROCEDURAL BRIDGE PATCH EVIDENCE
-Generated: 2026-08-12T09:34:57.109119+12:00
-Repository: /Users/brendan/Projects/KNIT/open-order
+================================================================================================
+METADATA
+================================================================================================
+OPEN ORDER PHASE 1.3 — PRECISION HARDENING
+Generated: 2026-08-15T21:33:19.388253+12:00
+HEAD: ad13d169bb73624b73ed2c1b0d712102a27608aa
 Branch: main
-HEAD: 2bed4662bf0617cd8189752454dd5bb45317a6d4
 
-Audit target:
-  Correct interaction between:
-    - personal_reflection / allegation_of_racism
-    - point_of_order
-    - authority-function / slot selection
-    - tactic-oriented answer composition
-    - claim-entailment validation and diagnostics
+Observed regressions:
 
-Observed regression to explain:
-  48/7 correctly limits taking personal exception on behalf of another member,
-  but the selected point-of-order authority was generic 21/5 rather than a
-  stronger rules-of-debate enforcement authority such as 22/5.
+1. Accountability to the House retrieved strongly but cannot satisfy
+   ministerial_accountability_rule.
 
-No env files, credentials, secrets, generated output, or dependency trees
-are intentionally included.
+2. Acceptance of closure motion retrieved strongly but cannot satisfy
+   closure_qualification.
 
-============================================================================================
+3. "premature" promoted generic heading "Examples".
+
+4. "into the Chamber" promoted unrelated heading
+   "Order to withdraw from Chamber".
+
+5. Standing Order subsection citations such as SO 137(3) triggered
+   deterministic citation rejection.
+
+Architectural targets:
+
+- correct authority-profile classification
+- generic-heading suppression
+- meaningful lexical-affinity gate for non-exact dynamic promotion
+- distinguish discovered search families from required answer obligations
+- audit exact/parent/subclause Standing Order citation validation
+
+
+================================================================================================
 GIT STATUS
-============================================================================================
+================================================================================================
 ## main...origin/main
+ D open-order-blueprint-satisfaction-evidence-20260812-094720.txt
+ D open-order-breadcrumb-binding-evidence-20260815-211214.txt
+ D open-order-corpus-bridge-recovery-evidence-20260815-204202.txt
+ D open-order-diagnostics-client-evidence-20260812-100743.txt
+ D open-order-dynamic-concept-discovery-evidence-20260812-114439.txt
+ D open-order-procedural-bridge-evidence-20260812-093457.txt
+ D open-order-procedural-reasoning-evidence-20260812-085253.txt
+ D open-order-recovery-diagnostics-evidence-20260812-095837.txt
 
-============================================================================================
-CURRENT UNSTAGED DIFF — AUDIT SCOPE
-============================================================================================
-(none)
+================================================================================================
+SHA-256 — lib/procedural-reasoning.ts
+================================================================================================
+e6d5ec63d2199f50c097234d4a62b4e46991a5ec786d17018fea0e0e7b6dfc41
 
-============================================================================================
-CURRENT STAGED DIFF — AUDIT SCOPE
-============================================================================================
-(none)
-
-============================================================================================
-TARGETED RG — CONCEPT INFERENCE AND PLANNER ADOPTION
-============================================================================================
-exit=0
-lib/procedural-reasoning.ts:65:  activeConcepts: ProceduralConcept[];
-lib/procedural-reasoning.ts:152:  plannerQueries: string[],
-lib/procedural-reasoning.ts:155:    plannerQueries.map(normalizeConceptTrigger).filter(Boolean),
-lib/procedural-reasoning.ts:161:    const triggers = concept.plannerTriggers ?? [];
-lib/procedural-reasoning.ts:172:export function inferConcepts(
-lib/procedural-reasoning.ts:174:  plannerQueries: string[] = [],
-lib/procedural-reasoning.ts:195:    const concept = getConceptById("point_of_order");
-lib/procedural-reasoning.ts:258:  addPlannerTriggeredConcepts(matched, plannerQueries);
-lib/procedural-reasoning.ts:265:  plannerQueries: string[] = [],
-lib/procedural-reasoning.ts:267:  const activeConcepts = inferConcepts(question, plannerQueries);
-lib/procedural-reasoning.ts:268:  const ids = new Set(activeConcepts.map((c) => c.id));
-lib/procedural-reasoning.ts:271:    activeConcepts,
-lib/procedural-reasoning.ts:356:  plannerQueries: string[];
-lib/procedural-reasoning.ts:359:  const frame = deriveFrame(input.question, input.plannerQueries);
-lib/procedural-reasoning.ts:360:  const seedQueries = [...input.plannerQueries];
-lib/procedural-reasoning.ts:361:  const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
-lib/procedural-reasoning.ts:372:      frame.activeConcepts.some((c) => c.id === "allegation_of_racism")
-lib/procedural-reasoning.ts:387:    frame.activeConcepts.some((c) => c.id === "point_of_order") ||
-lib/procedural-reasoning.ts:767:  plannerQueries?: string[];
-lib/procedural-reasoning.ts:772:  activeConceptIds: string[];
-lib/procedural-reasoning.ts:776:  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
-lib/procedural-reasoning.ts:777:  const slots = buildBlueprintSlots(frame.activeConcepts);
-lib/procedural-reasoning.ts:827:    if (isExcludedByConcepts(item.result, frame.activeConcepts)) return false;
-lib/procedural-reasoning.ts:870:    activeConceptIds: frame.activeConcepts.map((c) => c.id),
-app/api/ai/answer/route.ts:19:  inferConcepts,
-app/api/ai/answer/route.ts:129:          const inferredConcepts = inferConcepts(question, plan.searchQueries);
-app/api/ai/answer/route.ts:140:            plannerQueries: plan.searchQueries,
-app/api/ai/answer/route.ts:164:            plannerQueries: plan.searchQueries,
-app/api/ai/answer/route.ts:178:            activeConcepts: selected.activeConceptIds,
-app/api/ai/answer/route.ts:266:                concepts: selected.activeConceptIds,
-lib/concept-registry.ts:9:  | "point_of_order"
-lib/concept-registry.ts:38:  plannerTriggers?: string[];
-lib/concept-registry.ts:39:  preferredQueries: string[];
-lib/concept-registry.ts:55:    plannerTriggers: ["closure motion", "acceptance of closure motion"],
-lib/concept-registry.ts:56:    preferredQueries: ["closure motion", "acceptance of closure motion"],
-lib/concept-registry.ts:78:    id: "point_of_order",
-lib/concept-registry.ts:80:    plannerTriggers: ["point of order", "points of order"],
-lib/concept-registry.ts:81:    preferredQueries: ["point of order"],
-lib/concept-registry.ts:85:        key: "point_of_order_mechanism",
-lib/concept-registry.ts:107:    plannerTriggers: ["personal reflections", "against members"],
-lib/concept-registry.ts:108:    preferredQueries: ["personal reflections", "against members", "procedure"],
-lib/concept-registry.ts:134:    plannerTriggers: ["allegations of racism"],
-lib/concept-registry.ts:135:    preferredQueries: ["allegations of racism"],
-lib/concept-registry.ts:152:    plannerTriggers: ["relevancy"],
-lib/concept-registry.ts:153:    preferredQueries: ["relevancy"],
-lib/concept-registry.ts:168:    plannerTriggers: ["chairperson"],
-lib/concept-registry.ts:169:    preferredQueries: ["chairperson"],
-lib/concept-registry.ts:184:    plannerTriggers: ["committee of the whole", "committee stage"],
-lib/concept-registry.ts:185:    preferredQueries: ["committee of the whole", "chairperson"],
-lib/concept-registry.ts:204:    plannerTriggers: ["withdrawal"],
-lib/concept-registry.ts:205:    preferredQueries: ["withdrawal", "procedure"],
-lib/concept-registry.ts:237:    plannerTriggers: ["accountability to the house", "form of reply"],
-lib/concept-registry.ts:238:    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
-lib/concept-registry.ts:269:    preferredQueries: ["withdrawal", "procedure", "point of order"],
-
-============================================================================================
-TARGETED RG — BLUEPRINT / AUTHORITY FUNCTION / SLOT SELECTION
-============================================================================================
-exit=0
-app/api/ai/answer/route.ts:24:  selectFinalAuthorities,
-app/api/ai/answer/route.ts:161:          const selected = selectFinalAuthorities({
-app/api/ai/answer/route.ts:208:              slotBoost: item.slotBoost,
-app/api/ai/answer/route.ts:210:              matchedSlots: item.matchedSlotKeys,
-lib/ai/prompts.ts:264:Authority function: ${authorityProfile.authorityFunction}
-lib/procedural-reasoning.ts:7:  type AuthoritySlotSpec,
-lib/procedural-reasoning.ts:25:export type AuthorityFunction =
-lib/procedural-reasoning.ts:51:  authorityFunction: AuthorityFunction;
-lib/procedural-reasoning.ts:59:  slotBoost: number;
-lib/procedural-reasoning.ts:61:  matchedSlotKeys: string[];
-lib/procedural-reasoning.ts:490:  let authorityFunction: AuthorityFunction = "context";
-lib/procedural-reasoning.ts:493:    authorityFunction = "procedure";
-lib/procedural-reasoning.ts:495:    authorityFunction = "exception";
-lib/procedural-reasoning.ts:497:    authorityFunction = "effect";
-lib/procedural-reasoning.ts:504:    authorityFunction = "constraint";
-lib/procedural-reasoning.ts:506:    authorityFunction = "rule";
-lib/procedural-reasoning.ts:508:    authorityFunction = "application";
-lib/procedural-reasoning.ts:528:    authorityFunction,
-lib/procedural-reasoning.ts:563:  functions?: AuthorityFunction[],
-lib/procedural-reasoning.ts:567:  return functions.includes(profile.authorityFunction);
-lib/procedural-reasoning.ts:582:  slot: AuthoritySlotSpec,
-lib/procedural-reasoning.ts:690:function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
-lib/procedural-reasoning.ts:693:    concepts.flatMap((concept) => concept.supersedesSlots ?? []),
-lib/procedural-reasoning.ts:695:  const slots: AuthoritySlotSpec[] = [];
-lib/procedural-reasoning.ts:710:  slot: AuthoritySlotSpec,
-lib/procedural-reasoning.ts:712:  const preferred = slot.preferredTextIncludes ?? [];
-lib/procedural-reasoning.ts:725:  slots: AuthoritySlotSpec[],
-lib/procedural-reasoning.ts:726:): { matchedSlotKeys: string[]; slotBoost: number } {
-lib/procedural-reasoning.ts:727:  const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
-lib/procedural-reasoning.ts:728:  const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
-lib/procedural-reasoning.ts:730:  const slotBoost = matchedSlots.reduce(
-lib/procedural-reasoning.ts:735:  return { matchedSlotKeys, slotBoost };
-lib/procedural-reasoning.ts:746:  slots: AuthoritySlotSpec[],
-lib/procedural-reasoning.ts:748:  const matched = slots.find((slot) => item.matchedSlotKeys.includes(slot.key));
-lib/procedural-reasoning.ts:753:  if (item.slotBoost > 0) return true;
-lib/procedural-reasoning.ts:764:export function selectFinalAuthorities(input: {
-lib/procedural-reasoning.ts:777:  const slots = buildBlueprintSlots(frame.activeConcepts);
-lib/procedural-reasoning.ts:788:        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
-lib/procedural-reasoning.ts:795:          slotBoost,
-lib/procedural-reasoning.ts:796:          adjustedRank: result.rank + routeBoost + slotBoost,
-lib/procedural-reasoning.ts:797:          matchedSlotKeys,
-lib/procedural-reasoning.ts:805:    if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
-lib/procedural-reasoning.ts:842:    for (const slotKey of item.matchedSlotKeys) {
-lib/procedural-reasoning.ts:853:      (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
-lib/procedural-reasoning.ts:1247:            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
-lib/concept-registry.ts:4:  AuthorityFunction,
-lib/concept-registry.ts:19:export type AuthoritySlotSpec = {
-lib/concept-registry.ts:22:  functions?: AuthorityFunction[];
-lib/concept-registry.ts:26:  preferredTextIncludes?: string[];
-lib/concept-registry.ts:40:  slots: AuthoritySlotSpec[];
-lib/concept-registry.ts:42:  supersedesSlots?: string[];
-lib/concept-registry.ts:89:        preferredTextIncludes: [
-lib/concept-registry.ts:136:    supersedesSlots: ["personal_reflection_rule"],
-
-============================================================================================
-TARGETED RG — CLAIM / ENTAILMENT VALIDATION
-============================================================================================
-exit=0
-lib/chunking.ts:111:  const semanticBoundaryRegex =
-lib/chunking.ts:117:  while ((match = semanticBoundaryRegex.exec(text)) !== null) {
-lib/chunking.ts:179:  const semanticBlocks = splitSemanticBlocks(text);
-lib/chunking.ts:180:  if (semanticBlocks.length === 0) {
-lib/chunking.ts:184:  const normalizedBlocks = semanticBlocks.flatMap((block) =>
-app/api/ai/answer/route.ts:21:  pruneUnsupportedAnswerClaims,
-app/api/ai/answer/route.ts:22:  pruneValidatedAnswerContent,
-app/api/ai/answer/route.ts:50:const claimValidationSchema = z.object({
-app/api/ai/answer/route.ts:51:  claims: z.array(
-app/api/ai/answer/route.ts:54:      supported: z.boolean(),
-app/api/ai/answer/route.ts:274:            let claimValidationNote: string | null = null;
-app/api/ai/answer/route.ts:312:              label: "Validating grounded claims",
-app/api/ai/answer/route.ts:315:            const initialPrune = pruneValidatedAnswerContent({
-app/api/ai/answer/route.ts:322:              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
-app/api/ai/answer/route.ts:327:                "The AI draft could not be validated after pruning unsupported content.";
-app/api/ai/answer/route.ts:415:              const secondPrune = pruneValidatedAnswerContent({
-app/api/ai/answer/route.ts:422:              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
-app/api/ai/answer/route.ts:444:                      ? "unknown validation failure"
-app/api/ai/answer/route.ts:485:                "The AI draft contained no substantive grounded claims after deterministic validation.";
-app/api/ai/answer/route.ts:497:                label: "No grounded claims remained; returning fallback",
-app/api/ai/answer/route.ts:521:                claims: answerClaims,
-app/api/ai/answer/route.ts:527:            const claimValidation =
-app/api/ai/answer/route.ts:528:              claimValidationSchema.parse(rawClaimValidation);
-app/api/ai/answer/route.ts:529:            const validationById = new Map(
-app/api/ai/answer/route.ts:530:              claimValidation.claims.map((claim) => [claim.id, claim]),
-app/api/ai/answer/route.ts:533:            const unsupportedClaimIds = answerClaims
-app/api/ai/answer/route.ts:535:                (claim) => validationById.get(claim.id)?.supported !== true,
-app/api/ai/answer/route.ts:537:              .map((claim) => claim.id);
-app/api/ai/answer/route.ts:539:            if (unsupportedClaimIds.length > 0) {
-app/api/ai/answer/route.ts:540:              const semanticPrune = pruneUnsupportedAnswerClaims({
-app/api/ai/answer/route.ts:542:                claims: answerClaims,
-app/api/ai/answer/route.ts:543:                unsupportedClaimIds,
-app/api/ai/answer/route.ts:547:                semanticPrune.prunedText,
-app/api/ai/answer/route.ts:549:              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
-app/api/ai/answer/route.ts:568:                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
-app/api/ai/answer/route.ts:580:                label: "Semantic validation rejected the draft; returning fallback",
-app/api/ai/answer/route.ts:614:              claimValidationNote,
-lib/ai/prompts.ts:102:Be tactically useful, but never overclaim.
-lib/ai/prompts.ts:106:- Every substantive claim must be grounded in the retrieved authority pack.
-lib/ai/prompts.ts:145:You are a strict evidence-entailment validator for New Zealand parliamentary procedure.
-lib/ai/prompts.ts:148:You are checking whether each drafted claim is actually supported by the authority or authorities cited on that claim.
-lib/ai/prompts.ts:152:- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
-lib/ai/prompts.ts:154:- Reject claims that turn a narrow example into a general rule.
-lib/ai/prompts.ts:155:- Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
-lib/ai/prompts.ts:156:- Reject claims that treat an exception or qualification as the governing rule.
-lib/ai/prompts.ts:157:- Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
-lib/ai/prompts.ts:158:- Multiple cited authorities may be read together, but only the cited authorities may support the claim.
-lib/ai/prompts.ts:159:- Be conservative. If support is ambiguous, mark the claim unsupported.
-lib/ai/prompts.ts:160:- Do not rewrite claims.
-lib/ai/prompts.ts:166:  "claims": [
-lib/ai/prompts.ts:168:      "id": "claim-1",
-lib/ai/prompts.ts:169:      "supported": true,
-lib/ai/prompts.ts:177:  claims: Array<{
-lib/ai/prompts.ts:185:    input.claims.flatMap((claim) => claim.citations),
-lib/ai/prompts.ts:201:  const renderedClaims = input.claims
-lib/ai/prompts.ts:203:      (claim) => `
-lib/ai/prompts.ts:204:${claim.id}
-lib/ai/prompts.ts:205:Claim: ${claim.text}
-lib/ai/prompts.ts:206:Cited authorities: ${claim.citations.map((citation) => `[${citation}]`).join(" ")}
-lib/ai/prompts.ts:218:Return one validation result for every claim ID above.
-lib/ai/prompts.ts:318:- omit unsupported propositions rather than guessing,
-lib/procedural-reasoning.ts:1070:export function pruneValidatedAnswerContent(input: {
-lib/procedural-reasoning.ts:1142:  const claims: AnswerClaim[] = [];
-lib/procedural-reasoning.ts:1159:    claims.push({
-lib/procedural-reasoning.ts:1160:      id: `claim-${lineIndex + 1}`,
-lib/procedural-reasoning.ts:1167:  return claims;
-lib/procedural-reasoning.ts:1170:export function pruneUnsupportedAnswerClaims(input: {
-lib/procedural-reasoning.ts:1172:  claims: AnswerClaim[];
-lib/procedural-reasoning.ts:1173:  unsupportedClaimIds: string[];
-lib/procedural-reasoning.ts:1178:  const unsupported = new Set(input.unsupportedClaimIds);
-lib/procedural-reasoning.ts:1179:  const removedClaims = input.claims.filter((claim) =>
-lib/procedural-reasoning.ts:1180:    unsupported.has(claim.id),
-lib/procedural-reasoning.ts:1191:    removedClaims.map((claim) => claim.lineIndex),
-lib/procedural-reasoning.ts:1263:    `- A substantive answer was withheld because validation failed: ${input.fallbackReason}`,
-
-============================================================================================
-TARGETED RG — TACTIC / ANSWER INTENT
-============================================================================================
-exit=0
-lib/open-order/format.ts:204:  "Bottom line",
-lib/open-order/format.ts:486:    `Intent: ${input.plan?.intent ?? "None"}`,
-lib/open-order/types.ts:43:  intent:
-lib/open-order/types.ts:48:    | "tactic"
-app/api/ai/answer/route.ts:7:  ANSWER_STREAM_SYSTEM_PROMPT,
-app/api/ai/answer/route.ts:9:  buildGroundedAnswerPrompt,
-app/api/ai/answer/route.ts:36:  intent: z.enum([
-app/api/ai/answer/route.ts:41:    "tactic",
-app/api/ai/answer/route.ts:219:              planIntent: plan.intent,
-app/api/ai/answer/route.ts:255:              systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
-app/api/ai/answer/route.ts:256:              prompt: buildGroundedAnswerPrompt({
-app/api/ai/answer/route.ts:281:                planIntent: plan.intent,
-app/api/ai/answer/route.ts:331:                planIntent: plan.intent,
-app/api/ai/answer/route.ts:372:                planIntent: plan.intent,
-app/api/ai/answer/route.ts:451:                  planIntent: plan.intent,
-app/api/ai/answer/route.ts:489:                planIntent: plan.intent,
-app/api/ai/answer/route.ts:572:                planIntent: plan.intent,
-app/api/ai/answer/route.ts:627:              planIntent: plan.intent,
-lib/ai/prompts.ts:79:- Use "tactic" when the user asks how to stop, counter, shut down, force, challenge, or steer something procedurally.
-lib/ai/prompts.ts:85:- Use "clarification" only when the question is genuinely too indeterminate for a narrower intent.
-lib/ai/prompts.ts:89:  "intent": "explain_rule" | "explain_statement" | "options" | "admissibility" | "tactic" | "compare_authorities" | "clarification",
-lib/ai/prompts.ts:96:export const ANSWER_STREAM_SYSTEM_PROMPT = `
-lib/ai/prompts.ts:102:Be tactically useful, but never overclaim.
-lib/ai/prompts.ts:107:- Every substantive line in "Bottom line", "What this means", and every bullet under "Your options" and "Risks or constraints" should include at least one inline citation.
-lib/ai/prompts.ts:117:  - what is tactically arguable but uncertain.
-lib/ai/prompts.ts:121:Bottom line:
-lib/ai/prompts.ts:127:Your options:
-lib/ai/prompts.ts:237:export function buildGroundedAnswerPrompt(input: {
-lib/ai/prompts.ts:314:- what is tactically possible but uncertain.
-lib/procedural-reasoning.ts:885:    [/^Bottom line\s*:?$/im, "Bottom line:"],
-lib/procedural-reasoning.ts:887:    [/^Your options\s*:?$/im, "Your options:"],
-lib/procedural-reasoning.ts:1040:    "Bottom line:",
-lib/procedural-reasoning.ts:1042:    "Your options:",
-lib/procedural-reasoning.ts:1050:    section === "Bottom line:" ||
-lib/procedural-reasoning.ts:1052:    section === "Your options:" ||
-lib/procedural-reasoning.ts:1253:    "Bottom line:",
-lib/procedural-reasoning.ts:1259:    "Your options:",
-
-============================================================================================
-TARGETED RG — DIAGNOSTIC CONTRACT
-============================================================================================
-exit=0
-lib/open-order/format.ts:431:  const finalAuthoritySelectionText =
-lib/open-order/format.ts:432:    input.finalAuthoritySelection.length > 0
-lib/open-order/format.ts:433:      ? input.finalAuthoritySelection
-lib/open-order/format.ts:504:    finalAuthoritySelectionText,
-lib/open-order/types.ts:118:  finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
-lib/open-order/types.ts:135:  finalAuthoritySelection: AiDiagnosticFinalAuthority[];
-lib/open-order/types.ts:152:  finalAuthoritySelection: [],
-lib/open-order/types.ts:164:  diagnostics: AiDiagnostics;
-app/api/ai/answer/route.ts:50:const claimValidationSchema = z.object({
-app/api/ai/answer/route.ts:175:          send("diagnostics", {
-app/api/ai/answer/route.ts:179:            blueprintSlots: selected.blueprintSlots,
-app/api/ai/answer/route.ts:201:            finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
-app/api/ai/answer/route.ts:213:            selectedSlotMatches: selected.selectedSlotMatches,
-app/api/ai/answer/route.ts:272:            let rewriteNote: string | null = null;
-app/api/ai/answer/route.ts:273:            let pruneNote: string | null = null;
-app/api/ai/answer/route.ts:274:            let claimValidationNote: string | null = null;
-app/api/ai/answer/route.ts:322:              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
-app/api/ai/answer/route.ts:422:              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
-app/api/ai/answer/route.ts:527:            const claimValidation =
-app/api/ai/answer/route.ts:528:              claimValidationSchema.parse(rawClaimValidation);
-app/api/ai/answer/route.ts:530:              claimValidation.claims.map((claim) => [claim.id, claim]),
-app/api/ai/answer/route.ts:549:              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
-app/api/ai/answer/route.ts:612:              rewriteNote,
-app/api/ai/answer/route.ts:613:              pruneNote,
-app/api/ai/answer/route.ts:614:              claimValidationNote,
-lib/procedural-reasoning.ts:773:  blueprintSlots: string[];
-lib/procedural-reasoning.ts:774:  selectedSlotMatches: SlotMatch[];
-lib/procedural-reasoning.ts:815:  const selectedSlotMatches: SlotMatch[] = [];
-lib/procedural-reasoning.ts:843:      selectedSlotMatches.push({
-lib/procedural-reasoning.ts:871:    blueprintSlots: slots.map((slot) => slot.key),
-lib/procedural-reasoning.ts:872:    selectedSlotMatches,
-
-============================================================================================
-TARGETED RG — PROCEDURAL MECHANISM TERMS
-============================================================================================
-exit=0
-lib/ai/prompts.ts:27:  - "point of order"
-lib/ai/prompts.ts:46:  - "point of order"
-lib/ai/prompts.ts:54:  - prefer queries like "chairperson", "relevancy", "point of order", "committee of the whole"
-lib/ai/prompts.ts:60:  - prefer queries like "accountability to the House", "point of order", and only use "relevancy" if the context is debate rather than replies
-lib/ai/prompts.ts:62:  - prefer queries like "withdrawal", "procedure", and "point of order"
-lib/procedural-reasoning.ts:194:  if (q.includes("point of order")) {
-lib/procedural-reasoning.ts:303:      "point of order",
-lib/procedural-reasoning.ts:307:    "point of order relevancy": ["point of order", "relevancy"],
-lib/procedural-reasoning.ts:318:    return ["chairperson", "relevancy", "point of order"];
-lib/procedural-reasoning.ts:321:  if (q.includes("point of order") && q.includes("relevancy")) {
-lib/procedural-reasoning.ts:322:    return ["point of order", "relevancy"];
-lib/procedural-reasoning.ts:393:    additions.push("point of order");
-lib/procedural-reasoning.ts:419:  const isRulesOfDebate = pathText.includes("rules of debate");
-lib/procedural-reasoning.ts:424:  const isPointsOfOrder = heading === "points of order" || heading === "point of order";
-lib/procedural-reasoning.ts:664:  if (query.includes("point of order") && profile.isPointsOfOrder) boost += 100;
-lib/concept-registry.ts:79:    aliases: ["point of order", "points of order"],
-lib/concept-registry.ts:80:    plannerTriggers: ["point of order", "points of order"],
-lib/concept-registry.ts:81:    preferredQueries: ["point of order"],
-lib/concept-registry.ts:86:        headings: ["points of order", "point of order"],
-lib/concept-registry.ts:90:          "transgressing the rules of debate",
-lib/concept-registry.ts:91:          "breach of the rules",
-lib/concept-registry.ts:238:    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
-lib/concept-registry.ts:269:    preferredQueries: ["withdrawal", "procedure", "point of order"],
-
-============================================================================================
-DISCOVERED CALLERS / IMPORTERS
-============================================================================================
-app/api/ai/answer/route.ts
-lib/ai/prompts.ts
-lib/concept-registry.ts
-lib/open-order/format.ts
-lib/open-order/types.ts
-lib/procedural-reasoning.ts
-
-============================================================================================
-SHA-256 — CURRENT AUDIT FILES
-============================================================================================
-326722a2bc6ed967502769a33dbf3fa9b8a7566a1604f16ec5174e774014c03a  lib/procedural-reasoning.ts
-132425308aa8508f2e8bf123b6638bd8b31bc554286898ede2184f2c4b562b7b  lib/concept-registry.ts
-9cd230a9e4ced024695a76a6fd6b41077f59013a9f7a124378675b5feadcc414  lib/ai/prompts.ts
-4f55d90342488b6062d02ed30010c23be0f0245f7b5d147f386a9a01147be566  app/api/ai/answer/route.ts
-9c753e56de10240e848455a8deaab6cd3ff6bfec333ff800f44584456a8a0e4a  lib/open-order/types.ts
-fd2c04805a04f83767527cb19e10e626ee26dec6870b82869790bfca2e6811b6  lib/open-order/format.ts
-ab9a031bc10bf19b4a863cc33ebb99537f5f201724afeda2ffd8b2a9f872f17d  lib/procedural-search.ts
-863a154b7c562eefe59f89b36f058dd518bec01876ac5ad46ffff0bc90d48c87  lib/ai/gemini.ts
-323da72164ea38d3b358d0f13aad946b25dae7aaf933286822e4159309553abc  package.json
-d0015b2639702f15c4e74a50fe31087cc8cd8515113f41dab0768740846d9d2b  tsconfig.json
-07eba1567e7cfcf34bf732d2cfa9bfe853cf377dad97598bcdbf367754e755c5  eslint.config.mjs
-baa85f59da58b8a0a6fc19748585a0efefa784957366ae081777a441dffca5eb  next.config.mjs
-
-============================================================================================
+================================================================================================
 COMPLETE SOURCE — lib/procedural-reasoning.ts
-============================================================================================
+================================================================================================
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
@@ -379,9 +62,37 @@ import {
   type ProceduralConcept,
 } from "./concept-registry";
 
+export type QueryProvenance =
+  | "planner"
+  | "user_term"
+  | "registry_expansion"
+  | "corpus_bridge"
+  | "recovery";
+
+export type SearchDimension = {
+  query: string;
+  provenance: QueryProvenance;
+};
+
+export type DiscoveredProceduralDimension = {
+  conceptId: string;
+  query: string;
+  provenance: QueryProvenance;
+  status: "promoted" | "rejected" | "covered_by_static" | "bound_to_promoted";
+  validation: string;
+  heading: string | null;
+  evidenceCount: number;
+  slotKey: string | null;
+  bridgeSourceQuery: string | null;
+  bridgeSourceCitationLabel: string | null;
+};
+
 export type SearchExecution = {
   query: string;
   corpus: string | null;
+  provenance?: QueryProvenance;
+  bridgeSourceQuery?: string;
+  bridgeSourceCitationLabel?: string;
   results: ProceduralSearchResult[];
 };
 
@@ -428,6 +139,9 @@ export type ScoredAuthority = {
   queryIndex: number;
   routeBoost: number;
   slotBoost: number;
+  preferredTextBoost: number;
+  bridgeBoost: number;
+  discoveryBoost: number;
   adjustedRank: number;
   matchedSlotKeys: string[];
 };
@@ -446,6 +160,25 @@ type SlotMatch = {
   slotKey: string;
   citationLabel: string;
   heading: string | null;
+};
+
+export type CorpusBridgeSearchRequest = {
+  query: string;
+  corpus: "standing_orders" | "speakers_rulings" | null;
+  sourceQuery: string;
+  sourceProvenance: "planner" | "user_term";
+  sourceCitationLabel: string;
+};
+
+export type RecoverySearchRequest = {
+  slotKey: string;
+  query: string;
+  corpus: "standing_orders" | "speakers_rulings" | null;
+};
+
+export type MissingEvidenceGap = {
+  slotKey: string;
+  description: string;
 };
 
 function normalizeWhitespace(text: string): string {
@@ -700,37 +433,44 @@ function canonicalizeProceduralQuery(query: string): string[] {
   return [query];
 }
 
-function uniqQueries(queries: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
+function addSearchDimension(
+  output: SearchDimension[],
+  seen: Set<string>,
+  rawQuery: string,
+  provenance: QueryProvenance,
+): void {
+  const query = cleanQuery(rawQuery);
+  if (!query) return;
 
-  for (const raw of queries) {
-    const canonicalized = canonicalizeProceduralQuery(raw);
+  const key = query.toLowerCase();
+  if (seen.has(key)) return;
 
-    for (const candidate of canonicalized) {
-      const query = cleanQuery(candidate);
-      if (!query) continue;
-
-      const key = query.toLowerCase();
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      output.push(query);
-    }
-  }
-
-  return output;
+  seen.add(key);
+  output.push({ query, provenance });
 }
 
-export function expandPlannerQueries(input: {
+function addCanonicalExpansions(
+  output: SearchDimension[],
+  seen: Set<string>,
+  rawQuery: string,
+): void {
+  const literal = cleanQuery(rawQuery).toLowerCase();
+
+  for (const candidate of canonicalizeProceduralQuery(rawQuery)) {
+    const normalized = cleanQuery(candidate);
+    if (!normalized || normalized.toLowerCase() === literal) continue;
+    addSearchDimension(output, seen, normalized, "registry_expansion");
+  }
+}
+
+export function buildProceduralQueryPlan(input: {
   question: string;
   plannerQueries: string[];
+  salientTerms?: string[];
   effectiveCorpus: string | null;
-}): string[] {
+}): SearchDimension[] {
   const frame = deriveFrame(input.question, input.plannerQueries);
-  const seedQueries = [...input.plannerQueries];
   const conceptQueries = frame.activeConcepts.flatMap((c) => c.preferredQueries);
-
   const additions: string[] = [];
 
   if (frame.closure) {
@@ -772,11 +512,41 @@ export function expandPlannerQueries(input: {
     additions.push("withdrawal", "procedure");
   }
 
-  return uniqQueries([...seedQueries, ...conceptQueries, ...additions]).slice(
-    0,
-    6,
-  );
+  const output: SearchDimension[] = [];
+  const seen = new Set<string>();
+
+  for (const query of input.plannerQueries) {
+    addSearchDimension(output, seen, query, "planner");
+  }
+
+  for (const term of input.salientTerms ?? []) {
+    addSearchDimension(output, seen, term, "user_term");
+  }
+
+  for (const query of input.plannerQueries) {
+    addCanonicalExpansions(output, seen, query);
+  }
+
+  for (const term of input.salientTerms ?? []) {
+    addCanonicalExpansions(output, seen, term);
+  }
+
+  for (const query of [...conceptQueries, ...additions]) {
+    addSearchDimension(output, seen, query, "registry_expansion");
+  }
+
+  return output.slice(0, 8);
 }
+
+export function expandPlannerQueries(input: {
+  question: string;
+  plannerQueries: string[];
+  salientTerms?: string[];
+  effectiveCorpus: string | null;
+}): string[] {
+  return buildProceduralQueryPlan(input).map((dimension) => dimension.query);
+}
+
 
 export function buildAuthorityProfile(
   result: ProceduralSearchResult,
@@ -846,6 +616,7 @@ export function buildAuthorityProfile(
     "would have to be",
     "should not be curtailed",
     "depends on",
+    "cannot take exception",
   ];
   const ruleSignals = [
     "out of order",
@@ -860,7 +631,7 @@ export function buildAuthorityProfile(
 
   let authorityFunction: AuthorityFunction = "context";
 
-  if (isPointsOfOrder || heading === "procedure") {
+  if (isPointsOfOrder) {
     authorityFunction = "procedure";
   } else if (exceptionSignals.some((signal) => content.includes(signal))) {
     authorityFunction = "exception";
@@ -873,6 +644,8 @@ export function buildAuthorityProfile(
     constraintSignals.some((signal) => content.includes(signal))
   ) {
     authorityFunction = "constraint";
+  } else if (heading === "procedure") {
+    authorityFunction = "procedure";
   } else if (ruleSignals.some((signal) => content.includes(signal))) {
     authorityFunction = "rule";
   } else if (authorityClass === "governing_rule") {
@@ -948,6 +721,18 @@ function corpusMatches(
   );
 }
 
+function requiredTextMatches(
+  result: ProceduralSearchResult,
+  requiredTextIncludes?: string[],
+): boolean {
+  if (!requiredTextIncludes || requiredTextIncludes.length === 0) return true;
+
+  const content = result.sectionContent.toLowerCase();
+  return requiredTextIncludes.some((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  );
+}
+
 function matchesSlot(
   result: ProceduralSearchResult,
   slot: AuthoritySlotSpec,
@@ -957,7 +742,8 @@ function matchesSlot(
     pathMatches(result, slot.pathIncludes) &&
     classMatches(result, slot.classes) &&
     functionMatches(result, slot.functions) &&
-    corpusMatches(result, slot.preferredCorpora)
+    corpusMatches(result, slot.preferredCorpora) &&
+    requiredTextMatches(result, slot.requiredTextIncludes)
   );
 }
 
@@ -1058,7 +844,478 @@ function dedupeScoredAuthorities(
   return output;
 }
 
-function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[] {
+const DYNAMIC_DISCOVERY_STOP_QUERIES = new Set([
+  "procedure",
+  "procedures",
+  "rule",
+  "rules",
+  "house",
+  "debate",
+  "member",
+  "speaker",
+  "chair",
+]);
+
+const CORPUS_BRIDGE_STOP_HEADINGS = new Set([
+  ...DYNAMIC_DISCOVERY_STOP_QUERIES,
+  "general",
+  "general procedures",
+  "maintenance of order",
+  "parliament house",
+  "questions",
+  "motions",
+]);
+
+function normalizedStaticConceptTerms(
+  concept: ProceduralConcept,
+): Set<string> {
+  return new Set(
+    [
+      ...concept.aliases,
+      ...(concept.plannerTriggers ?? []),
+      ...concept.preferredQueries,
+    ]
+      .map(normalizeConceptTrigger)
+      .filter(Boolean),
+  );
+}
+
+function searchDimensionCoveredByStaticConcept(
+  search: SearchExecution,
+  concepts: ProceduralConcept[],
+): boolean {
+  const query = normalizeConceptTrigger(search.query);
+  if (!query) return false;
+
+  return concepts.some((concept) =>
+    normalizedStaticConceptTerms(concept).has(query),
+  );
+}
+
+function discoveryKey(text: string): string {
+  return cleanQuery(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+function normalizeHeadingForDiscovery(heading: string): string {
+  return normalizeWhitespace(heading).toLowerCase();
+}
+
+function strongestEligibleCorpusBreadcrumb(
+  search: SearchExecution,
+  concepts: ProceduralConcept[],
+): ProceduralSearchResult | null {
+  return (
+    search.results.slice(0, 3).find((result) => {
+      const heading = result.heading?.trim();
+      if (!heading) return false;
+
+      const normalizedHeading = normalizeHeadingForDiscovery(heading);
+      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
+      if (normalizedHeading === normalizeConceptTrigger(search.query)) {
+        return false;
+      }
+
+      const headingSearch: SearchExecution = {
+        query: heading,
+        corpus: result.documentCorpus,
+        provenance: "corpus_bridge",
+        results: [],
+      };
+
+      return !searchDimensionCoveredByStaticConcept(headingSearch, concepts);
+    }) ?? null
+  );
+}
+
+type HeadingEvidenceGroup = {
+  heading: string;
+  results: ProceduralSearchResult[];
+  exactHeadingCount: number;
+  headingPhraseCount: number;
+  maxRank: number;
+  maxClusterSupportCount: number;
+};
+
+function strongestHeadingEvidence(
+  results: ProceduralSearchResult[],
+): HeadingEvidenceGroup | null {
+  const groups = new Map<string, HeadingEvidenceGroup>();
+
+  for (const result of results) {
+    const heading = result.heading?.trim();
+    if (!heading) continue;
+    if (
+      !result.matchSignals.exactHeadingMatch &&
+      !result.matchSignals.headingPhraseMatch
+    ) {
+      continue;
+    }
+
+    const key = normalizeHeadingForDiscovery(heading);
+    const existing = groups.get(key) ?? {
+      heading,
+      results: [],
+      exactHeadingCount: 0,
+      headingPhraseCount: 0,
+      maxRank: 0,
+      maxClusterSupportCount: 0,
+    };
+
+    existing.results.push(result);
+    if (result.matchSignals.exactHeadingMatch) existing.exactHeadingCount += 1;
+    if (result.matchSignals.headingPhraseMatch) existing.headingPhraseCount += 1;
+    existing.maxRank = Math.max(existing.maxRank, result.rank);
+    existing.maxClusterSupportCount = Math.max(
+      existing.maxClusterSupportCount,
+      result.clusterSupportCount,
+    );
+    groups.set(key, existing);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    if (b.exactHeadingCount !== a.exactHeadingCount) {
+      return b.exactHeadingCount - a.exactHeadingCount;
+    }
+    if (b.results.length !== a.results.length) {
+      return b.results.length - a.results.length;
+    }
+    return b.maxRank - a.maxRank;
+  })[0] ?? null;
+}
+
+export function discoverProceduralDimensions(input: {
+  searches: SearchExecution[];
+  concepts: ProceduralConcept[];
+}): DiscoveredProceduralDimension[] {
+  const output: DiscoveredProceduralDimension[] = [];
+
+  for (const search of input.searches) {
+    const provenance = search.provenance ?? "registry_expansion";
+    if (
+      provenance !== "planner" &&
+      provenance !== "user_term" &&
+      provenance !== "corpus_bridge"
+    ) {
+      continue;
+    }
+
+    const query = cleanQuery(search.query);
+    const normalizedQuery = query.toLowerCase();
+    const bridgeSourceQuery = search.bridgeSourceQuery ?? null;
+    const bridgeSourceCitationLabel = search.bridgeSourceCitationLabel ?? null;
+
+    if (searchDimensionCoveredByStaticConcept(search, input.concepts)) {
+      output.push({
+        conceptId: `static:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "covered_by_static",
+        validation: "A static registry concept already owns this search dimension.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
+      });
+      continue;
+    }
+
+    if (DYNAMIC_DISCOVERY_STOP_QUERIES.has(normalizedQuery)) {
+      output.push({
+        conceptId: `rejected:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "rejected",
+        validation: "The search dimension is too generic to create a runtime procedural concept.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
+      });
+      continue;
+    }
+
+    const evidence = strongestHeadingEvidence(search.results);
+    if (!evidence) {
+      output.push({
+        conceptId: `rejected:${discoveryKey(query)}`,
+        query,
+        provenance,
+        status: "rejected",
+        validation: "No heading-level corpus evidence supported promotion.",
+        heading: null,
+        evidenceCount: 0,
+        slotKey: null,
+        bridgeSourceQuery,
+        bridgeSourceCitationLabel,
+      });
+      continue;
+    }
+
+    const promotedByExactHeading =
+      evidence.exactHeadingCount >= 1 &&
+      (evidence.maxRank >= 120 || evidence.results.length >= 2);
+    const promotedByHeadingCluster =
+      evidence.headingPhraseCount >= 2 && evidence.maxRank >= 180;
+
+    // A corpus bridge begins with a weak semantic breadcrumb. Searching the
+    // breadcrumb heading will necessarily create an exact-heading match, so
+    // exactness alone would be circular evidence. Require a coherent
+    // multi-authority heading family before a bridge may create a concept.
+    const promotedByCorpusBridge =
+      evidence.results.length >= 2 &&
+      evidence.maxClusterSupportCount >= 2 &&
+      evidence.maxRank >= 180 &&
+      (evidence.exactHeadingCount >= 2 || evidence.headingPhraseCount >= 2);
+
+    const promoted =
+      provenance === "corpus_bridge"
+        ? promotedByCorpusBridge
+        : promotedByExactHeading || promotedByHeadingCluster;
+    const key = discoveryKey(evidence.heading || query);
+
+    output.push({
+      conceptId: promoted ? `discovered:${key}` : `rejected:${discoveryKey(query)}`,
+      query,
+      provenance,
+      status: promoted ? "promoted" : "rejected",
+      validation: promoted
+        ? provenance === "corpus_bridge"
+          ? `Promoted after corpus-bridge validation: ${evidence.results.length} coherent heading matches with cluster support ${evidence.maxClusterSupportCount}.`
+          : evidence.exactHeadingCount > 0
+            ? `Promoted from heading-level corpus evidence: ${evidence.exactHeadingCount} exact-heading match(es), ${evidence.results.length} coherent heading match(es).`
+            : `Promoted from a coherent heading-phrase cluster of ${evidence.results.length} results.`
+        : provenance === "corpus_bridge"
+          ? "The breadcrumb heading did not show enough independent multi-authority corpus support to create a runtime concept."
+          : "Heading evidence was present but did not meet the promotion threshold.",
+      heading: evidence.heading,
+      evidenceCount: evidence.results.length,
+      slotKey: promoted ? `discovered_${key}` : null,
+      bridgeSourceQuery,
+      bridgeSourceCitationLabel,
+    });
+  }
+
+  const promotedByHeading = new Map(
+    output
+      .filter(
+        (dimension) =>
+          dimension.status === "promoted" && Boolean(dimension.heading),
+      )
+      .map((dimension) => [
+        normalizeHeadingForDiscovery(dimension.heading ?? ""),
+        dimension,
+      ]),
+  );
+
+  return output.map((dimension) => {
+    if (
+      dimension.status !== "rejected" ||
+      (dimension.provenance !== "planner" &&
+        dimension.provenance !== "user_term")
+    ) {
+      return dimension;
+    }
+
+    const sourceSearch = input.searches.find(
+      (search) =>
+        (search.provenance ?? "registry_expansion") === dimension.provenance &&
+        normalizeConceptTrigger(search.query) ===
+          normalizeConceptTrigger(dimension.query),
+    );
+    if (!sourceSearch) return dimension;
+
+    const breadcrumb = strongestEligibleCorpusBreadcrumb(
+      sourceSearch,
+      input.concepts,
+    );
+    if (!breadcrumb?.heading) return dimension;
+
+    const promoted = promotedByHeading.get(
+      normalizeHeadingForDiscovery(breadcrumb.heading),
+    );
+    if (!promoted?.heading || !promoted.slotKey) return dimension;
+
+    return {
+      ...dimension,
+      conceptId: promoted.conceptId,
+      status: "bound_to_promoted",
+      validation: `Strongest corpus breadcrumb ${breadcrumb.citationLabel} maps to already-promoted heading "${promoted.heading}". Bound to that concept; no additional bridge search is needed.`,
+      heading: promoted.heading,
+      evidenceCount: 1,
+      slotKey: promoted.slotKey,
+      bridgeSourceQuery: dimension.query,
+      bridgeSourceCitationLabel: breadcrumb.citationLabel,
+    };
+  });
+}
+
+export function buildCorpusBridgeSearchRequests(input: {
+  searches: SearchExecution[];
+  question: string;
+  plannerQueries?: string[];
+  maxRequests?: number;
+}): CorpusBridgeSearchRequest[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const discoveries = discoverProceduralDimensions({
+    searches: input.searches,
+    concepts: frame.activeConcepts,
+  });
+  const discoveryBySearch = new Map(
+    discoveries.map((dimension) => [
+      `${dimension.provenance}::${normalizeConceptTrigger(dimension.query)}`,
+      dimension,
+    ]),
+  );
+  const existingSearchKeys = new Set(
+    input.searches.map(
+      (search) =>
+        `${search.corpus ?? "auto"}::${normalizeConceptTrigger(search.query)}`,
+    ),
+  );
+  const candidates: Array<{
+    request: CorpusBridgeSearchRequest;
+    sourceRank: number;
+    sourcePriority: number;
+  }> = [];
+
+  for (const search of input.searches) {
+    const provenance = search.provenance ?? "registry_expansion";
+    if (provenance !== "planner" && provenance !== "user_term") continue;
+
+    const discovery = discoveryBySearch.get(
+      `${provenance}::${normalizeConceptTrigger(search.query)}`,
+    );
+    if (!discovery || discovery.status !== "rejected") continue;
+    if (search.results.length === 0) continue;
+
+    const breadcrumb = strongestEligibleCorpusBreadcrumb(
+      search,
+      frame.activeConcepts,
+    );
+
+    if (!breadcrumb?.heading) continue;
+
+    const corpus =
+      breadcrumb.documentCorpus === "standing_orders" ||
+      breadcrumb.documentCorpus === "speakers_rulings"
+        ? breadcrumb.documentCorpus
+        : search.corpus === "standing_orders" ||
+            search.corpus === "speakers_rulings"
+          ? search.corpus
+          : null;
+
+    const headingSearchKey = `${corpus ?? "auto"}::${normalizeConceptTrigger(
+      breadcrumb.heading,
+    )}`;
+    if (existingSearchKeys.has(headingSearchKey)) {
+      continue;
+    }
+
+    candidates.push({
+      request: {
+        query: cleanQuery(breadcrumb.heading),
+        corpus,
+        sourceQuery: cleanQuery(search.query),
+        sourceProvenance: provenance,
+        sourceCitationLabel: breadcrumb.citationLabel,
+      },
+      sourceRank: breadcrumb.rank,
+      sourcePriority: provenance === "user_term" ? 1 : 0,
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (b.sourcePriority !== a.sourcePriority) {
+      return b.sourcePriority - a.sourcePriority;
+    }
+    return b.sourceRank - a.sourceRank;
+  });
+
+  const maxRequests = Math.max(1, Math.min(input.maxRequests ?? 2, 2));
+  const seen = new Set<string>();
+  const output: CorpusBridgeSearchRequest[] = [];
+
+  for (const candidate of candidates) {
+    const key = `${candidate.request.corpus ?? "auto"}::${normalizeConceptTrigger(candidate.request.query)}`;
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    output.push(candidate.request);
+    if (output.length >= maxRequests) break;
+  }
+
+  return output;
+}
+
+function buildDiscoveredSlots(
+  discoveries: DiscoveredProceduralDimension[],
+  searches: SearchExecution[],
+): AuthoritySlotSpec[] {
+  const seen = new Set<string>();
+  const slots: AuthoritySlotSpec[] = [];
+
+  for (const discovery of discoveries) {
+    if (
+      discovery.status !== "promoted" ||
+      !discovery.heading ||
+      !discovery.slotKey ||
+      seen.has(discovery.slotKey)
+    ) {
+      continue;
+    }
+
+    seen.add(discovery.slotKey);
+
+    const sourceSearch = searches.find(
+      (search) =>
+        cleanQuery(search.query).toLowerCase() ===
+          cleanQuery(discovery.query).toLowerCase() &&
+        (search.provenance ?? "registry_expansion") === discovery.provenance,
+    );
+    const corpus =
+      sourceSearch?.corpus === "standing_orders" ||
+      sourceSearch?.corpus === "speakers_rulings"
+        ? sourceSearch.corpus
+        : null;
+
+    const discoveryHeading = normalizeHeadingForDiscovery(discovery.heading);
+    const linkedUserTerms = searches
+      .filter((search) => search.provenance === "user_term")
+      .filter((search) =>
+        search.results.some(
+          (result) =>
+            result.heading &&
+            normalizeHeadingForDiscovery(result.heading) === discoveryHeading &&
+            result.matchSignals.bodyPhraseMatch,
+        ),
+      )
+      .map((search) => cleanQuery(search.query))
+      .filter(Boolean);
+
+    slots.push({
+      key: discovery.slotKey,
+      requirement: "required",
+      headings: [discovery.heading],
+      preferredCorpora: corpus ? [corpus] : undefined,
+      preferredTextIncludes:
+        linkedUserTerms.length > 0 ? linkedUserTerms : undefined,
+      maxMatches: 1,
+    });
+  }
+
+  return slots;
+}
+
+function buildBlueprintSlots(
+  concepts: ProceduralConcept[],
+  discoveredSlots: AuthoritySlotSpec[] = [],
+): AuthoritySlotSpec[] {
   const seen = new Set<string>();
   const superseded = new Set(
     concepts.flatMap((concept) => concept.supersedesSlots ?? []),
@@ -1073,7 +1330,106 @@ function buildBlueprintSlots(concepts: ProceduralConcept[]): AuthoritySlotSpec[]
     }
   }
 
+  for (const slot of discoveredSlots) {
+    if (seen.has(slot.key)) continue;
+    seen.add(slot.key);
+    slots.push(slot);
+  }
+
   return slots;
+}
+
+export function buildMissingSlotRecoveryRequests(input: {
+  question: string;
+  plannerQueries?: string[];
+  missingRequiredSlots: string[];
+  requestedCorpus?: "standing_orders" | "speakers_rulings" | null;
+  maxRequests?: number;
+}): RecoverySearchRequest[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
+  const missing = new Set(input.missingRequiredSlots);
+  const seen = new Set<string>();
+  const output: RecoverySearchRequest[] = [];
+  const maxRequests = Math.max(1, Math.min(input.maxRequests ?? 4, 8));
+
+  for (const slot of slots) {
+    if (!missing.has(slot.key)) continue;
+
+    const queries =
+      slot.recoveryQueries?.length
+        ? slot.recoveryQueries
+        : slot.requiredTextIncludes ?? [];
+
+    const corpora: Array<"standing_orders" | "speakers_rulings" | null> =
+      input.requestedCorpus
+        ? [input.requestedCorpus]
+        : slot.recoveryCorpora?.length
+          ? slot.recoveryCorpora
+          : slot.preferredCorpora?.length
+            ? slot.preferredCorpora
+            : [null];
+
+    for (const query of queries) {
+      for (const corpus of corpora) {
+        const normalizedQuery = cleanQuery(query);
+        if (!normalizedQuery) continue;
+
+        const key = `${slot.key}::${corpus ?? "auto"}::${normalizedQuery.toLowerCase()}`;
+        if (seen.has(key)) continue;
+
+        seen.add(key);
+        output.push({
+          slotKey: slot.key,
+          query: normalizedQuery,
+          corpus,
+        });
+
+        if (output.length >= maxRequests) {
+          return output;
+        }
+      }
+    }
+  }
+
+  return output;
+}
+
+function humanizeSlotKey(slotKey: string): string {
+  return slotKey.replace(/_/g, " ");
+}
+
+export function describeMissingAuthoritySlots(input: {
+  question: string;
+  plannerQueries?: string[];
+  missingRequiredSlots: string[];
+}): MissingEvidenceGap[] {
+  const frame = deriveFrame(input.question, input.plannerQueries ?? []);
+  const slots = buildBlueprintSlots(frame.activeConcepts);
+  const slotByKey = new Map(slots.map((slot) => [slot.key, slot]));
+
+  return input.missingRequiredSlots.map((slotKey) => {
+    const slot = slotByKey.get(slotKey);
+    return {
+      slotKey,
+      description:
+        slot?.evidenceGapDescription ??
+        `the required evidence for ${humanizeSlotKey(slotKey)}`,
+    };
+  });
+}
+
+function isRequiredSlot(slot: AuthoritySlotSpec): boolean {
+  return slot.requirement === "required";
+}
+
+function countTextMatches(
+  content: string,
+  phrases: string[],
+): number {
+  return phrases.filter((phrase) =>
+    content.includes(phrase.toLowerCase()),
+  ).length;
 }
 
 function scorePreferredText(
@@ -1084,26 +1440,110 @@ function scorePreferredText(
   if (preferred.length === 0) return 0;
 
   const content = result.sectionContent.toLowerCase();
-  const matchCount = preferred.filter((phrase) =>
-    content.includes(phrase.toLowerCase()),
-  ).length;
+  return countTextMatches(content, preferred) * 120;
+}
 
-  return matchCount * 120;
+function contextPreferenceApplies(
+  activeConceptIds: Set<string>,
+  preference: NonNullable<AuthoritySlotSpec["contextualTextPreferences"]>[number],
+): boolean {
+  const any = preference.whenAnyConcepts ?? [];
+  const all = preference.whenAllConcepts ?? [];
+
+  const anySatisfied =
+    any.length === 0 || any.some((conceptId) => activeConceptIds.has(conceptId));
+  const allSatisfied =
+    all.length === 0 || all.every((conceptId) => activeConceptIds.has(conceptId));
+
+  return anySatisfied && allSatisfied;
+}
+
+function scoreContextualBridgeText(
+  result: ProceduralSearchResult,
+  slot: AuthoritySlotSpec,
+  activeConceptIds: Set<string>,
+): number {
+  const preferences = slot.contextualTextPreferences ?? [];
+  if (preferences.length === 0) return 0;
+
+  const content = result.sectionContent.toLowerCase();
+
+  return preferences.reduce((score, preference) => {
+    if (!contextPreferenceApplies(activeConceptIds, preference)) {
+      return score;
+    }
+
+    const matches = countTextMatches(content, preference.textIncludes);
+    const bonusPerMatch = preference.bonusPerMatch ?? 180;
+    return score + matches * bonusPerMatch;
+  }, 0);
+}
+
+function scoreDiscoveryBreadcrumb(
+  result: ProceduralSearchResult,
+  discoveries: DiscoveredProceduralDimension[],
+): number {
+  const resultHeading = result.heading
+    ? normalizeHeadingForDiscovery(result.heading)
+    : null;
+
+  return discoveries.reduce((score, discovery) => {
+    const isValidatedBridgeBreadcrumb =
+      discovery.status === "promoted" &&
+      discovery.provenance === "corpus_bridge";
+    const isBoundBreadcrumb =
+      discovery.status === "bound_to_promoted" &&
+      (discovery.provenance === "planner" ||
+        discovery.provenance === "user_term");
+
+    if (
+      (!isValidatedBridgeBreadcrumb && !isBoundBreadcrumb) ||
+      !discovery.heading ||
+      !discovery.bridgeSourceCitationLabel ||
+      discovery.bridgeSourceCitationLabel !== result.citationLabel ||
+      !resultHeading ||
+      resultHeading !== normalizeHeadingForDiscovery(discovery.heading)
+    ) {
+      return score;
+    }
+
+    // Once a heading family is independently validated, prefer the strongest
+    // semantic breadcrumb that led the user into that family. Use a fixed
+    // affinity rather than stacking duplicate bridge/binding evidence.
+    return Math.max(score, 260);
+  }, 0);
 }
 
 function scoreSlotMatches(
   result: ProceduralSearchResult,
   slots: AuthoritySlotSpec[],
-): { matchedSlotKeys: string[]; slotBoost: number } {
+  activeConceptIds: Set<string>,
+): {
+  matchedSlotKeys: string[];
+  slotBoost: number;
+  preferredTextBoost: number;
+  bridgeBoost: number;
+} {
   const matchedSlots = slots.filter((slot) => matchesSlot(result, slot));
   const matchedSlotKeys = matchedSlots.map((slot) => slot.key);
 
-  const slotBoost = matchedSlots.reduce(
-    (score, slot) => score + 180 + scorePreferredText(result, slot),
+  const slotBoost = matchedSlots.length * 180;
+  const preferredTextBoost = matchedSlots.reduce(
+    (score, slot) => score + scorePreferredText(result, slot),
+    0,
+  );
+  const bridgeBoost = matchedSlots.reduce(
+    (score, slot) =>
+      score + scoreContextualBridgeText(result, slot, activeConceptIds),
     0,
   );
 
-  return { matchedSlotKeys, slotBoost };
+  return {
+    matchedSlotKeys,
+    slotBoost,
+    preferredTextBoost,
+    bridgeBoost,
+  };
 }
 
 function profileFamilyKey(item: ScoredAuthority): string {
@@ -1142,10 +1582,31 @@ export function selectFinalAuthorities(input: {
   scoredAuthorities: ScoredAuthority[];
   activeConceptIds: string[];
   blueprintSlots: string[];
+  requiredSlots: string[];
+  optionalSlots: string[];
+  satisfiedSlots: string[];
+  missingRequiredSlots: string[];
+  blueprintSatisfied: boolean;
   selectedSlotMatches: SlotMatch[];
+  discoveredDimensions: DiscoveredProceduralDimension[];
 } {
   const frame = deriveFrame(input.question, input.plannerQueries ?? []);
-  const slots = buildBlueprintSlots(frame.activeConcepts);
+  const discoveredDimensions = discoverProceduralDimensions({
+    searches: input.searches,
+    concepts: frame.activeConcepts,
+  });
+  const discoveredSlots = buildDiscoveredSlots(
+    discoveredDimensions,
+    input.searches,
+  );
+  const slots = buildBlueprintSlots(frame.activeConcepts, discoveredSlots);
+  const promotedConceptIds = discoveredDimensions
+    .filter((dimension) => dimension.status === "promoted")
+    .map((dimension) => dimension.conceptId);
+  const activeConceptIds = new Set([
+    ...frame.activeConcepts.map((concept) => concept.id),
+    ...promotedConceptIds,
+  ]);
 
   const flattened: ScoredAuthority[] = input.searches.flatMap(
     (search, queryIndex) =>
@@ -1156,7 +1617,16 @@ export function selectFinalAuthorities(input: {
           frame,
         });
 
-        const { matchedSlotKeys, slotBoost } = scoreSlotMatches(result, slots);
+        const {
+          matchedSlotKeys,
+          slotBoost,
+          preferredTextBoost,
+          bridgeBoost,
+        } = scoreSlotMatches(result, slots, activeConceptIds);
+        const discoveryBoost = scoreDiscoveryBreadcrumb(
+          result,
+          discoveredDimensions,
+        );
 
         return {
           result,
@@ -1164,7 +1634,16 @@ export function selectFinalAuthorities(input: {
           queryIndex,
           routeBoost,
           slotBoost,
-          adjustedRank: result.rank + routeBoost + slotBoost,
+          preferredTextBoost,
+          bridgeBoost,
+          discoveryBoost,
+          adjustedRank:
+            result.rank +
+            routeBoost +
+            slotBoost +
+            preferredTextBoost +
+            bridgeBoost +
+            discoveryBoost,
           matchedSlotKeys,
         };
       }),
@@ -1173,6 +1652,11 @@ export function selectFinalAuthorities(input: {
   const sorted = [...flattened].sort((a, b) => {
     if (b.adjustedRank !== a.adjustedRank)
       return b.adjustedRank - a.adjustedRank;
+    if (b.discoveryBoost !== a.discoveryBoost)
+      return b.discoveryBoost - a.discoveryBoost;
+    if (b.bridgeBoost !== a.bridgeBoost) return b.bridgeBoost - a.bridgeBoost;
+    if (b.preferredTextBoost !== a.preferredTextBoost)
+      return b.preferredTextBoost - a.preferredTextBoost;
     if (b.slotBoost !== a.slotBoost) return b.slotBoost - a.slotBoost;
     if (b.routeBoost !== a.routeBoost) return b.routeBoost - a.routeBoost;
     if (b.result.rank !== a.result.rank) return b.result.rank - a.result.rank;
@@ -1183,10 +1667,18 @@ export function selectFinalAuthorities(input: {
   const selected: ScoredAuthority[] = [];
   const seen = new Set<string>();
   const familyCounts = new Map<string, number>();
+  const satisfiedSlotKeys = new Set<string>();
   const selectedSlotMatches: SlotMatch[] = [];
 
+  const requiredSlots = slots
+    .filter(isRequiredSlot)
+    .map((slot) => slot.key);
+  const optionalSlots = slots
+    .filter((slot) => !isRequiredSlot(slot))
+    .map((slot) => slot.key);
+
   const defaultMaxAuthorities =
-    slots.length > 0 ? Math.max(2, Math.min(slots.length, 8)) : 4;
+    slots.length > 0 ? Math.max(1, Math.min(slots.length, 8)) : 4;
 
   const computedMaxAuthorities = Math.min(
     10,
@@ -1211,6 +1703,9 @@ export function selectFinalAuthorities(input: {
     familyCounts.set(key, (familyCounts.get(key) ?? 0) + 1);
 
     for (const slotKey of item.matchedSlotKeys) {
+      if (satisfiedSlotKeys.has(slotKey)) continue;
+
+      satisfiedSlotKeys.add(slotKey);
       selectedSlotMatches.push({
         slotKey,
         citationLabel: item.result.citationLabel,
@@ -1219,18 +1714,38 @@ export function selectFinalAuthorities(input: {
     }
   }
 
-  for (const slot of slots) {
+  const orderedSlots = [...slots].sort((a, b) => {
+    const aRequired = isRequiredSlot(a) ? 1 : 0;
+    const bRequired = isRequiredSlot(b) ? 1 : 0;
+    return bRequired - aRequired;
+  });
+
+  for (const slot of orderedSlots) {
+    if (selected.length >= computedMaxAuthorities) break;
+    if (satisfiedSlotKeys.has(slot.key)) continue;
+
     const candidate = deduped.find(
       (item) => item.matchedSlotKeys.includes(slot.key) && canAdd(item),
     );
+
     if (candidate) add(candidate);
   }
 
-  for (const item of deduped) {
-    if (selected.length >= computedMaxAuthorities) break;
-    if (!canAdd(item)) continue;
-    add(item);
+  if (slots.length === 0) {
+    for (const item of deduped) {
+      if (selected.length >= computedMaxAuthorities) break;
+      if (!canAdd(item)) continue;
+      add(item);
+    }
   }
+
+  const satisfiedSlots = slots
+    .map((slot) => slot.key)
+    .filter((slotKey) => satisfiedSlotKeys.has(slotKey));
+
+  const missingRequiredSlots = requiredSlots.filter(
+    (slotKey) => !satisfiedSlotKeys.has(slotKey),
+  );
 
   return {
     finalAuthorities: selected.map((item) => ({
@@ -1238,9 +1753,15 @@ export function selectFinalAuthorities(input: {
       rank: item.adjustedRank,
     })),
     scoredAuthorities: selected,
-    activeConceptIds: frame.activeConcepts.map((c) => c.id),
+    activeConceptIds: [...activeConceptIds],
     blueprintSlots: slots.map((slot) => slot.key),
+    requiredSlots,
+    optionalSlots,
+    satisfiedSlots,
+    missingRequiredSlots,
+    blueprintSatisfied: missingRequiredSlots.length === 0,
     selectedSlotMatches,
+    discoveredDimensions,
   };
 }
 
@@ -1264,6 +1785,66 @@ export function normalizeAnswerFormatting(text: string): string {
     (acc, [pattern, replacement]) => acc.replace(pattern, replacement),
     normalized,
   );
+}
+
+export function removeEmptyAnswerSections(answerText: string): string {
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const output: string[] = [];
+
+  for (let index = 0; index < lines.length; ) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!isStructuralHeading(trimmed)) {
+      output.push(line);
+      index += 1;
+      continue;
+    }
+
+    let nextHeadingIndex = index + 1;
+    while (
+      nextHeadingIndex < lines.length &&
+      !isStructuralHeading(lines[nextHeadingIndex].trim())
+    ) {
+      nextHeadingIndex += 1;
+    }
+
+    const sectionBody = lines
+      .slice(index + 1, nextHeadingIndex)
+      .filter((candidate) => candidate.trim().length > 0);
+
+    if (sectionBody.length > 0) {
+      output.push(line, ...lines.slice(index + 1, nextHeadingIndex));
+    }
+
+    index = nextHeadingIndex;
+  }
+
+  return output
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function answerSectionHasContent(
+  answerText: string,
+  heading: string,
+): boolean {
+  const normalizedHeading = heading.trim();
+  const lines = normalizeAnswerFormatting(answerText).split("\n");
+  const headingIndex = lines.findIndex(
+    (line) => line.trim() === normalizedHeading,
+  );
+
+  if (headingIndex < 0) return false;
+
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (isStructuralHeading(trimmed)) break;
+    if (trimmed) return true;
+  }
+
+  return false;
 }
 
 function extractInlineCitations(answerText: string): string[] {
@@ -1575,6 +2156,33 @@ export function pruneUnsupportedAnswerClaims(input: {
   };
 }
 
+export function appendEvidenceGapSection(
+  answerText: string,
+  evidenceGaps: string[],
+): string {
+  const gaps = evidenceGaps
+    .map((gap) => normalizeWhitespace(gap))
+    .filter(Boolean);
+
+  if (gaps.length === 0) {
+    return normalizeAnswerFormatting(answerText);
+  }
+
+  const rendered = gaps.map(
+    (gap) =>
+      `- Open Order did not retrieve authority establishing ${gap}. That unresolved point should not be treated as proved either way.`,
+  );
+
+  return [
+    normalizeAnswerFormatting(answerText),
+    "",
+    "Evidence gap:",
+    ...rendered,
+  ]
+    .join("\n")
+    .trim();
+}
+
 function classifyOption(result: ProceduralSearchResult): string {
   const heading = result.heading ?? "Relevant authority";
   return `Inspect or cite ${heading} to test whether it directly governs the step in issue [${result.citationLabel}].`;
@@ -1638,9 +2246,14 @@ export function buildFallbackAnswer(input: {
   ].join("\n");
 }
 
-============================================================================================
+================================================================================================
+SHA-256 — lib/concept-registry.ts
+================================================================================================
+8d79613f2a27111fb3af83cc049c2b6ea76fd1f8967b450c91b7b86a867b7965
+
+================================================================================================
 COMPLETE SOURCE — lib/concept-registry.ts
-============================================================================================
+================================================================================================
 // lib/concept-registry.ts
 import type {
   AuthorityClass,
@@ -1659,14 +2272,27 @@ export type ProceduralConceptId =
   | "ministerial_accountability"
   | "retrospective_discipline";
 
+export type AuthorityContextPreference = {
+  whenAnyConcepts?: ProceduralConceptId[];
+  whenAllConcepts?: ProceduralConceptId[];
+  textIncludes: string[];
+  bonusPerMatch?: number;
+};
+
 export type AuthoritySlotSpec = {
   key: string;
+  requirement?: "required" | "optional";
   classes?: AuthorityClass[];
   functions?: AuthorityFunction[];
   headings?: string[];
   pathIncludes?: string[];
   preferredCorpora?: Array<"standing_orders" | "speakers_rulings">;
+  requiredTextIncludes?: string[];
+  recoveryQueries?: string[];
+  recoveryCorpora?: Array<"standing_orders" | "speakers_rulings">;
+  evidenceGapDescription?: string;
   preferredTextIncludes?: string[];
+  contextualTextPreferences?: AuthorityContextPreference[];
   maxMatches?: number;
 };
 
@@ -1701,6 +2327,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "closure_governing_rule",
+        requirement: "required",
         headings: ["closure motion"],
         classes: ["governing_rule"],
         functions: ["rule", "application"],
@@ -1709,6 +2336,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       },
       {
         key: "closure_qualification",
+        requirement: "optional",
         headings: ["acceptance of closure motion", "effect of carrying closure motion"],
         classes: ["constraint_or_qualification"],
         functions: ["constraint", "effect"],
@@ -1726,13 +2354,28 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "point_of_order_mechanism",
+        requirement: "optional",
         headings: ["points of order", "point of order"],
         classes: ["procedural_mechanism"],
         functions: ["procedure"],
         preferredTextIncludes: [
-          "transgressing the rules of debate",
-          "breach of the rules",
           "speaker can take action",
+        ],
+        contextualTextPreferences: [
+          {
+            whenAnyConcepts: [
+              "personal_reflection",
+              "allegation_of_racism",
+              "relevancy",
+            ],
+            textIncludes: [
+              "transgressing the rules of debate",
+              "breach of the rules",
+              "call the attention of the speaker",
+              "draw the speaker's attention",
+            ],
+            bonusPerMatch: 260,
+          },
         ],
         maxMatches: 1,
       },
@@ -1753,6 +2396,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "personal_reflection_rule",
+        requirement: "required",
         pathIncludes: ["personal reflections"],
         headings: ["against members"],
         classes: ["governing_rule"],
@@ -1762,6 +2406,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       },
       {
         key: "personal_reflection_procedure",
+        requirement: "optional",
         pathIncludes: ["personal reflections"],
         headings: ["procedure"],
         classes: ["constraint_or_qualification"],
@@ -1781,6 +2426,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "racism_rule",
+        requirement: "required",
         headings: ["allegations of racism"],
         classes: ["governing_rule"],
         functions: ["rule", "application"],
@@ -1798,6 +2444,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "relevancy_rule",
+        requirement: "required",
         headings: ["relevancy"],
         classes: ["governing_rule"],
         functions: ["rule", "application"],
@@ -1814,6 +2461,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "chair_control_rule",
+        requirement: "required",
         headings: ["chairperson"],
         classes: ["chair_control"],
         preferredCorpora: ["speakers_rulings"],
@@ -1830,6 +2478,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "committee_of_whole_context",
+        requirement: "required",
         pathIncludes: ["committees of the whole house"],
         preferredCorpora: ["standing_orders", "speakers_rulings"],
         maxMatches: 1,
@@ -1850,7 +2499,9 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "withdrawal_rule",
+        requirement: "required",
         headings: ["withdrawal"],
+        pathIncludes: ["unparliamentary language"],
         classes: ["constraint_or_qualification", "governing_rule"],
         functions: ["procedure", "constraint", "rule", "application"],
         preferredCorpora: ["speakers_rulings"],
@@ -1858,7 +2509,9 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       },
       {
         key: "withdrawal_procedure",
+        requirement: "optional",
         headings: ["procedure"],
+        pathIncludes: ["unparliamentary language"],
         classes: ["constraint_or_qualification"],
         functions: ["procedure", "constraint"],
         preferredCorpora: ["speakers_rulings"],
@@ -1883,6 +2536,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
     slots: [
       {
         key: "ministerial_accountability_rule",
+        requirement: "required",
         headings: ["accountability to the house"],
         classes: ["governing_rule"],
         functions: ["rule", "application"],
@@ -1891,6 +2545,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       },
       {
         key: "ministerial_form_of_reply",
+        requirement: "optional",
         headings: ["form of reply"],
         classes: ["constraint_or_qualification"],
         functions: ["constraint", "rule", "application"],
@@ -1909,28 +2564,49 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
       "require an apology",
       "apology for something that happened",
     ],
-    preferredQueries: ["withdrawal", "procedure", "point of order"],
-    defaultPackContribution: 3,
+    preferredQueries: [
+      "withdrawal",
+      "procedure",
+      "point of order",
+      "previous sitting",
+    ],
+    defaultPackContribution: 2,
     slots: [
       {
-        key: "retrospective_withdrawal",
-        headings: ["withdrawal"],
-        preferredCorpora: ["speakers_rulings"],
-        maxMatches: 1,
-      },
-      {
-        key: "retrospective_procedure",
-        headings: ["procedure"],
-        preferredCorpora: ["speakers_rulings"],
+        key: "retrospective_timing_rule",
+        requirement: "required",
+        pathIncludes: ["rules of debate", "maintenance of order"],
+        preferredCorpora: ["standing_orders", "speakers_rulings"],
+        requiredTextIncludes: [
+          "previous sitting",
+          "earlier sitting",
+          "previous day",
+          "earlier day",
+          "at an earlier sitting",
+          "at a previous sitting",
+        ],
+        recoveryQueries: [
+          "previous sitting",
+          "earlier sitting",
+          "previous day",
+        ],
+        recoveryCorpora: ["speakers_rulings", "standing_orders"],
+        evidenceGapDescription:
+          "whether the Speaker may require withdrawal or an apology for conduct from an earlier sitting",
         maxMatches: 1,
       },
     ],
   },
 ];
 
-============================================================================================
+================================================================================================
+SHA-256 — lib/ai/prompts.ts
+================================================================================================
+415dbf1ecddd96cd7b7966b48a54eff3077a1d7984809e149ac42d2c3e4990ee
+
+================================================================================================
 COMPLETE SOURCE — lib/ai/prompts.ts
-============================================================================================
+================================================================================================
 // lib/ai/prompts.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
@@ -1945,6 +2621,9 @@ Important constraints:
 - You are ONLY planning targeted retrieval queries.
 - Prefer 1 to 3 search queries total.
 - Queries should be short, canonical, procedural, and retrieval-friendly.
+- Separately preserve up to 4 short, salient terms or phrases from the user's own wording when they may plausibly appear verbatim in the parliamentary corpus.
+- Salient terms are not substitutes for canonical procedural queries; they are literal retrieval companions. Preserve the user's wording rather than paraphrasing it.
+- Prefer the shortest distinctive user phrase that preserves the relevant meaning, because literal corpus matches are especially valuable.
 - Prefer the named procedural concept that is most likely to appear in a Standing Order heading or Speaker's Ruling heading.
 - Avoid vague abstractions such as "Speaker discretion debate" or long natural-language paraphrases.
 - Avoid broad generic queries when a more specific heading-native label is available.
@@ -2007,6 +2686,9 @@ Query composition rules:
 - Do not repeat near-duplicates.
 - Do not include filler words.
 - Do not include explanatory notes inside the query strings.
+- Put canonical procedural labels in searchQueries.
+- Put only literal terms preserved from the user's question in salientTerms.
+- Use an empty salientTerms array when no literal wording is likely to improve retrieval.
 
 Intent mapping:
 - Use "tactic" when the user asks how to stop, counter, shut down, force, challenge, or steer something procedurally.
@@ -2022,6 +2704,7 @@ Return this exact shape:
   "intent": "explain_rule" | "explain_statement" | "options" | "admissibility" | "tactic" | "compare_authorities" | "clarification",
   "preferredCorpus": "standing_orders" | "speakers_rulings" | null,
   "searchQueries": ["..."],
+  "salientTerms": ["literal user term or short phrase", "..."],
   "notes": "brief note"
 }
 `.trim();
@@ -2048,6 +2731,10 @@ Critical grounding rules:
   - what the authorities clearly allow,
   - what appears to depend on the Chair,
   - what is tactically arguable but uncertain.
+- Where one authority limits a particular person's ability to object and another authority provides a separate procedural mechanism, preserve that distinction. Do not turn a limit on one route into a prohibition on the other.
+- For a tactic or options question, lead with the strongest supported procedural action. Put constraints after the action unless the authorities establish that no action is available.
+- If the prompt identifies an unresolved evidence gap, do not treat that gap as proving the user's preferred conclusion or its opposite.
+- When a decisive proposition is unsupported but other procedural steps are supported, answer those supported steps directly and leave the unsupported proposition unresolved.
 
 Write in this exact structure and punctuation:
 
@@ -2088,6 +2775,7 @@ Validation rules:
 - Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
 - Reject claims that treat an exception or qualification as the governing rule.
 - Reject claims that state that a member "can require", "must", "may", or "cannot" do something when the cited authority only describes a narrower circumstance.
+- Reject claims that broaden a restriction on one person's entitlement, objection, or remedy into a restriction on a distinct procedural mechanism that another authority makes available.
 - Multiple cited authorities may be read together, but only the cited authorities may support the claim.
 - Be conservative. If support is ambiguous, mark the claim unsupported.
 - Do not rewrite claims.
@@ -2170,7 +2858,9 @@ Generate a search plan now.
 export function buildGroundedAnswerPrompt(input: {
   question: string;
   corpus?: string | null;
+  intent?: string | null;
   concepts?: string[];
+  evidenceGaps?: string[];
   searches: Array<{
     query: string;
     corpus: string | null;
@@ -2231,8 +2921,18 @@ ${input.question}
 Requested corpus filter:
 ${input.corpus ?? "none"}
 
+Answer intent:
+${input.intent ?? "unspecified"}
+
 Detected procedural concepts:
 ${input.concepts?.join(", ") ?? "none"}
+
+Known evidence gaps:
+${
+  input.evidenceGaps?.length
+    ? input.evidenceGaps.map((gap) => `- ${gap}`).join("\n")
+    : "none"
+}
 
 Retrieved authorities:
 ${renderedSearches}
@@ -2249,13 +2949,22 @@ If useful, distinguish between:
 Remember:
 - every substantive line should carry inline citations,
 - omit unsupported propositions rather than guessing,
+- if the answer intent is "tactic" or "options", the first Bottom line sentence and first Your options bullet should state the strongest grounded procedural move when one is supported,
+- reconcile distinct permissions and constraints explicitly rather than collapsing them,
+- if a known evidence gap is listed above, do not make the missing proposition the Bottom line; instead lead with the strongest supported procedural move and keep the missing proposition expressly unresolved,
+- do not claim that absence of retrieved authority proves that a power does or does not exist,
 - keep the answer compact, procedural, and grounded.
 `.trim();
 }
 
-============================================================================================
+================================================================================================
+SHA-256 — app/api/ai/answer/route.ts
+================================================================================================
+fc3c58955e18928d4020d10280a26da6821e119e3df7d3c52840d489c691edd0
+
+================================================================================================
 COMPLETE SOURCE — app/api/ai/answer/route.ts
-============================================================================================
+================================================================================================
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -2270,13 +2979,20 @@ import {
 } from "@/lib/ai/prompts";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
+  answerSectionHasContent,
+  appendEvidenceGapSection,
   buildAuthorityPayload,
+  buildAuthorityProfile,
+  buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
-  expandPlannerQueries,
+  buildMissingSlotRecoveryRequests,
+  buildProceduralQueryPlan,
+  describeMissingAuthoritySlots,
   extractAnswerClaims,
   inferConcepts,
   normalizeAnswerFormatting,
   pruneUnsupportedAnswerClaims,
+  removeEmptyAnswerSections,
   pruneValidatedAnswerContent,
   rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
@@ -2302,6 +3018,7 @@ const searchPlanSchema = z.object({
   ]),
   preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
   searchQueries: z.array(z.string().min(1)).min(1).max(3),
+  salientTerms: z.array(z.string().min(1)).max(4).default([]),
   notes: z.string(),
 });
 
@@ -2393,54 +3110,214 @@ export async function POST(request: NextRequest) {
             label: "Retrieving authorities",
           });
 
-          const expandedQueries = expandPlannerQueries({
+          const queryPlan = buildProceduralQueryPlan({
             question,
             plannerQueries: plan.searchQueries,
+            salientTerms: plan.salientTerms,
             effectiveCorpus,
           });
+          const expandedQueries = queryPlan.map((dimension) => dimension.query);
 
           const searches: SearchExecution[] = [];
 
-          for (const query of expandedQueries) {
+          for (const dimension of queryPlan) {
             const searchResponse = await searchProceduralAuthorities({
-              q: query,
+              q: dimension.query,
               corpus: effectiveCorpus,
               limit: 10,
               offset: 0,
             });
 
             searches.push({
-              query,
+              query: dimension.query,
               corpus: effectiveCorpus,
+              provenance: dimension.provenance,
               results: searchResponse.results,
             });
           }
 
-          const selected = selectFinalAuthorities({
+          let selected = selectFinalAuthorities({
             searches,
             question,
             plannerQueries: plan.searchQueries,
+          });
+
+          const bridgeRequests = buildCorpusBridgeSearchRequests({
+            searches,
+            question,
+            plannerQueries: plan.searchQueries,
+            maxRequests: 2,
+          });
+
+          if (bridgeRequests.length > 0) {
+            send("stage", {
+              key: "retrieving",
+              label: "Following corpus-native procedural breadcrumbs",
+            });
+
+            const existingBridgeSearchKeys = new Set(
+              searches.map(
+                (search) =>
+                  `${search.corpus ?? "auto"}::${search.query.toLowerCase()}`,
+              ),
+            );
+            let bridgeSearchCount = 0;
+
+            for (const bridge of bridgeRequests) {
+              const searchKey = `${bridge.corpus ?? "auto"}::${bridge.query.toLowerCase()}`;
+              if (existingBridgeSearchKeys.has(searchKey)) continue;
+
+              const searchResponse = await searchProceduralAuthorities({
+                q: bridge.query,
+                corpus: bridge.corpus,
+                limit: 10,
+                offset: 0,
+              });
+
+              searches.push({
+                query: bridge.query,
+                corpus: bridge.corpus,
+                provenance: "corpus_bridge",
+                bridgeSourceQuery: bridge.sourceQuery,
+                bridgeSourceCitationLabel: bridge.sourceCitationLabel,
+                results: searchResponse.results,
+              });
+              existingBridgeSearchKeys.add(searchKey);
+              bridgeSearchCount += 1;
+            }
+
+            if (bridgeSearchCount > 0) {
+              selected = selectFinalAuthorities({
+                searches,
+                question,
+                plannerQueries: plan.searchQueries,
+              });
+            }
+          }
+
+          const recoveryAttempts: Array<{
+            slotKey: string;
+            query: string;
+            corpus: string | null;
+            resultCount: number;
+          }> = [];
+
+          if (!selected.blueprintSatisfied) {
+            send("stage", {
+              key: "retrieving",
+              label: "Recovering missing authority evidence",
+            });
+
+            const recoveryRequests = buildMissingSlotRecoveryRequests({
+              question,
+              plannerQueries: plan.searchQueries,
+              missingRequiredSlots: selected.missingRequiredSlots,
+              requestedCorpus: corpus,
+              maxRequests: 4,
+            });
+
+            const existingSearchKeys = new Set(
+              searches.map(
+                (search) =>
+                  `${search.corpus ?? "auto"}::${search.query.toLowerCase()}`,
+              ),
+            );
+
+            for (const recovery of recoveryRequests) {
+              const searchKey = `${recovery.corpus ?? "auto"}::${recovery.query.toLowerCase()}`;
+              if (existingSearchKeys.has(searchKey)) continue;
+
+              const searchResponse = await searchProceduralAuthorities({
+                q: recovery.query,
+                corpus: recovery.corpus,
+                limit: 10,
+                offset: 0,
+              });
+
+              searches.push({
+                query: recovery.query,
+                corpus: recovery.corpus,
+                provenance: "recovery",
+                results: searchResponse.results,
+              });
+              existingSearchKeys.add(searchKey);
+
+              recoveryAttempts.push({
+                slotKey: recovery.slotKey,
+                query: recovery.query,
+                corpus: recovery.corpus,
+                resultCount: searchResponse.results.length,
+              });
+            }
+
+            if (recoveryAttempts.length > 0) {
+              selected = selectFinalAuthorities({
+                searches,
+                question,
+                plannerQueries: plan.searchQueries,
+              });
+            }
+          }
+
+          const evidenceGaps = describeMissingAuthoritySlots({
+            question,
+            plannerQueries: plan.searchQueries,
+            missingRequiredSlots: selected.missingRequiredSlots,
           });
 
           const finalAuthorities = selected.finalAuthorities;
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
 
+          const finalAuthorityCorpora = [
+            ...new Set(finalAuthorities.map((authority) => authority.documentCorpus)),
+          ];
+          const finalAuthorityCorpus =
+            finalAuthorityCorpora.length === 1
+              ? finalAuthorityCorpora[0]
+              : null;
+
           send("authorities", {
             authorities: authorityPayload,
           });
 
+          const diagnosticConcepts = [
+            ...new Set([
+              ...inferredConcepts.map((concept) => concept.id),
+              ...selected.discoveredDimensions
+                .filter((dimension) => dimension.status === "promoted")
+                .map((dimension) => dimension.conceptId),
+            ]),
+          ];
+
           send("diagnostics", {
             effectiveCorpus,
-            inferredConcepts: inferredConcepts.map((concept) => concept.id),
+            inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,
+            requiredSlots: selected.requiredSlots,
+            optionalSlots: selected.optionalSlots,
+            satisfiedSlots: selected.satisfiedSlots,
+            missingRequiredSlots: selected.missingRequiredSlots,
+            blueprintSatisfied: selected.blueprintSatisfied,
             expandedQueries,
-            retrievals: searches.map((search) => ({
-              query: search.query,
-              corpus: search.corpus,
-              resultCount: search.results.length,
-              topResults: search.results.slice(0, 6).map((result) => ({
+            recoveryAttempts,
+            evidenceGaps,
+            retrievals: searches.map((search) => {
+              const discovery = selected.discoveredDimensions.find(
+                (dimension) =>
+                  dimension.query.toLowerCase() === search.query.toLowerCase() &&
+                  dimension.provenance ===
+                    (search.provenance ?? "registry_expansion"),
+              );
+
+              return {
+                query: search.query,
+                corpus: search.corpus,
+                provenance: search.provenance ?? "registry_expansion",
+                discovery,
+                resultCount: search.results.length,
+                topResults: search.results.slice(0, 6).map((result) => ({
                 sectionId: result.sectionId,
                 sectionKey: result.sectionKey,
                 citationLabel: result.citationLabel,
@@ -2453,9 +3330,10 @@ export async function POST(request: NextRequest) {
                 bodyRank: result.bodyRank,
                 chunkRank: result.chunkRank,
                 clusterSupportCount: result.clusterSupportCount,
-                matchSignals: result.matchSignals,
-              })),
-            })),
+                  matchSignals: result.matchSignals,
+                })),
+              };
+            }),
             finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
               query: item.query,
               citationLabel: item.result.citationLabel,
@@ -2464,8 +3342,12 @@ export async function POST(request: NextRequest) {
               baseRank: item.result.rank,
               routeBoost: item.routeBoost,
               slotBoost: item.slotBoost,
+              preferredTextBoost: item.preferredTextBoost,
+              bridgeBoost: item.bridgeBoost,
+              discoveryBoost: item.discoveryBoost,
               adjustedRank: item.adjustedRank,
               matchedSlots: item.matchedSlotKeys,
+              authorityFunction: buildAuthorityProfile(item.result).authorityFunction,
               path: item.result.path,
             })),
             selectedSlotMatches: selected.selectedSlotMatches,
@@ -2513,11 +3395,13 @@ export async function POST(request: NextRequest) {
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
                 question,
-                corpus: effectiveCorpus,
+                corpus: finalAuthorityCorpus ?? effectiveCorpus,
+                intent: plan.intent,
+                evidenceGaps: evidenceGaps.map((gap) => gap.description),
                 searches: [
                   {
                     query: "final_authority_pack",
-                    corpus: effectiveCorpus,
+                    corpus: finalAuthorityCorpus,
                     results: finalAuthorities,
                   },
                 ],
@@ -2801,10 +3685,24 @@ export async function POST(request: NextRequest) {
                 unsupportedClaimIds,
               });
 
-              finalAnswer = normalizeAnswerFormatting(
-                semanticPrune.prunedText,
+              finalAnswer = removeEmptyAnswerSections(
+                normalizeAnswerFormatting(semanticPrune.prunedText),
               );
-              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}`;
+
+              const unsupportedReasons = semanticPrune.removedClaims
+                .map((claim) => {
+                  const reason =
+                    validationById.get(claim.id)?.reason ??
+                    "no supporting validation result";
+                  return `${claim.id}: ${reason}`;
+                })
+                .join(" | ");
+
+              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}${
+                unsupportedReasons ? ` (${unsupportedReasons})` : ""
+              }`;
+            } else {
+              finalAnswer = removeEmptyAnswerSections(finalAnswer);
             }
 
             const remainingClaims = extractAnswerClaims(finalAnswer);
@@ -2817,13 +3715,20 @@ export async function POST(request: NextRequest) {
               authorities: authorityPayload,
             });
 
+            const hasBottomLine = answerSectionHasContent(
+              finalAnswer,
+              "Bottom line:",
+            );
+
             if (
               remainingClaims.length === 0 ||
+              !hasBottomLine ||
               !finalCitationValidation.ok ||
               !finalMentionValidation.ok
             ) {
-              const fallbackReason =
-                "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
+              const fallbackReason = !hasBottomLine
+                ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
+                : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
 
               const fallbackAnswer = buildFallbackAnswer({
                 question,
@@ -2856,11 +3761,18 @@ export async function POST(request: NextRequest) {
               return;
             }
 
+            if (evidenceGaps.length > 0) {
+              finalAnswer = appendEvidenceGapSection(
+                finalAnswer,
+                evidenceGaps.map((gap) => gap.description),
+              );
+            }
+
             send("answer_delta", { text: finalAnswer });
 
             send("done", {
               ok: true,
-              degraded: false,
+              degraded: evidenceGaps.length > 0,
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
@@ -2870,6 +3782,9 @@ export async function POST(request: NextRequest) {
               rewriteNote,
               pruneNote,
               claimValidationNote,
+              recoveryAttempts,
+              evidenceGaps,
+              missingRequiredSlots: selected.missingRequiredSlots,
             });
 
             controller.close();
@@ -2949,9 +3864,14 @@ export async function POST(request: NextRequest) {
   });
 }
 
-============================================================================================
+================================================================================================
+SHA-256 — lib/open-order/types.ts
+================================================================================================
+162193cc02edf43036d08b7709f4f9b24b0443aa5b26a62eb96e59b9244181e8
+
+================================================================================================
 COMPLETE SOURCE — lib/open-order/types.ts
-============================================================================================
+================================================================================================
 // lib/open-order/types.ts
 export type SearchResult = {
   sectionId: string;
@@ -3004,6 +3924,7 @@ export type AiPlan = {
     | "clarification";
   preferredCorpus: "standing_orders" | "speakers_rulings" | null;
   searchQueries: string[];
+  salientTerms?: string[];
   notes: string;
 };
 
@@ -3046,9 +3967,31 @@ export type AiDiagnosticTopResult = {
   };
 };
 
+export type AiQueryProvenance =
+  | "planner"
+  | "user_term"
+  | "registry_expansion"
+  | "corpus_bridge"
+  | "recovery";
+
+export type AiDiagnosticDiscovery = {
+  conceptId: string;
+  query: string;
+  provenance: AiQueryProvenance;
+  status: "promoted" | "rejected" | "covered_by_static" | "bound_to_promoted";
+  validation: string;
+  heading: string | null;
+  evidenceCount: number;
+  slotKey: string | null;
+  bridgeSourceQuery?: string | null;
+  bridgeSourceCitationLabel?: string | null;
+};
+
 export type AiDiagnosticRetrieval = {
   query: string;
   corpus: string | null;
+  provenance?: AiQueryProvenance;
+  discovery?: AiDiagnosticDiscovery;
   resultCount: number;
   topResults: AiDiagnosticTopResult[];
 };
@@ -3060,14 +4003,33 @@ export type AiDiagnosticFinalAuthority = {
   documentCorpus: string;
   baseRank: number;
   routeBoost: number;
+  slotBoost?: number;
+  preferredTextBoost?: number;
+  bridgeBoost?: number;
+  discoveryBoost?: number;
   adjustedRank: number;
+  matchedSlots?: string[];
+  authorityFunction?: string;
   path: string[];
+};
+
+export type AiDiagnosticSlotMatch = {
+  slotKey: string;
+  citationLabel: string;
+  heading: string | null;
 };
 
 export type AiDiagnosticsPayload = {
   effectiveCorpus: string | null;
   inferredConcepts?: string[];
   expandedQueries?: string[];
+  blueprintSlots?: string[];
+  requiredSlots?: string[];
+  optionalSlots?: string[];
+  satisfiedSlots?: string[];
+  missingRequiredSlots?: string[];
+  blueprintSatisfied?: boolean;
+  selectedSlotMatches?: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
 };
@@ -3085,6 +4047,13 @@ export type AiDiagnostics = {
   error: string | null;
   inferredConcepts: string[];
   expandedQueries: string[];
+  blueprintSlots: string[];
+  requiredSlots: string[];
+  optionalSlots: string[];
+  satisfiedSlots: string[];
+  missingRequiredSlots: string[];
+  blueprintSatisfied: boolean | null;
+  selectedSlotMatches: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection: AiDiagnosticFinalAuthority[];
 };
@@ -3102,6 +4071,13 @@ export const EMPTY_AI_DIAGNOSTICS: AiDiagnostics = {
   error: null,
   inferredConcepts: [],
   expandedQueries: [],
+  blueprintSlots: [],
+  requiredSlots: [],
+  optionalSlots: [],
+  satisfiedSlots: [],
+  missingRequiredSlots: [],
+  blueprintSatisfied: null,
+  selectedSlotMatches: [],
   retrievals: [],
   finalAuthoritySelection: [],
 };
@@ -3123,9 +4099,14 @@ export type UseOpenOrderAssistantReturn = {
   ask: (requestedCorpus: string | null) => Promise<void>;
 };
 
-============================================================================================
+================================================================================================
+SHA-256 — lib/open-order/format.ts
+================================================================================================
+03c55f1b03c33b58633b4dfb46b47cf08db521c2c58fddbb8fd25685ecb7ad64
+
+================================================================================================
 COMPLETE SOURCE — lib/open-order/format.ts
-============================================================================================
+================================================================================================
 import type {
   AiDiagnosticTopResult,
   AiDiagnostics,
@@ -3503,6 +4484,10 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     ? input.plan.searchQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
     : "None";
 
+  const salientTermsText = input.plan?.salientTerms?.length
+    ? input.plan.salientTerms.map((term, i) => `${i + 1}. ${term}`).join("\n")
+    : "None";
+
   const inferredConceptsText =
     input.inferredConcepts.length > 0
       ? input.inferredConcepts.map((c, i) => `${i + 1}. ${c}`).join("\n")
@@ -3511,6 +4496,43 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
   const expandedQueriesText =
     input.expandedQueries.length > 0
       ? input.expandedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
+      : "None";
+
+  const blueprintSlotsText =
+    input.blueprintSlots.length > 0
+      ? input.blueprintSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const requiredSlotsText =
+    input.requiredSlots.length > 0
+      ? input.requiredSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const optionalSlotsText =
+    input.optionalSlots.length > 0
+      ? input.optionalSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const satisfiedSlotsText =
+    input.satisfiedSlots.length > 0
+      ? input.satisfiedSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+      : "None";
+
+  const missingRequiredSlotsText =
+    input.missingRequiredSlots.length > 0
+      ? input.missingRequiredSlots
+          .map((slot, i) => `${i + 1}. ${slot}`)
+          .join("\n")
+      : "None";
+
+  const selectedSlotMatchesText =
+    input.selectedSlotMatches.length > 0
+      ? input.selectedSlotMatches
+          .map(
+            (match, index) =>
+              `${index + 1}. ${match.slotKey} -> ${match.citationLabel} (${match.heading ?? "None"})`,
+          )
+          .join("\n")
       : "None";
 
   const retrievalsText =
@@ -3545,9 +4567,24 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
                     .join("\n")
                 : "    None";
 
+            const discoveryText = retrieval.discovery
+              ? [
+                  `   Discovery status: ${retrieval.discovery.status}`,
+                  `   Discovery concept: ${retrieval.discovery.conceptId}`,
+                  `   Discovery heading: ${retrieval.discovery.heading ?? "None"}`,
+                  `   Discovery evidence count: ${retrieval.discovery.evidenceCount}`,
+                  `   Discovery slot: ${retrieval.discovery.slotKey ?? "None"}`,
+                  `   Discovery bridge source query: ${retrieval.discovery.bridgeSourceQuery ?? "None"}`,
+                  `   Discovery bridge source authority: ${retrieval.discovery.bridgeSourceCitationLabel ?? "None"}`,
+                  `   Discovery validation: ${retrieval.discovery.validation}`,
+                ]
+              : ["   Discovery status: not evaluated"];
+
             return [
               `${retrievalIndex + 1}. Query: ${retrieval.query}`,
               `   Corpus: ${retrieval.corpus ?? "Auto"}`,
+              `   Provenance: ${retrieval.provenance ?? "unknown"}`,
+              ...discoveryText,
               `   Result count: ${retrieval.resultCount}`,
               `   Top results:`,
               topResultsText,
@@ -3569,6 +4606,14 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
               `   heading: ${item.heading ?? "None"}`,
               `   baseRank: ${item.baseRank.toFixed(2)}`,
               `   routeBoost: ${item.routeBoost.toFixed(2)}`,
+              `   slotBoost: ${(item.slotBoost ?? 0).toFixed(2)}`,
+              `   preferredTextBoost: ${(item.preferredTextBoost ?? 0).toFixed(2)}`,
+              `   bridgeBoost: ${(item.bridgeBoost ?? 0).toFixed(2)}`,
+              `   discoveryBoost: ${(item.discoveryBoost ?? 0).toFixed(2)}`,
+              `   authorityFunction: ${item.authorityFunction ?? "None"}`,
+              `   matchedSlots: ${
+                item.matchedSlots?.length ? item.matchedSlots.join(", ") : "None"
+              }`,
               `   adjustedRank: ${item.adjustedRank.toFixed(2)}`,
               `   path: ${path}`,
             ].join("\n");
@@ -3617,11 +4662,41 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     "Planner search queries:",
     searchQueries,
     "",
+    "Salient user terms:",
+    salientTermsText,
+    "",
     "Inferred concepts:",
     inferredConceptsText,
     "",
     "Expanded queries:",
     expandedQueriesText,
+    "",
+    "BLUEPRINT COVERAGE",
+    "------------------",
+    `Satisfied: ${
+      input.blueprintSatisfied === null
+        ? "Unknown"
+        : input.blueprintSatisfied
+          ? "Yes"
+          : "No"
+    }`,
+    "Blueprint slots:",
+    blueprintSlotsText,
+    "",
+    "Required slots:",
+    requiredSlotsText,
+    "",
+    "Optional slots:",
+    optionalSlotsText,
+    "",
+    "Satisfied slots:",
+    satisfiedSlotsText,
+    "",
+    "Missing required slots:",
+    missingRequiredSlotsText,
+    "",
+    "Selected slot matches:",
+    selectedSlotMatchesText,
     "",
     "RETRIEVALS",
     "----------",
@@ -3663,1054 +4738,132 @@ export function getAiProgressValue(
   return isAiLoading ? 14 : 100;
 }
 
-============================================================================================
-COMPLETE SOURCE — lib/procedural-search.ts
-============================================================================================
-// lib/procedural-search.ts
-import { db } from "@/lib/db";
-import {
-  buildSingularizedPhrase,
-  cleanQuery,
-  deriveExactCitationCompact,
-  deriveExactSectionKey,
-} from "@/lib/search-core";
 
-export type ProceduralSearchParams = {
-  q: string;
-  corpus?: string | null;
-  limit?: number;
-  offset?: number;
-  includeDebug?: boolean;
-};
-
-export type ProceduralSearchResult = {
-  sectionId: string;
-  sectionKey: string;
-  citationLabel: string;
-  heading: string | null;
-  path: string[];
-  pathText: string;
-  documentSlug: string;
-  documentTitle: string;
-  documentCorpus: string;
-  sourceUrl: string | null;
-  sourceAnchor: string | null;
-  rank: number;
-  sectionRank: number;
-  pathRank: number;
-  bodyRank: number;
-  chunkRank: number | null;
-  clusterSupportCount: number;
-  sectionContent: string;
-  matchSignals: {
-    exactSectionKeyMatch: boolean;
-    exactCitationMatch: boolean;
-    exactHeadingMatch: boolean;
-    headingPhraseMatch: boolean;
-    bodyPhraseMatch: boolean;
-    pathPhraseMatch: boolean;
-  };
-};
-
-export type ProceduralSearchDebug = {
-  tsQuery: string;
-  phraseQuery: string;
-  singularPhrase: string | null;
-  singularPhraseQuery: string | null;
-  queryLower: string;
-  exactSectionKey: string | null;
-  exactCitationCompact: string | null;
-  offset: number;
-  total: number;
-};
-
-export type ProceduralSearchResponse = {
-  query: string;
-  corpus: string | null;
-  limit: number;
-  offset: number;
-  total: number;
-  hasMore: boolean;
-  results: ProceduralSearchResult[];
-  debug?: ProceduralSearchDebug;
-};
-
-export async function searchProceduralAuthorities(
-  params: ProceduralSearchParams,
-): Promise<ProceduralSearchResponse> {
-  const normalizedQuery = cleanQuery(params.q);
-  const corpus = params.corpus ?? null;
-  const limit = Math.max(1, Math.min(params.limit ?? 8, 50));
-  const offset = Math.max(0, params.offset ?? 0);
-  const singularizedPhrase = buildSingularizedPhrase(normalizedQuery);
-  const exactSectionKey = deriveExactSectionKey(normalizedQuery);
-  const exactCitationCompact = deriveExactCitationCompact(normalizedQuery);
-
-  const tsQueryResult = await db.query<{
-    ts_query: string;
-    phrase_query: string;
-    singular_phrase_query: string | null;
-  }>(
-    `
-    select
-      websearch_to_tsquery('english', $1)::text as ts_query,
-      phraseto_tsquery('english', $1)::text as phrase_query,
-      case
-        when $2::text is not null and btrim($2::text) <> ''
-        then phraseto_tsquery('english', $2)::text
-        else null
-      end as singular_phrase_query
-    `,
-    [normalizedQuery, singularizedPhrase],
-  );
-
-  const tsQuery = tsQueryResult.rows[0]?.ts_query ?? "";
-  const phraseQuery = tsQueryResult.rows[0]?.phrase_query ?? "";
-  const singularPhraseQuery =
-    tsQueryResult.rows[0]?.singular_phrase_query ?? null;
-
-  const result = await db.query<{
-    section_id: string;
-    section_key: string;
-    citation_label: string;
-    heading: string | null;
-    section_content: string;
-    path: string[];
-    path_text: string;
-    document_slug: string;
-    document_title: string;
-    document_corpus: string;
-    source_url: string | null;
-    source_anchor: string | null;
-    section_rank: number;
-    heading_phrase_rank: number;
-    body_phrase_rank: number;
-    path_phrase_rank: number;
-    chunk_rank: number | null;
-    chunk_phrase_rank: number | null;
-    cluster_support_count: number;
-    overall_rank: number;
-    total_count: number;
-    exact_section_key_match: boolean;
-    exact_citation_match: boolean;
-    exact_heading_match: boolean;
-    heading_phrase_match: boolean;
-    body_phrase_match: boolean;
-    path_phrase_match: boolean;
-  }>(
-    `
-    with input as (
-      select
-        websearch_to_tsquery('english', $1) as ts_query,
-        phraseto_tsquery('english', $1) as phrase_ts_query,
-        case
-          when $2::text is not null and btrim($2::text) <> ''
-          then phraseto_tsquery('english', $2)
-          else null
-        end as singular_phrase_ts_query,
-        $3::text as corpus_filter,
-        $4::int as result_limit,
-        $5::int as result_offset,
-        $6::text as exact_section_key,
-        $7::text as exact_citation_compact,
-        lower(trim($1)) as query_lower,
-        cardinality(regexp_split_to_array(lower(trim($1)), E'\\s+')) as query_word_count
-    ),
-
-    section_candidates as (
-      select
-        s.id as section_id,
-        s.section_key,
-        s.citation_label,
-        s.heading,
-        s.content as section_content,
-        s.path,
-        array_to_string(s.path, ' > ') as path_text,
-        d.slug as document_slug,
-        d.title as document_title,
-        d.corpus as document_corpus,
-        s.source_url,
-        s.source_anchor,
-
-        case
-          when array_length(s.path, 1) is null then d.slug
-          when array_length(s.path, 1) <= 3 then array_to_string(s.path, ' > ')
-          else array_to_string(s.path[1:(array_length(s.path, 1) - 2)], ' > ')
-        end as cluster_key,
-
-        case
-          when i.ts_query::text <> '' then ts_rank_cd(s.search_tsv, i.ts_query)
-          else 0
-        end as section_rank,
-
-        case
-          when i.phrase_ts_query::text <> ''
-            and s.heading is not null
-            and to_tsvector('english', s.heading) @@ i.phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', s.heading), i.phrase_ts_query)
-          else 0
-        end as heading_phrase_rank_primary,
-
-        case
-          when i.singular_phrase_ts_query is not null
-            and s.heading is not null
-            and to_tsvector('english', s.heading) @@ i.singular_phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', s.heading), i.singular_phrase_ts_query)
-          else 0
-        end as heading_phrase_rank_singular,
-
-        case
-          when i.phrase_ts_query::text <> ''
-            and to_tsvector('english', s.content) @@ i.phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', s.content), i.phrase_ts_query)
-          else 0
-        end as body_phrase_rank_primary,
-
-        case
-          when i.singular_phrase_ts_query is not null
-            and to_tsvector('english', s.content) @@ i.singular_phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', s.content), i.singular_phrase_ts_query)
-          else 0
-        end as body_phrase_rank_singular,
-
-        case
-          when i.phrase_ts_query::text <> ''
-            and to_tsvector('english', array_to_string(s.path, ' ')) @@ i.phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', array_to_string(s.path, ' ')), i.phrase_ts_query)
-          else 0
-        end as path_phrase_rank_primary,
-
-        case
-          when i.singular_phrase_ts_query is not null
-            and to_tsvector('english', array_to_string(s.path, ' ')) @@ i.singular_phrase_ts_query
-          then ts_rank_cd(to_tsvector('english', array_to_string(s.path, ' ')), i.singular_phrase_ts_query)
-          else 0
-        end as path_phrase_rank_singular,
-
-        case
-          when i.exact_section_key is not null
-            and lower(s.section_key) = i.exact_section_key
-          then true else false
-        end as exact_section_key_match,
-
-        case
-          when i.exact_citation_compact is not null
-            and lower(regexp_replace(s.citation_label, '\\s+', '', 'g')) = i.exact_citation_compact
-          then true else false
-        end as exact_citation_match,
-
-        case
-          when i.query_lower <> ''
-            and lower(coalesce(s.heading, '')) = i.query_lower
-          then true else false
-        end as exact_heading_match,
-
-        case
-          when i.query_lower <> ''
-            and lower(coalesce(s.heading, '')) like '%' || i.query_lower || '%'
-          then true else false
-        end as heading_phrase_match,
-
-        case
-          when i.query_lower <> ''
-            and i.query_word_count = 1
-            and lower(s.content) like '%' || i.query_lower || '%'
-          then true else false
-        end as body_phrase_match,
-
-        case
-          when i.query_lower <> ''
-            and lower(array_to_string(s.path, ' > ')) like '%' || i.query_lower || '%'
-          then true else false
-        end as path_phrase_match
-
-      from sections s
-      join documents d on d.id = s.document_id
-      cross join input i
-      where (
-        (i.ts_query::text <> '' and s.search_tsv @@ i.ts_query)
-        or (
-          i.exact_section_key is not null
-          and lower(s.section_key) = i.exact_section_key
-        )
-        or (
-          i.exact_citation_compact is not null
-          and lower(regexp_replace(s.citation_label, '\\s+', '', 'g')) = i.exact_citation_compact
-        )
-        or (
-          i.query_lower <> ''
-          and lower(coalesce(s.heading, '')) = i.query_lower
-        )
-        or (
-          i.query_lower <> ''
-          and lower(coalesce(s.heading, '')) like '%' || i.query_lower || '%'
-        )
-        or (
-          i.query_word_count = 1
-          and i.query_lower <> ''
-          and lower(s.content) like '%' || i.query_lower || '%'
-        )
-        or (
-          i.query_lower <> ''
-          and lower(array_to_string(s.path, ' > ')) like '%' || i.query_lower || '%'
-        )
-      )
-      and (i.corpus_filter is null or d.corpus = i.corpus_filter)
-    ),
-
-    section_scored as (
-      select
-        sc.section_id,
-        sc.section_key,
-        sc.citation_label,
-        sc.heading,
-        sc.section_content,
-        sc.path,
-        sc.path_text,
-        sc.document_slug,
-        sc.document_title,
-        sc.document_corpus,
-        sc.source_url,
-        sc.source_anchor,
-        sc.cluster_key,
-        sc.section_rank,
-        greatest(sc.heading_phrase_rank_primary, sc.heading_phrase_rank_singular) as heading_phrase_rank,
-        greatest(sc.body_phrase_rank_primary, sc.body_phrase_rank_singular) as body_phrase_rank,
-        greatest(sc.path_phrase_rank_primary, sc.path_phrase_rank_singular) as path_phrase_rank,
-        sc.exact_section_key_match,
-        sc.exact_citation_match,
-        sc.exact_heading_match,
-        sc.heading_phrase_match,
-        sc.body_phrase_match,
-        sc.path_phrase_match
-      from section_candidates sc
-    ),
-
-    section_clustered as (
-      select
-        ss.*,
-        count(*) filter (
-          where
-            ss.exact_heading_match
-            or ss.heading_phrase_match
-            or ss.heading_phrase_rank > 0
-            or ss.body_phrase_rank > 0
-            or ss.path_phrase_rank > 0
-            or ss.path_phrase_match
-        ) over (
-          partition by ss.document_slug, ss.cluster_key
-        ) as cluster_support_count
-      from section_scored ss
-    ),
-
-    ranked as (
-      select
-        sc.section_id,
-        sc.section_key,
-        sc.citation_label,
-        sc.heading,
-        sc.section_content,
-        sc.path,
-        sc.path_text,
-        sc.document_slug,
-        sc.document_title,
-        sc.document_corpus,
-        sc.source_url,
-        sc.source_anchor,
-        sc.section_rank,
-        sc.heading_phrase_rank,
-        sc.body_phrase_rank,
-        sc.path_phrase_rank,
-        sc.cluster_support_count,
-        bc.chunk_rank,
-        bc.chunk_phrase_rank,
-        sc.exact_section_key_match,
-        sc.exact_citation_match,
-        sc.exact_heading_match,
-        sc.heading_phrase_match,
-        sc.body_phrase_match,
-        sc.path_phrase_match,
-
-        (
-          case when sc.exact_section_key_match then 1200 else 0 end +
-          case when sc.exact_citation_match then 1100 else 0 end +
-          case when sc.exact_heading_match then 240 else 0 end +
-          case when sc.heading_phrase_match then 80 else 0 end +
-          case when sc.path_phrase_match then 70 else 0 end +
-          case when sc.body_phrase_match then 2 else 0 end +
-          (sc.heading_phrase_rank * 650) +
-          (sc.path_phrase_rank * 280) +
-          (sc.body_phrase_rank * 110) +
-          (coalesce(bc.chunk_phrase_rank, 0) * 70) +
-          (sc.section_rank * 55) +
-          (coalesce(bc.chunk_rank, 0) * 10) +
-          case
-            when sc.cluster_support_count >= 2
-            then least((sc.cluster_support_count - 1) * 45, 135)
-            else 0
-          end
-        ) as overall_rank
-
-      from section_clustered sc
-      cross join input i
-      left join lateral (
-        select
-          case
-            when i.ts_query::text <> '' then ts_rank_cd(c.search_tsv, i.ts_query)
-            else 0
-          end as chunk_rank,
-
-          greatest(
-            case
-              when i.phrase_ts_query::text <> ''
-                and c.search_tsv @@ i.phrase_ts_query
-              then ts_rank_cd(c.search_tsv, i.phrase_ts_query)
-              else 0
-            end,
-            case
-              when i.singular_phrase_ts_query is not null
-                and c.search_tsv @@ i.singular_phrase_ts_query
-              then ts_rank_cd(c.search_tsv, i.singular_phrase_ts_query)
-              else 0
-            end
-          ) as chunk_phrase_rank
-        from chunks c
-        where c.section_id = sc.section_id
-        order by
-          greatest(
-            case
-              when i.phrase_ts_query::text <> ''
-                and c.search_tsv @@ i.phrase_ts_query
-              then ts_rank_cd(c.search_tsv, i.phrase_ts_query)
-              else 0
-            end,
-            case
-              when i.singular_phrase_ts_query is not null
-                and c.search_tsv @@ i.singular_phrase_ts_query
-              then ts_rank_cd(c.search_tsv, i.singular_phrase_ts_query)
-              else 0
-            end
-          ) desc,
-          case
-            when i.ts_query::text <> '' then ts_rank_cd(c.search_tsv, i.ts_query)
-            else 0
-          end desc,
-          c.chunk_index asc
-        limit 1
-      ) bc on true
-    ),
-
-    counted as (
-      select
-        r.*,
-        count(*) over() as total_count
-      from ranked r
-    )
-
-    select
-      section_id,
-      section_key,
-      citation_label,
-      heading,
-      section_content,
-      path,
-      path_text,
-      document_slug,
-      document_title,
-      document_corpus,
-      source_url,
-      source_anchor,
-      section_rank,
-      heading_phrase_rank,
-      body_phrase_rank,
-      path_phrase_rank,
-      chunk_rank,
-      chunk_phrase_rank,
-      cluster_support_count,
-      overall_rank,
-      total_count,
-      exact_section_key_match,
-      exact_citation_match,
-      exact_heading_match,
-      heading_phrase_match,
-      body_phrase_match,
-      path_phrase_match
-    from counted
-    order by
-      overall_rank desc,
-      exact_heading_match desc,
-      heading_phrase_rank desc,
-      path_phrase_rank desc,
-      cluster_support_count desc,
-      body_phrase_rank desc,
-      section_rank desc,
-      coalesce(chunk_phrase_rank, 0) desc,
-      coalesce(chunk_rank, 0) desc,
-      citation_label asc
-    limit $4
-    offset $5
-    `,
-    [
-      normalizedQuery,
-      singularizedPhrase,
-      corpus,
-      limit,
-      offset,
-      exactSectionKey,
-      exactCitationCompact,
-    ],
-  );
-
-  const total = result.rows[0]?.total_count ?? 0;
-
-  return {
-    query: normalizedQuery,
-    corpus,
-    limit,
-    offset,
-    total,
-    hasMore: offset + result.rows.length < total,
-    results: result.rows.map((row) => ({
-      sectionId: row.section_id,
-      sectionKey: row.section_key,
-      citationLabel: row.citation_label,
-      heading: row.heading,
-      path: row.path,
-      pathText: row.path_text,
-      documentSlug: row.document_slug,
-      documentTitle: row.document_title,
-      documentCorpus: row.document_corpus,
-      sourceUrl: row.source_url,
-      sourceAnchor: row.source_anchor,
-      rank: Number(row.overall_rank),
-      sectionRank: Number(row.section_rank),
-      pathRank: Number(row.path_phrase_rank),
-      bodyRank: Number(row.body_phrase_rank),
-      chunkRank: row.chunk_rank !== null ? Number(row.chunk_rank) : null,
-      clusterSupportCount: Number(row.cluster_support_count ?? 0),
-      sectionContent: row.section_content,
-      matchSignals: {
-        exactSectionKeyMatch: row.exact_section_key_match,
-        exactCitationMatch: row.exact_citation_match,
-        exactHeadingMatch: row.exact_heading_match,
-        headingPhraseMatch:
-          row.heading_phrase_match || row.heading_phrase_rank > 0,
-        bodyPhraseMatch: row.body_phrase_match || row.body_phrase_rank > 0,
-        pathPhraseMatch: row.path_phrase_match || row.path_phrase_rank > 0,
-      },
-    })),
-    ...(params.includeDebug
-      ? {
-          debug: {
-            tsQuery,
-            phraseQuery,
-            singularPhrase: singularizedPhrase,
-            singularPhraseQuery,
-            queryLower: normalizedQuery.toLowerCase(),
-            exactSectionKey,
-            exactCitationCompact,
-            offset,
-            total,
-          },
-        }
-      : {}),
-  };
-}
-
-============================================================================================
-COMPLETE SOURCE — lib/ai/gemini.ts
-============================================================================================
-// lib/ai/gemini.ts
-import { GoogleGenAI } from "@google/genai";
-
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-
-const GEMINI_MAX_RETRIES = 2;
-const GEMINI_INITIAL_BACKOFF_MS = 700;
-const GEMINI_MAX_BACKOFF_MS = 2500;
-
-export type AiErrorKind =
-  | "configuration"
-  | "rate_limited"
-  | "unavailable"
-  | "upstream"
-  | "parse"
-  | "unknown";
-
-export class AiProviderError extends Error {
-  kind: AiErrorKind;
-  statusCode: number | null;
-  retryable: boolean;
-  provider: string;
-  rawMessage?: string;
-
-  constructor(params: {
-    message: string;
-    kind: AiErrorKind;
-    statusCode?: number | null;
-    retryable?: boolean;
-    provider?: string;
-    rawMessage?: string;
-  }) {
-    super(params.message);
-    this.name = "AiProviderError";
-    this.kind = params.kind;
-    this.statusCode = params.statusCode ?? null;
-    this.retryable = params.retryable ?? false;
-    this.provider = params.provider ?? "gemini";
-    this.rawMessage = params.rawMessage;
-  }
-}
-
-function getApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new AiProviderError({
-      message: "Missing GEMINI_API_KEY in server environment.",
-      kind: "configuration",
-      retryable: false,
-    });
-  }
-
-  return apiKey;
-}
-
-function getClient(): GoogleGenAI {
-  return new GoogleGenAI({ apiKey: getApiKey() });
-}
-
-function stripCodeFences(input: string): string {
-  return input
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
-
-function extractLikelyJson(input: string): string {
-  const cleaned = stripCodeFences(input);
-
-  const objectStart = cleaned.indexOf("{");
-  const objectEnd = cleaned.lastIndexOf("}");
-  if (objectStart >= 0 && objectEnd > objectStart) {
-    return cleaned.slice(objectStart, objectEnd + 1);
-  }
-
-  const arrayStart = cleaned.indexOf("[");
-  const arrayEnd = cleaned.lastIndexOf("]");
-  if (arrayStart >= 0 && arrayEnd > arrayStart) {
-    return cleaned.slice(arrayStart, arrayEnd + 1);
-  }
-
-  return cleaned;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function computeBackoffMs(attempt: number): number {
-  const base = Math.min(
-    GEMINI_INITIAL_BACKOFF_MS * Math.pow(2, attempt),
-    GEMINI_MAX_BACKOFF_MS,
-  );
-
-  const jitter = Math.floor(Math.random() * 250);
-  return base + jitter;
-}
-
-function safeJsonParse(input: string): unknown | null {
-  try {
-    return JSON.parse(input);
-  } catch {
-    return null;
-  }
-}
-
-function extractStatusCode(error: unknown): number | null {
-  if (!error || typeof error !== "object") return null;
-
-  const directStatus =
-    "status" in error && typeof error.status === "number" ? error.status : null;
-
-  if (directStatus) return directStatus;
-
-  const message =
-    "message" in error && typeof error.message === "string"
-      ? error.message
-      : "";
-
-  if (!message) return null;
-
-  const parsed = safeJsonParse(message);
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    parsed !== null &&
-    "error" in parsed &&
-    parsed.error &&
-    typeof parsed.error === "object" &&
-    "code" in parsed.error &&
-    typeof parsed.error.code === "number"
-  ) {
-    return parsed.error.code;
-  }
-
-  const codeMatch = message.match(/"code"\s*:\s*(\d{3})/);
-  if (codeMatch) {
-    return Number(codeMatch[1]);
-  }
-
-  return null;
-}
-
-function extractRawMessage(error: unknown): string {
-  if (error instanceof Error && typeof error.message === "string") {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-function isRetryableStatus(statusCode: number | null): boolean {
-  return (
-    statusCode === 429 ||
-    statusCode === 500 ||
-    statusCode === 502 ||
-    statusCode === 503 ||
-    statusCode === 504
-  );
-}
-
-function classifyError(error: unknown): AiProviderError {
-  if (error instanceof AiProviderError) {
-    return error;
-  }
-
-  const rawMessage = extractRawMessage(error);
-  const statusCode = extractStatusCode(error);
-
-  if (statusCode === 429) {
-    return new AiProviderError({
-      message: "The AI model is temporarily rate limited. Please try again.",
-      kind: "rate_limited",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
-  }
-
-  if (statusCode === 503) {
-    return new AiProviderError({
-      message:
-        "The AI model is temporarily unavailable due to high demand. Search still works, and you can retry in a moment.",
-      kind: "unavailable",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
-  }
-
-  if (statusCode !== null && isRetryableStatus(statusCode)) {
-    return new AiProviderError({
-      message:
-        "The AI provider is temporarily unavailable. Search still works, and you can retry in a moment.",
-      kind: "upstream",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
-  }
-
-  if (statusCode !== null) {
-    return new AiProviderError({
-      message:
-        statusCode === 404
-          ? `The configured Gemini model "${GEMINI_MODEL}" was not found or is not available to this API key.`
-          : `The AI provider returned an error${statusCode ? ` (${statusCode})` : ""}.`,
-      kind: "upstream",
-      statusCode,
-      retryable: false,
-      rawMessage,
-    });
-  }
-
-  if (
-    rawMessage.includes("Missing GEMINI_API_KEY") ||
-    rawMessage.includes("server environment")
-  ) {
-    return new AiProviderError({
-      message: "AI model configuration is missing on the server.",
-      kind: "configuration",
-      retryable: false,
-      rawMessage,
-    });
-  }
-
-  return new AiProviderError({
-    message: "An unexpected AI provider error occurred.",
-    kind: "unknown",
-    retryable: false,
-    rawMessage,
-  });
-}
-
-async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
-  let lastError: AiProviderError | null = null;
-
-  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      const classified = classifyError(error);
-      lastError = classified;
-
-      const shouldRetry = classified.retryable && attempt < GEMINI_MAX_RETRIES;
-
-      if (!shouldRetry) {
-        throw classified;
-      }
-
-      await sleep(computeBackoffMs(attempt));
-    }
-  }
-
-  throw (
-    lastError ??
-    new AiProviderError({
-      message: "The AI provider failed after retries.",
-      kind: "unknown",
-      retryable: false,
-    })
-  );
-}
-
-export async function generateJson<T>({
-  systemInstruction,
-  prompt,
-  temperature = 0.2,
-}: {
-  systemInstruction: string;
-  prompt: string;
-  temperature?: number;
-}): Promise<T> {
-  return withRetry(async () => {
-    const gemini = getClient();
-
-    const response = await gemini.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature,
-        responseMimeType: "application/json",
-      },
-    });
-
-    const text = response.text ?? "";
-    const jsonText = extractLikelyJson(text);
-
-    try {
-      return JSON.parse(jsonText) as T;
-    } catch (error) {
-      throw new AiProviderError({
-        message: "Failed to parse AI JSON response.",
-        kind: "parse",
-        retryable: false,
-        rawMessage: `Raw response:\n${text}\n\nParsed candidate:\n${jsonText}\n\nError: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      });
-    }
-  });
-}
-
-export async function streamText({
-  systemInstruction,
-  prompt,
-  temperature = 0.2,
-  onChunk,
-}: {
-  systemInstruction: string;
-  prompt: string;
-  temperature?: number;
-  onChunk?: (text: string) => void;
-}): Promise<string> {
-  return withRetry(async () => {
-    const gemini = getClient();
-
-    const response = await gemini.models.generateContentStream({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature,
-      },
-    });
-
-    let fullText = "";
-
-    for await (const chunk of response) {
-      const text = chunk.text ?? "";
-      if (!text) continue;
-
-      fullText += text;
-      onChunk?.(text);
-    }
-
-    return fullText;
-  });
-}
-
-============================================================================================
-COMPLETE CONFIG — package.json
-============================================================================================
-{
-  "name": "open-order",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Open Order — evidence-first procedural retrieval for New Zealand parliamentary material.",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint",
-    "db:check": "node --env-file=.env.local --import tsx scripts/db-check.ts",
-    "db:apply": "node --env-file=.env.local --import tsx scripts/apply-sql.ts",
-    "db:inspect": "node --env-file=.env.local --import tsx scripts/db-inspect.ts",
-    "db:seed-documents": "node --env-file=.env.local --import tsx scripts/seed-documents.ts",
-    "db:list-documents": "node --env-file=.env.local --import tsx scripts/list-documents.ts",
-    "db:ingest-speakers-rulings": "node --env-file=.env.local --import tsx scripts/ingest-speakers-rulings.ts",
-    "db:count-sections": "node --env-file=.env.local --import tsx scripts/count-sections.ts",
-    "db:sample-sections": "node --env-file=.env.local --import tsx scripts/sample-sections.ts",
-    "db:heading-stats": "node --env-file=.env.local --import tsx scripts/heading-stats.ts",
-    "db:chapter-stats": "node --env-file=.env.local --import tsx scripts/chapter-stats.ts",
-    "db:null-heading-samples": "node --env-file=.env.local --import tsx scripts/null-heading-samples.ts",
-    "db:tail-sections": "node --env-file=.env.local --import tsx scripts/tail-sections.ts",
-    "db:ingest-speakers-rulings-html": "node --env-file=.env.local --import tsx scripts/ingest-speakers-rulings-html.ts",
-    "db:ingest-standing-orders-html": "node --env-file=.env.local --import tsx scripts/ingest-standing-orders-html.ts",
-    "db:chunk-sections": "node --env-file=.env.local --import tsx scripts/chunk-sections.ts",
-    "db:count-chunks": "node --env-file=.env.local --import tsx scripts/count-chunks.ts"
-  },
-  "dependencies": {
-    "@google/genai": "^1.48.0",
-    "cheerio": "^1.2.0",
-    "dotenv": "^17.4.1",
-    "next": "^16.2.2",
-    "pdf-parse": "^2.4.5",
-    "pg": "^8.12.0",
-    "playwright": "^1.59.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.2",
-    "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "autoprefixer": "^10.4.27",
-    "eslint": "^9.14.0",
-    "eslint-config-next": "^16.2.2",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
-  }
-}
-
-============================================================================================
-COMPLETE CONFIG — tsconfig.json
-============================================================================================
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "es2022"
-    ],
-    "allowJs": false,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    }
-  },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
-}
-
-============================================================================================
-COMPLETE CONFIG — eslint.config.mjs
-============================================================================================
-import nextVitals from 'eslint-config-next/core-web-vitals'
-
-const eslintConfig = [...nextVitals]
-
-export default eslintConfig
-
-============================================================================================
-COMPLETE CONFIG — next.config.mjs
-============================================================================================
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true
-}
-
-export default nextConfig
-
-============================================================================================
-IMPORT GRAPH — procedural reasoning
-============================================================================================
-exit=0
-app/api/ai/answer/route.ts:28:} from "@/lib/procedural-reasoning";
+================================================================================================
+RG — buildAuthorityProfile|isClosure|isAcceptance|isEffect|accountability
+================================================================================================
 lib/ai/prompts.ts:3:import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
-lib/concept-registry.ts:5:} from "@/lib/procedural-reasoning";
+lib/ai/prompts.ts:50:  - "accountability to the House"
+lib/ai/prompts.ts:62:- When the issue concerns Ministers avoiding direct accountability in replies:
+lib/ai/prompts.ts:63:  - prefer queries like "accountability to the House", "point of order", and only use "relevancy" if the context is debate rather than replies
+lib/ai/prompts.ts:268:                const authorityProfile = buildAuthorityProfile(result);
+lib/concept-registry.ts:16:  | "ministerial_accountability"
+lib/concept-registry.ts:267:    id: "ministerial_accountability",
+lib/concept-registry.ts:273:      "accountability to the house",
+lib/concept-registry.ts:277:    plannerTriggers: ["accountability to the house", "form of reply"],
+lib/concept-registry.ts:278:    preferredQueries: ["accountability to the House", "form of reply", "point of order"],
+lib/concept-registry.ts:282:        key: "ministerial_accountability_rule",
+lib/concept-registry.ts:284:        headings: ["accountability to the house"],
+app/api/ai/answer/route.ts:18:  buildAuthorityProfile,
+app/api/ai/answer/route.ts:383:              authorityFunction: buildAuthorityProfile(item.result).authorityFunction,
+lib/procedural-reasoning.ts:75:  isClosure: boolean;
+lib/procedural-reasoning.ts:76:  isAcceptance: boolean;
+lib/procedural-reasoning.ts:77:  isEffect: boolean;
+lib/procedural-reasoning.ts:286:    q.includes("accountability to the house") ||
+lib/procedural-reasoning.ts:291:    const accountability = getConceptById("ministerial_accountability");
+lib/procedural-reasoning.ts:292:    if (accountability) matched.set(accountability.id, accountability);
+lib/procedural-reasoning.ts:327:    ministerialAccountability: ids.has("ministerial_accountability"),
+lib/procedural-reasoning.ts:454:    additions.push("accountability to the House", "form of reply");
+lib/procedural-reasoning.ts:497:export function buildAuthorityProfile(
+lib/procedural-reasoning.ts:516:  const isClosure =
+lib/procedural-reasoning.ts:518:  const isAcceptance =
+lib/procedural-reasoning.ts:521:  const isEffect =
+lib/procedural-reasoning.ts:534:    isClosure
+lib/procedural-reasoning.ts:538:    isAcceptance ||
+lib/procedural-reasoning.ts:539:    isEffect ||
+lib/procedural-reasoning.ts:584:  } else if (isEffect) {
+lib/procedural-reasoning.ts:587:    isAcceptance ||
+lib/procedural-reasoning.ts:614:    isClosure,
+lib/procedural-reasoning.ts:615:    isAcceptance,
+lib/procedural-reasoning.ts:616:    isEffect,
+lib/procedural-reasoning.ts:647:  const profile = buildAuthorityProfile(result);
+lib/procedural-reasoning.ts:656:  const profile = buildAuthorityProfile(result);
+lib/procedural-reasoning.ts:722:  const profile = buildAuthorityProfile(input.result);
+lib/procedural-reasoning.ts:756:    if (profile.heading === "accountability to the house") boost += 170;
+lib/procedural-reasoning.ts:773:  if (query.includes("closure motion") && profile.isClosure) boost += 100;
+lib/procedural-reasoning.ts:2166:            const profile = buildAuthorityProfile(authority);
 
-============================================================================================
-IMPORT GRAPH — concept registry
-============================================================================================
-exit=0
-lib/procedural-reasoning.ts:9:} from "./concept-registry";
+================================================================================================
+RG — DYNAMIC_DISCOVERY_STOP|CORPUS_BRIDGE_STOP|strongestHeadingEvidence
+================================================================================================
+lib/procedural-reasoning.ts:793:const DYNAMIC_DISCOVERY_STOP_QUERIES = new Set([
+lib/procedural-reasoning.ts:805:const CORPUS_BRIDGE_STOP_HEADINGS = new Set([
+lib/procedural-reasoning.ts:806:  ...DYNAMIC_DISCOVERY_STOP_QUERIES,
+lib/procedural-reasoning.ts:863:      if (CORPUS_BRIDGE_STOP_HEADINGS.has(normalizedHeading)) return false;
+lib/procedural-reasoning.ts:889:function strongestHeadingEvidence(
+lib/procedural-reasoning.ts:973:    if (DYNAMIC_DISCOVERY_STOP_QUERIES.has(normalizedQuery)) {
+lib/procedural-reasoning.ts:989:    const evidence = strongestHeadingEvidence(search.results);
 
-============================================================================================
-IMPORT GRAPH — Open Order diagnostic types / formatter
-============================================================================================
-exit=0
-lib/open-order/types.ts:1:// lib/open-order/types.ts
+================================================================================================
+RG — promotedByHeadingCluster|promotedByExactHeading|discoveredSlots
+================================================================================================
+lib/procedural-reasoning.ts:1006:    const promotedByExactHeading =
+lib/procedural-reasoning.ts:1009:    const promotedByHeadingCluster =
+lib/procedural-reasoning.ts:1025:        : promotedByExactHeading || promotedByHeadingCluster;
+lib/procedural-reasoning.ts:1263:  discoveredSlots: AuthoritySlotSpec[] = [],
+lib/procedural-reasoning.ts:1279:  for (const slot of discoveredSlots) {
+lib/procedural-reasoning.ts:1544:  const discoveredSlots = buildDiscoveredSlots(
+lib/procedural-reasoning.ts:1548:  const slots = buildBlueprintSlots(frame.activeConcepts, discoveredSlots);
+
+================================================================================================
+RG — requirement:|requiredSlots|optionalSlots|buildDiscoveredSlots
+================================================================================================
+lib/open-order/format.ts:397:  const requiredSlotsText =
+lib/open-order/format.ts:398:    input.requiredSlots.length > 0
+lib/open-order/format.ts:399:      ? input.requiredSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+lib/open-order/format.ts:402:  const optionalSlotsText =
+lib/open-order/format.ts:403:    input.optionalSlots.length > 0
+lib/open-order/format.ts:404:      ? input.optionalSlots.map((slot, i) => `${i + 1}. ${slot}`).join("\n")
+lib/open-order/format.ts:578:    requiredSlotsText,
+lib/open-order/format.ts:581:    optionalSlotsText,
+lib/open-order/types.ts:153:  requiredSlots?: string[];
+lib/open-order/types.ts:154:  optionalSlots?: string[];
+lib/open-order/types.ts:177:  requiredSlots: string[];
+lib/open-order/types.ts:178:  optionalSlots: string[];
+lib/open-order/types.ts:201:  requiredSlots: [],
+lib/open-order/types.ts:202:  optionalSlots: [],
+app/api/ai/answer/route.ts:331:            requiredSlots: selected.requiredSlots,
+app/api/ai/answer/route.ts:332:            optionalSlots: selected.optionalSlots,
+lib/concept-registry.ts:74:        requirement: "required",
+lib/concept-registry.ts:83:        requirement: "optional",
+lib/concept-registry.ts:101:        requirement: "optional",
+lib/concept-registry.ts:143:        requirement: "required",
+lib/concept-registry.ts:153:        requirement: "optional",
+lib/concept-registry.ts:173:        requirement: "required",
+lib/concept-registry.ts:191:        requirement: "required",
+lib/concept-registry.ts:208:        requirement: "required",
+lib/concept-registry.ts:225:        requirement: "required",
+lib/concept-registry.ts:246:        requirement: "required",
+lib/concept-registry.ts:256:        requirement: "optional",
+lib/concept-registry.ts:283:        requirement: "required",
+lib/concept-registry.ts:292:        requirement: "optional",
+lib/concept-registry.ts:321:        requirement: "required",
+lib/procedural-reasoning.ts:1202:function buildDiscoveredSlots(
+lib/procedural-reasoning.ts:1249:      requirement: "required",
+lib/procedural-reasoning.ts:1531:  requiredSlots: string[];
+lib/procedural-reasoning.ts:1532:  optionalSlots: string[];
+lib/procedural-reasoning.ts:1544:  const discoveredSlots = buildDiscoveredSlots(
+lib/procedural-reasoning.ts:1619:  const requiredSlots = slots
+lib/procedural-reasoning.ts:1622:  const optionalSlots = slots
+lib/procedural-reasoning.ts:1692:  const missingRequiredSlots = requiredSlots.filter(
+lib/procedural-reasoning.ts:1704:    requiredSlots,
+lib/procedural-reasoning.ts:1705:    optionalSlots,
+
+================================================================================================
+RG — looksLikeEmbeddedAuthorityReference|isCitationAllowed|validateAnswerCitations
+================================================================================================
+lib/procedural-reasoning.ts:1801:function looksLikeEmbeddedAuthorityReference(citation: string): boolean {
+lib/procedural-reasoning.ts:1813:function isCitationAllowed(cited: string, allowedLabels: Set<string>): boolean {
+lib/procedural-reasoning.ts:1903:export function validateAnswerCitations(input: {
+lib/procedural-reasoning.ts:1920:          !isCitationAllowed(citation, allowedLabels) ||
+lib/procedural-reasoning.ts:1921:          looksLikeEmbeddedAuthorityReference(citation),
+lib/procedural-reasoning.ts:1961:  return citations.every((citation) => isCitationAllowed(citation, allowedLabels));
+app/api/ai/answer/route.ts:34:  validateAnswerCitations,
+app/api/ai/answer/route.ts:535:            const citationValidation = validateAnswerCitations({
+app/api/ai/answer/route.ts:610:              const recheckCitations = validateAnswerCitations({
+app/api/ai/answer/route.ts:742:            const finalCitationValidation = validateAnswerCitations({
+
+================================================================================================
+DIFF — TARGETS
+================================================================================================
+(none)

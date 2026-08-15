@@ -23,6 +23,7 @@ import {
   describeMissingAuthoritySlots,
   extractAnswerClaims,
   inferConcepts,
+  normalizeAnswerCitationLabels,
   normalizeAnswerFormatting,
   pruneUnsupportedAnswerClaims,
   removeEmptyAnswerSections,
@@ -443,7 +444,12 @@ export async function POST(request: NextRequest) {
               temperature: 0.2,
             });
 
-            let finalAnswer = normalizeAnswerFormatting(draftedAnswer);
+            let finalAnswer = normalizeAnswerFormatting(
+              normalizeAnswerCitationLabels({
+                answerText: draftedAnswer,
+                authorities: authorityPayload,
+              }),
+            );
             let rewriteNote: string | null = null;
             let pruneNote: string | null = null;
             let claimValidationNote: string | null = null;
