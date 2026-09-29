@@ -121,7 +121,7 @@ Open Order can:
 - **TypeScript** — end-to-end typing  
 - **PostgreSQL (Neon)** — document storage and full-text search  
 - **tsvector / GIN indexes** — ranked lexical retrieval  
-- **LLM (Gemini)** — planning and answer generation  
+- **Provider-routed LLM layer** — task-based planning and answer generation via Gemini or configurable OpenAI-compatible endpoints
 - **Custom reasoning layer** — concept inference, authority classification, selection logic  
 
 ---

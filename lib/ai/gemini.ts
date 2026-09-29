@@ -1,5 +1,6 @@
 // lib/ai/gemini.ts
 import { GoogleGenAI } from "@google/genai";
+import { AiProviderError } from "./errors";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
@@ -7,38 +8,8 @@ const GEMINI_MAX_RETRIES = 2;
 const GEMINI_INITIAL_BACKOFF_MS = 700;
 const GEMINI_MAX_BACKOFF_MS = 2500;
 
-export type AiErrorKind =
-  | "configuration"
-  | "rate_limited"
-  | "unavailable"
-  | "upstream"
-  | "parse"
-  | "unknown";
-
-export class AiProviderError extends Error {
-  kind: AiErrorKind;
-  statusCode: number | null;
-  retryable: boolean;
-  provider: string;
-  rawMessage?: string;
-
-  constructor(params: {
-    message: string;
-    kind: AiErrorKind;
-    statusCode?: number | null;
-    retryable?: boolean;
-    provider?: string;
-    rawMessage?: string;
-  }) {
-    super(params.message);
-    this.name = "AiProviderError";
-    this.kind = params.kind;
-    this.statusCode = params.statusCode ?? null;
-    this.retryable = params.retryable ?? false;
-    this.provider = params.provider ?? "gemini";
-    this.rawMessage = params.rawMessage;
-  }
-}
+export { AiProviderError } from "./errors";
+export type { AiErrorKind } from "./errors";
 
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -56,6 +27,10 @@ function getApiKey(): string {
 
 function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: getApiKey() });
+}
+
+export function isGeminiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY);
 }
 
 function stripCodeFences(input: string): string {

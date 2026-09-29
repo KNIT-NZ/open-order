@@ -1,7 +1,7 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { generateJson, streamText } from "@/lib/ai/gemini";
+import { generateJson, streamText } from "@/lib/ai";
 import {
   ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
   ANSWER_STREAM_SYSTEM_PROMPT,
@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
           });
 
           const rawPlan = await generateJson<unknown>({
+            task: "query.plan",
             systemInstruction: SEARCH_PLANNER_SYSTEM_PROMPT,
             prompt: buildSearchPlannerPrompt({
               question,
@@ -426,6 +427,7 @@ export async function POST(request: NextRequest) {
 
           try {
             const draftedAnswer = await streamText({
+              task: "answer.generate",
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
                 question,
@@ -697,6 +699,7 @@ export async function POST(request: NextRequest) {
             }
 
             const rawClaimValidation = await generateJson<unknown>({
+                task: "answer.validate",
               systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
               prompt: buildAnswerClaimValidationPrompt({
                 claims: answerClaims,
