@@ -93,3 +93,44 @@ mark {
   padding: 0 0.1rem;
   border-radius: 0.2rem;
 }
+
+/* OPEN ORDER v5.19 — global rules moved from openOrder.module.css; keep in global stylesheet. */
+html,
+body {
+  min-height: 100%;
+}
+
+:root {
+  --oo-bg: #f5f7fb;
+  --oo-panel: #ffffff;
+  --oo-panel-muted: #f7f8fc;
+  --oo-border: #d8dde8;
+  --oo-border-strong: #b8c0d2;
+  --oo-text: #101522;
+  --oo-text-soft: #53607a;
+  --oo-accent: #06a18f;
+  --oo-accent-soft: #e7eefc;
+  --oo-shadow: 0 12px 30px rgba(16, 21, 34, 0.08);
+  --oo-highlight: rgba(16, 42, 86, 0.08);
+  --oo-green: #0d7c5d;
+}
+
+html[data-theme="dark"] {
+  --oo-bg: #0d1119;
+  --oo-panel: #141b27;
+  --oo-panel-muted: #101722;
+  --oo-border: #253043;
+  --oo-border-strong: #36445d;
+  --oo-text: #edf2fb;
+  --oo-text-soft: #a8b4ca;
+  --oo-accent: #06a18f;
+  --oo-accent-soft: rgba(184, 205, 248, 0.12);
+  --oo-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+  --oo-highlight: rgba(184, 205, 248, 0.08);
+  --oo-green: #6ce1b7;
+}
+
+body {
+  background: var(--oo-bg);
+  color: var(--oo-text);
+}

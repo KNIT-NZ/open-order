@@ -30,6 +30,7 @@ import {
   pruneValidatedAnswerContent,
   rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
+  selectV517ProductionAuthorities,
   type SearchExecution,
   validateAnswerAuthorityMentions,
   validateAnswerCitations,
@@ -51,7 +52,10 @@ const searchPlanSchema = z.object({
     "clarification",
   ]),
   preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
-  searchQueries: z.array(z.string().min(1)).min(1).max(3),
+  searchQueries: z
+    .array(z.string().min(1))
+    .min(1)
+    .transform((queries) => queries.slice(0, 3)),
   salientTerms: z.array(z.string().min(1)).max(4).default([]),
   notes: z.string(),
 });
@@ -135,7 +139,9 @@ export async function POST(request: NextRequest) {
           });
 
           const plan = searchPlanSchema.parse(rawPlan);
-          const effectiveCorpus = corpus ?? plan.preferredCorpus ?? null;
+          // Only an explicit user corpus request may hard-filter retrieval.
+          // The planner's preferredCorpus remains advisory metadata in the plan.
+          const effectiveCorpus = corpus ?? null;
           const inferredConcepts = inferConcepts(question, plan.searchQueries);
 
           send("plan", plan);
@@ -294,6 +300,19 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // v5.18 is authoritative for the final evidence pack. The existing
+          // concept/slot selector remains in place for bridge/recovery planning
+          // and diagnostics, but it no longer determines the answer authority set.
+          const v517Selection = await selectV517ProductionAuthorities({
+            searches,
+            question,
+            searchProceduralAuthorities,
+          });
+          selected = {
+            ...selected,
+            finalAuthorities: v517Selection.finalAuthorities,
+          };
+
           const evidenceGaps = describeMissingAuthoritySlots({
             question,
             plannerQueries: plan.searchQueries,
@@ -431,7 +450,9 @@ export async function POST(request: NextRequest) {
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
                 question,
-                corpus: finalAuthorityCorpus ?? effectiveCorpus,
+                // This field is labelled "Requested corpus filter" in the prompt.
+                // Do not misreport the final authority corpus as a user constraint.
+                corpus,
                 intent: plan.intent,
                 evidenceGaps: evidenceGaps.map((gap) => gap.description),
                 searches: [

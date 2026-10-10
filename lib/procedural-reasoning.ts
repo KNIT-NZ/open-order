@@ -7,6 +7,11 @@ import {
   type AuthoritySlotSpec,
   type ProceduralConcept,
 } from "./concept-registry";
+import {
+  selectV517AuthorityPack,
+  type V517SearchFunction,
+  type V517SelectionResult,
+} from "./v5-17-semantic-selector.js";
 
 export type QueryProvenance =
   | "planner"
@@ -750,7 +755,13 @@ function scoreContextualAuthority(input: {
 
   if (input.frame.relevancy) {
     if (profile.isRelevancy) boost += 130;
-    if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 100;
+
+    if (input.frame.committeeOfWhole) {
+      if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 100;
+    } else {
+      if (profile.isRulesOfDebate) boost += 180;
+      if (profile.isCommitteeStage) boost -= 220;
+    }
   }
 
   if (input.frame.ministerialAccountability) {
@@ -1633,9 +1644,11 @@ export function selectFinalAuthorities(input: {
     concepts: frame.activeConcepts,
   });
   const staticSlots = buildBlueprintSlots(frame.activeConcepts);
-  const discoveredRequirement = staticSlots.some(isRequiredSlot)
-    ? "optional"
-    : "required";
+  // Dynamic discovery is authoritative only for genuinely discovery-only topics.
+  // When a known static concept already supplies a blueprint, discovered dimensions
+  // may supplement it but must not become required and displace the static slots.
+  const discoveredRequirement =
+    staticSlots.length > 0 ? "optional" : "required";
   const discoveredSlots = buildDiscoveredSlots(
     discoveredDimensions,
     input.searches,
@@ -1719,8 +1732,22 @@ export function selectFinalAuthorities(input: {
     .filter((slot) => !isRequiredSlot(slot))
     .map((slot) => slot.key);
 
+  const staticPackBudget = frame.activeConcepts.reduce((total, concept) => {
+    const contributesStaticSlot = concept.slots.some((conceptSlot) =>
+      staticSlots.some((staticSlot) => staticSlot.key === conceptSlot.key),
+    );
+
+    if (!contributesStaticSlot) return total;
+
+    return total + (concept.defaultPackContribution ?? concept.slots.length);
+  }, 0);
+
   const defaultMaxAuthorities =
-    slots.length > 0 ? Math.max(1, Math.min(slots.length, 8)) : 4;
+    staticSlots.length > 0
+      ? Math.max(1, Math.min(staticPackBudget || staticSlots.length, 8))
+      : slots.length > 0
+        ? Math.max(1, Math.min(slots.length, 8))
+        : 4;
 
   const computedMaxAuthorities = Math.min(
     10,
@@ -1805,6 +1832,21 @@ export function selectFinalAuthorities(input: {
     selectedSlotMatches,
     discoveredDimensions,
   };
+}
+
+
+export async function selectV517ProductionAuthorities(input: {
+  searches: SearchExecution[];
+  question: string;
+  searchProceduralAuthorities: V517SearchFunction;
+  maxAuthorities?: number;
+}): Promise<V517SelectionResult> {
+  return selectV517AuthorityPack({
+    question: input.question,
+    searches: input.searches,
+    searchProceduralAuthorities: input.searchProceduralAuthorities,
+    maxAuthorities: input.maxAuthorities,
+  });
 }
 
 function normalizeCandidateCitationLabel(citation: string): string {

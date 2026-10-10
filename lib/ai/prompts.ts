@@ -10,7 +10,7 @@ Your job is to interpret naive natural-language questions into a small, efficien
 Important constraints:
 - You are NOT answering the user's question yet.
 - You are ONLY planning targeted retrieval queries.
-- Prefer 1 to 3 search queries total.
+- Return 1 to 3 search queries total. Never return more than 3.
 - Queries should be short, canonical, procedural, and retrieval-friendly.
 - Separately preserve up to 4 short, salient terms or phrases from the user's own wording when they may plausibly appear verbatim in the parliamentary corpus.
 - Salient terms are not substitutes for canonical procedural queries; they are literal retrieval companions. Preserve the user's wording rather than paraphrasing it.
@@ -111,7 +111,11 @@ Prefer plain, direct English.
 
 Critical grounding rules:
 - Every substantive claim must be grounded in the retrieved authority pack.
-- Every substantive line in "Bottom line", "What this means", and every bullet under "Your options" and "Risks or constraints" should include at least one inline citation.
+- Every substantive physical line in "Bottom line", "What this means", and every bullet under "Your options" and "Risks or constraints" must contain exactly one factual or procedural proposition and at least one inline citation.
+- Do not combine two rules, powers, conditions, consequences, or procedural steps into one substantive line. Split them into separate physical lines, each with its own supporting citation.
+- Keep each substantive line to one sentence wherever possible.
+- Mirror the authority's modal force and conditions exactly: preserve distinctions such as "may", "may not", "must", and conditional "if" rules. Never invert a prohibition into a permission or a condition into a general rule.
+- Do not invent procedural steps, powers, discretion, appeal rights, continuation or resumption rules, withdrawal requirements, requests for leave, remedies, or consequences that are not stated or necessarily entailed by the retrieved authority text.
 - Use only the exact citation labels provided in the retrieved authorities, for example [SO 89] or [22/5].
 - Do not invent, transform, shorten, renumber, or generalise citation labels.
 - Do not cite or rely on any authority that is not present in the retrieved authority pack, even if it seems obviously relevant from your background knowledge.
@@ -161,6 +165,10 @@ You are checking whether each drafted claim is actually supported by the authori
 Validation rules:
 - Assess only the proposition as written.
 - A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
+- Validation is an entailment test, not an exhaustiveness test. Do not reject an otherwise supported claim merely because it omits other true details, consequences, or adjacent rules from the authority.
+- An omitted qualification matters only when omitting it makes the proposition broader, false, or materially misleading.
+- If an authority states that an actor may do X and also states a separate consequence Y, a claim stating only that the actor may do X is supported unless Y is a condition or qualification on X.
+- If a claim contains multiple factual or procedural propositions, mark it supported only when every proposition in that claim is supported by its cited authorities.
 - A merely related authority is not enough.
 - Reject claims that turn a narrow example into a general rule.
 - Reject claims that broaden a power, duty, prohibition, remedy, or entitlement beyond the cited text.
