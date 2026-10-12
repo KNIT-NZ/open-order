@@ -1,10 +1,14 @@
+import { reserveTesterModelAttempt } from "./tester-admission";
 // lib/ai/gemini.ts
 import { GoogleGenAI } from "@google/genai";
 import { AiProviderError } from "./errors";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
-const GEMINI_MAX_RETRIES = 2;
+// Disable application-managed retries for the zero-billed tester mode.
+// An SDK-level retry audit is still required before live tester authorisation.
+const GEMINI_MAX_RETRIES =
+  process.env.OPEN_ORDER_INFERENCE_MODE?.trim() === "zero-billed-test" ? 0 : 2;
 const GEMINI_INITIAL_BACKOFF_MS = 700;
 const GEMINI_MAX_BACKOFF_MS = 2500;
 
@@ -25,8 +29,16 @@ function getApiKey(): string {
   return apiKey;
 }
 
-function getClient(): GoogleGenAI {
-  return new GoogleGenAI({ apiKey: getApiKey() });
+async function getClient(): Promise<GoogleGenAI> {
+  // Defence in depth if a future caller imports the Gemini adapter directly.
+  if (process.env.OPEN_ORDER_INFERENCE_MODE?.trim() === "zero-billed-test") {
+    if (GEMINI_MODEL !== "gemini-3.5-flash-lite") {
+      throw new Error("Tester mode rejected a non-allowlisted Gemini model.");
+    }
+  }
+  const apiKey = getApiKey();
+  await reserveTesterModelAttempt();
+  return new GoogleGenAI({ apiKey });
 }
 
 export function isGeminiConfigured(): boolean {
@@ -257,7 +269,7 @@ export async function generateJson<T>({
   temperature?: number;
 }): Promise<T> {
   return withRetry(async () => {
-    const gemini = getClient();
+    const gemini = await getClient();
 
     const response = await gemini.models.generateContent({
       model: GEMINI_MODEL,
@@ -299,7 +311,7 @@ export async function streamText({
   onChunk?: (text: string) => void;
 }): Promise<string> {
   return withRetry(async () => {
-    const gemini = getClient();
+    const gemini = await getClient();
 
     const response = await gemini.models.generateContentStream({
       model: GEMINI_MODEL,
