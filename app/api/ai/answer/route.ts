@@ -408,17 +408,20 @@ export async function POST(request: NextRequest) {
           });
 
           if (finalAuthorities.length === 0) {
+            const noAuthorityReason = searches.some((search) => search.results.length > 0)
+              ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
+              : "No relevant authorities were retrieved.";
             const fallbackAnswer = buildFallbackAnswer({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
               effectiveCorpus,
-              fallbackReason: "No relevant authorities were retrieved.",
+              fallbackReason: noAuthorityReason,
             });
 
             send("stage", {
               key: "answering",
-              label: "No authorities retrieved; returning grounded fallback",
+              label: "No authorities selected; returning grounded fallback",
             });
 
             send("answer_delta", { text: fallbackAnswer });
@@ -432,7 +435,7 @@ export async function POST(request: NextRequest) {
               plan,
               answerText: fallbackAnswer,
               authorities: authorityPayload,
-              fallbackReason: "No relevant authorities were retrieved.",
+              fallbackReason: noAuthorityReason,
             });
 
             controller.close();
