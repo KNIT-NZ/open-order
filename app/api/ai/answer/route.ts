@@ -313,11 +313,17 @@ export async function POST(request: NextRequest) {
             finalAuthorities: v517Selection.finalAuthorities,
           };
 
-          const evidenceGaps = describeMissingAuthoritySlots({
+          const legacyEvidenceGaps = describeMissingAuthoritySlots({
             question,
             plannerQueries: plan.searchQueries,
             missingRequiredSlots: selected.missingRequiredSlots,
           });
+          // The legacy slot blueprint controls recovery and diagnostics, not the
+          // authoritative semantic evidence pack. A missing legacy slot must
+          // not add a contradictory user-facing gap to a grounded answer.
+          const evidenceGaps = v517Selection.finalAuthorities.length > 0
+            ? []
+            : legacyEvidenceGaps;
 
           const finalAuthorities = selected.finalAuthorities;
           const authorityPayload: AuthorityPayload[] =
