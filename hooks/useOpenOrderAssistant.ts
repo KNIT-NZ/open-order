@@ -1,14 +1,15 @@
 // hooks/useOpenOrderAssistant.ts
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { buildCanonicalCitationHref, formatAiDebugSnapshot } from "../lib/open-order/format";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { buildCanonicalCitationHref, formatAiDebugSnapshot, getAiProgressValue } from "../lib/open-order/format";
 import {
   EMPTY_AI_DIAGNOSTICS,
   type AiAuthority,
   type AiDiagnostics,
   type AiDiagnosticsPayload,
   type AiPlan,
+  type AiPipelineTrace,
 } from "../lib/open-order/types";
 
 export function useOpenOrderAssistant() {
@@ -19,6 +20,8 @@ export function useOpenOrderAssistant() {
   const [answerText, setAnswerText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progressValue, setProgressValue] = useState(0);
+  const activeRequest = useRef(0);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<AiDiagnostics>(EMPTY_AI_DIAGNOSTICS);
 
@@ -31,7 +34,9 @@ export function useOpenOrderAssistant() {
   async function ask(requestedCorpus: string | null) {
     const trimmed = question.trim();
     if (!trimmed) return;
+    const requestId = ++activeRequest.current;
 
+    setProgressValue(8);
     setError(null);
     setStageLabel("Starting AI analysis");
     setPlan(null);
@@ -73,9 +78,14 @@ export function useOpenOrderAssistant() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let terminalSeen = false;
 
       while (true) {
         const { value, done } = await reader.read();
+        if (requestId !== activeRequest.current) {
+          await reader.cancel();
+          return;
+        }
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -108,8 +118,12 @@ export function useOpenOrderAssistant() {
           }
 
           if (eventName === "stage") {
-            const payload = data as { label?: string };
+            const payload = data as { key?: string; label?: string };
             if (payload.label) {
+              if (typeof payload.key === "string") {
+                const target = getAiProgressValue(payload.key);
+                setProgressValue((current) => Math.max(current, target));
+              }
               setStageLabel(payload.label);
               setDiagnostics((current) => ({
                 ...current,
@@ -173,6 +187,7 @@ export function useOpenOrderAssistant() {
               finalAuthoritySelection:
                 payload.finalAuthoritySelection ??
                 current.finalAuthoritySelection,
+              selectorSummary: payload.selectorSummary ?? current.selectorSummary,
             }));
           } else if (eventName === "answer_delta") {
             const payload = data as { text?: string };
@@ -184,11 +199,19 @@ export function useOpenOrderAssistant() {
               }));
             }
           } else if (eventName === "done") {
+            terminalSeen = true;
             const payload = data as {
               answerText?: string;
               authorities?: AiAuthority[];
               corpus?: string | null;
               latencyMs?: number;
+              degraded?: boolean;
+              fallbackReason?: string;
+              rewriteNote?: string | null;
+              pruneNote?: string | null;
+              claimValidationNote?: string | null;
+              invalidCitations?: string[];
+              trace?: AiPipelineTrace;
             };
 
             const finalAuthorities =
@@ -207,6 +230,7 @@ export function useOpenOrderAssistant() {
 
             setAuthorities(finalAuthorities);
             setStageLabel("Complete");
+            setProgressValue(100);
             setIsLoading(false);
 
             setDiagnostics((current) => ({
@@ -225,9 +249,19 @@ export function useOpenOrderAssistant() {
                   ? payload.answerText
                   : current.answerText,
               stageLabel: "Complete",
+              pipelineTrace: payload.trace ?? current.pipelineTrace,
+              terminalValidation: {
+                degraded: payload.degraded === true,
+                fallbackReason: payload.fallbackReason ?? null,
+                rewriteNote: payload.rewriteNote ?? null,
+                pruneNote: payload.pruneNote ?? null,
+                claimValidationNote: payload.claimValidationNote ?? null,
+                invalidCitations: payload.invalidCitations ?? [],
+              },
             }));
           } else if (eventName === "error") {
-            const payload = data as { message?: string };
+            terminalSeen = true;
+            const payload = data as { message?: string; trace?: AiPipelineTrace; kind?: string; retryable?: boolean };
             const message = payload.message ?? "AI request failed.";
             setError(message);
             setStageLabel(null);
@@ -236,11 +270,22 @@ export function useOpenOrderAssistant() {
               ...current,
               error: message,
               stageLabel: null,
+              pipelineTrace: payload.trace ?? current.pipelineTrace,
+              errorKind: payload.kind ?? null,
+              errorRetryable: typeof payload.retryable === "boolean" ? payload.retryable : null,
             }));
           }
         }
       }
+      if (!terminalSeen && requestId === activeRequest.current) {
+        const message = "AI stream ended before completion.";
+        setError(message);
+        setStageLabel(null);
+        setIsLoading(false);
+        setDiagnostics((current) => ({ ...current, error: message, stageLabel: null }));
+      }
     } catch {
+      if (requestId !== activeRequest.current) return;
       setError("AI request failed.");
       setStageLabel(null);
       setIsLoading(false);
@@ -280,6 +325,7 @@ export function useOpenOrderAssistant() {
     answerText,
     error,
     isLoading,
+    progressValue,
     diagnostics,
     copiedToken,
     setCopiedToken,

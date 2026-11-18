@@ -6,7 +6,6 @@ import {
   buildCanonicalCitationHref,
   copyText,
   corpusLabel,
-  getAiProgressValue,
   renderAiAnswerHtml,
 } from "../../lib/open-order/format";
 import type {
@@ -51,15 +50,9 @@ export function AssistantPanel({
     assistant.diagnostics.latencyMs !== null,
   );
 
-  const aiProgressValue = getAiProgressValue(
-    assistant.stageLabel,
-    assistant.isLoading,
-  );
-
-  const displayedProgressValue =
-    assistant.isLoading && assistant.stageLabel
-      ? Math.max(aiProgressValue, 12)
-      : aiProgressValue;
+  // Progress is accumulated per request in the stream hook, not re-derived
+  // from mutable stage labels during rendering.
+  const displayedProgressValue = assistant.progressValue;
 
   return (
     <div className={styles.panel}>

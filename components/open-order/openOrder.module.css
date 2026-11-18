@@ -296,7 +296,7 @@
     #e06d84 55%,
     var(--oo-accent) 100%
   );
-  transition: width 240ms ease;
+  transition: width 540ms cubic-bezier(0.2, 0.75, 0.2, 1);
 }
 
 .aiProgressBarActive {
@@ -924,6 +924,11 @@
   display: inline-flex;
   align-items: flex-end;
   white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiProgressBar { transition: none; }
+  .aiProgressBarActive { animation: none; }
 }
 
 @keyframes oo-progress-shimmer {

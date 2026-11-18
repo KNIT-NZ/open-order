@@ -145,6 +145,31 @@ export type AiDiagnosticSlotMatch = {
   heading: string | null;
 };
 
+export type AiSelectorSummary = {
+  candidateCount: number;
+  minObligationCoverage: number;
+  allObligationsComplete: boolean;
+  obligationDetails: Array<{ coverage: number; complete: boolean }>;
+  prePruneLabels: string[];
+  selectedLabels: string[];
+};
+
+export type AiPipelineTrace = {
+  schemaVersion: 2;
+  requestId: string;
+  buildCommit: string | null;
+  stageTimeline: Array<{ key: string; label: string; atMs: number }>;
+};
+
+export type AiTerminalValidation = {
+  degraded: boolean;
+  fallbackReason: string | null;
+  rewriteNote: string | null;
+  pruneNote: string | null;
+  claimValidationNote: string | null;
+  invalidCitations: string[];
+};
+
 export type AiDiagnosticsPayload = {
   effectiveCorpus: string | null;
   inferredConcepts?: string[];
@@ -158,6 +183,7 @@ export type AiDiagnosticsPayload = {
   selectedSlotMatches?: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection?: AiDiagnosticFinalAuthority[];
+  selectorSummary?: AiSelectorSummary;
 };
 
 export type AiDiagnostics = {
@@ -182,6 +208,11 @@ export type AiDiagnostics = {
   selectedSlotMatches: AiDiagnosticSlotMatch[];
   retrievals: AiDiagnosticRetrieval[];
   finalAuthoritySelection: AiDiagnosticFinalAuthority[];
+  selectorSummary: AiSelectorSummary | null;
+  pipelineTrace: AiPipelineTrace | null;
+  terminalValidation: AiTerminalValidation | null;
+  errorKind: string | null;
+  errorRetryable: boolean | null;
 };
 
 export const EMPTY_AI_DIAGNOSTICS: AiDiagnostics = {
@@ -206,6 +237,11 @@ export const EMPTY_AI_DIAGNOSTICS: AiDiagnostics = {
   selectedSlotMatches: [],
   retrievals: [],
   finalAuthoritySelection: [],
+  selectorSummary: null,
+  pipelineTrace: null,
+  terminalValidation: null,
+  errorKind: null,
+  errorRetryable: null,
 };
 
 export type UseOpenOrderAssistantReturn = {
@@ -217,6 +253,7 @@ export type UseOpenOrderAssistantReturn = {
   answerText: string;
   error: string | null;
   isLoading: boolean;
+  progressValue: number;
   diagnostics: AiDiagnostics;
   copiedToken: string | null;
   setCopiedToken: (value: string | null) => void;

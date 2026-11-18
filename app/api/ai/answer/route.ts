@@ -1,5 +1,6 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { generateJson, streamText } from "@/lib/ai";
 import {
@@ -115,12 +116,34 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      const startedAt = Date.now();
+      const requestId = randomUUID();
+      // Vercel supplies the public deployment commit when available.
+      const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
+      const stageTimeline: Array<{ key: string; label: string; atMs: number }> = [];
       const send = (event: string, data: unknown) => {
+        if (event === "stage" && data && typeof data === "object") {
+          const stage = data as { key?: unknown; label?: unknown };
+          if (typeof stage.key === "string" && typeof stage.label === "string" && stageTimeline.length < 32) {
+            stageTimeline.push({ key: stage.key, label: stage.label, atMs: Math.max(0, Date.now() - startedAt) });
+          }
+        }
+        if ((event === "done" || event === "error") && data && typeof data === "object") {
+          data = {
+            ...data,
+            trace: {
+              schemaVersion: 2,
+              requestId,
+              buildCommit,
+              stageTimeline,
+            },
+          };
+        }
         controller.enqueue(encoder.encode(sseEvent(event, data)));
       };
 
       const run = async () => {
-        const started = Date.now();
+        const started = startedAt;
 
         try {
           send("stage", {
@@ -303,6 +326,7 @@ export async function POST(request: NextRequest) {
           // v5.18 is authoritative for the final evidence pack. The existing
           // concept/slot selector remains in place for bridge/recovery planning
           // and diagnostics, but it no longer determines the answer authority set.
+          send("stage", { key: "selecting", label: "Qualifying procedural evidence" });
           const v517Selection = await selectV517ProductionAuthorities({
             searches,
             question,
@@ -352,6 +376,16 @@ export async function POST(request: NextRequest) {
 
           send("diagnostics", {
             effectiveCorpus,
+            // These are the semantic selector's own measured coverage results,
+            // not legacy blueprint coverage or inferred confidence scores.
+            selectorSummary: {
+              candidateCount: v517Selection.candidateCount,
+              minObligationCoverage: v517Selection.minObligationCoverage,
+              allObligationsComplete: v517Selection.allObligationsComplete,
+              obligationDetails: v517Selection.obligationDetails,
+              prePruneLabels: v517Selection.prePruneLabels,
+              selectedLabels: v517Selection.selectedLabels,
+            },
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,

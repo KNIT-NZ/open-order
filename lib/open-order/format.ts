@@ -495,17 +495,8 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
               `   query: ${item.query}`,
               `   corpus: ${item.documentCorpus}`,
               `   heading: ${item.heading ?? "None"}`,
-              `   baseRank: ${item.baseRank.toFixed(2)}`,
-              `   routeBoost: ${item.routeBoost.toFixed(2)}`,
-              `   slotBoost: ${(item.slotBoost ?? 0).toFixed(2)}`,
-              `   preferredTextBoost: ${(item.preferredTextBoost ?? 0).toFixed(2)}`,
-              `   bridgeBoost: ${(item.bridgeBoost ?? 0).toFixed(2)}`,
-              `   discoveryBoost: ${(item.discoveryBoost ?? 0).toFixed(2)}`,
+              `   retrievalRank: ${item.baseRank.toFixed(2)} (not semantic confidence)`,
               `   authorityFunction: ${item.authorityFunction ?? "None"}`,
-              `   matchedSlots: ${
-                item.matchedSlots?.length ? item.matchedSlots.join(", ") : "None"
-              }`,
-              `   adjustedRank: ${item.adjustedRank.toFixed(2)}`,
               `   path: ${path}`,
             ].join("\n");
           })
@@ -533,6 +524,47 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
           .join("\n\n")
       : "None";
 
+  const selector = input.selectorSummary;
+  const semanticSummary = selector
+    ? [
+        "Selector: v5.18 semantic authority pack (not the legacy blueprint)",
+        `Candidate authorities evaluated: ${selector.candidateCount}`,
+        `Final authorities selected: ${selector.selectedLabels.join(", ") || "None"}`,
+        `Minimum obligation coverage: ${selector.minObligationCoverage.toFixed(3)}`,
+        `All semantic obligations complete: ${selector.allObligationsComplete ? "Yes" : "No"}`,
+        "Per-obligation coverage:",
+        ...selector.obligationDetails.slice(0, 12).map((detail, index) =>
+          `  ${index + 1}. ${detail.coverage.toFixed(3)} (${detail.complete ? "complete" : "incomplete"})`),
+        `Selection before redundancy pruning: ${selector.prePruneLabels.join(", ") || "None"}`,
+      ].join("\n")
+    : "Semantic selection summary: Not received";
+
+  const trace = input.pipelineTrace;
+  const traceSummary = trace
+    ? [
+        `Diagnostic schema: ${trace.schemaVersion}`,
+        `Request ID: ${trace.requestId}`,
+        `Build commit: ${trace.buildCommit ?? "Unavailable"}`,
+        "Observed server stage transitions (elapsed from request start):",
+        ...trace.stageTimeline.slice(0, 32).map((stage, index, stages) => {
+          const prior = index > 0 ? stages[index - 1].atMs : 0;
+          return `  ${index + 1}. ${stage.key} — ${stage.label}: ${stage.atMs} ms (+${Math.max(0, stage.atMs - prior)} ms)`;
+        }),
+      ].join("\n")
+    : "Request trace: Not received";
+
+  const validation = input.terminalValidation;
+  const validationSummary = validation
+    ? [
+        `Outcome: ${validation.degraded ? "Degraded/fallback" : "Completed without declared degradation"}`,
+        `Fallback reason: ${validation.fallbackReason ?? "None"}`,
+        `Deterministic pruning: ${validation.pruneNote ?? "None reported"}`,
+        `Authority mention rewrite: ${validation.rewriteNote ?? "None reported"}`,
+        `Semantic claim validation: ${validation.claimValidationNote ?? "No unsupported claims reported"}`,
+        `Invalid citations: ${validation.invalidCitations.join(", ") || "None reported"}`,
+      ].join("\n")
+    : "Terminal validation: Not received";
+
   return [
     "OPEN ORDER AI DEBUG SNAPSHOT",
     "============================",
@@ -544,6 +576,20 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     `Started at: ${input.startedAt ?? "None"}`,
     `Latency ms: ${input.latencyMs ?? "Unknown"}`,
     `Error: ${input.error ?? "None"}`,
+    `Error kind: ${input.errorKind ?? "Unknown/not applicable"}`,
+    `Error retryable: ${input.errorRetryable === null ? "Unknown" : input.errorRetryable ? "Yes" : "No"}`,
+    "",
+    "REQUEST TRACE",
+    "-------------",
+    traceSummary,
+    "",
+    "SEMANTIC AUTHORITY COVERAGE",
+    "---------------------------",
+    semanticSummary,
+    "",
+    "VALIDATION OUTCOME",
+    "------------------",
+    validationSummary,
     "",
     "PLAN",
     "----",
@@ -608,23 +654,14 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
   ].join("\n");
 }
 
-export function getAiProgressValue(
-  stageLabel: string | null,
-  isAiLoading: boolean,
-) {
-  if (!stageLabel && !isAiLoading) return 0;
-  if (!stageLabel && isAiLoading) return 6;
-
-  const stage = (stageLabel ?? "").toLowerCase();
-
-  if (stage.includes("complete")) return 100;
-  if (stage.includes("answer")) return 90;
-  if (stage.includes("synth")) return 82;
-  if (stage.includes("authorit")) return 72;
-  if (stage.includes("retriev")) return 58;
-  if (stage.includes("search")) return 42;
-  if (stage.includes("plan")) return 22;
-  if (stage.includes("start")) return 10;
-
-  return isAiLoading ? 14 : 100;
+/** Display targets for stable server stage keys. The hook owns monotonic progression. */
+export function getAiProgressValue(stageKey: string | null): number {
+  switch (stageKey) {
+    case "planning": return 20;
+    case "retrieving": return 48;
+    case "selecting": return 68;
+    case "answering": return 83;
+    case "validating": return 94;
+    default: return 12;
+  }
 }
