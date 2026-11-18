@@ -394,21 +394,23 @@ export async function POST(request: NextRequest) {
                 })),
               };
             }),
-            finalAuthoritySelection: selected.scoredAuthorities.map((item) => ({
-              query: item.query,
-              citationLabel: item.result.citationLabel,
-              heading: item.result.heading,
-              documentCorpus: item.result.documentCorpus,
-              baseRank: item.result.rank,
-              routeBoost: item.routeBoost,
-              slotBoost: item.slotBoost,
-              preferredTextBoost: item.preferredTextBoost,
-              bridgeBoost: item.bridgeBoost,
-              discoveryBoost: item.discoveryBoost,
-              adjustedRank: item.adjustedRank,
-              matchedSlots: item.matchedSlotKeys,
-              authorityFunction: buildAuthorityProfile(item.result).authorityFunction,
-              path: item.result.path,
+            // The final selection diagnostic must describe the semantic pack
+            // actually supplied to drafting, not the earlier legacy ranking.
+            finalAuthoritySelection: v517Selection.finalAuthorities.map((result) => ({
+              query: "semantic_authority_pack",
+              citationLabel: result.citationLabel,
+              heading: result.heading,
+              documentCorpus: result.documentCorpus,
+              baseRank: result.rank,
+              routeBoost: 0,
+              slotBoost: 0,
+              preferredTextBoost: 0,
+              bridgeBoost: 0,
+              discoveryBoost: 0,
+              adjustedRank: result.rank,
+              matchedSlots: [],
+              authorityFunction: buildAuthorityProfile(result).authorityFunction,
+              path: result.path,
             })),
             selectedSlotMatches: selected.selectedSlotMatches,
           });
