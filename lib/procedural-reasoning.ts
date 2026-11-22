@@ -414,6 +414,22 @@ function addCanonicalExpansions(
   }
 }
 
+export function derivePostStagePathwayQueries(question: string): string[] {
+  const text = question.toLowerCase().replace(/\s+/g, " ");
+  const hasBill = /\b(?:bill|bills|legislation)\b/.test(text);
+  const hasWholeHouseStage = /\b(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
+  const isSelectCommitteeOnly = /\bselect committee\b/.test(text) && !/\bcommittee of the whole(?: house)?\b/.test(text);
+  const seeksAlteration = /\b(?:amend(?:ment|ments|ed|ing)?|alter(?:ation|ations|ed|ing)?|modify|modification|change(?:d|s|ing)?|revise|revision)\b/.test(text);
+  const stageClosed = /\b(?:committee of the whole(?: house)?|committee stage)\b.{0,85}\b(?:finish(?:ed|es|ing)?|complet(?:e|ed|ion|ing)|conclu(?:de(?:d|s)?|ding|sion)|end(?:ed|ing)?|report(?:ed|s)?|pass(?:ed|es)?)\b/.test(text);
+  const afterStage = /\b(?:after|once|following|now that)\b.{0,95}\b(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
+  const afterStageConclusion = /\b(?:after|following)\b.{0,25}\b(?:completion|conclusion|end|reporting)\b.{0,35}\b(?:of )?(?:the )?(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
+  const incompleteStage = /\b(?:committee of the whole(?: house)?|committee stage)\b.{0,45}\b(?:not|never|hasn't|has not)\b.{0,12}\b(?:finish(?:ed|ing)?|complet(?:e|ed|ion|ing)|conclu(?:de(?:d|s)?|ding|sion)|end(?:ed|ing)?)\b/.test(text);
+  if (!(hasBill && hasWholeHouseStage && !isSelectCommitteeOnly && seeksAlteration && !incompleteStage && ((afterStage && stageClosed) || afterStageConclusion))) {
+    return [];
+  }
+  return ["recommittal of bill"];
+}
+
 export function buildProceduralQueryPlan(input: {
   question: string;
   plannerQueries: string[];
@@ -483,6 +499,10 @@ export function buildProceduralQueryPlan(input: {
   }
 
   for (const query of [...conceptQueries, ...additions]) {
+    addSearchDimension(output, seen, query, "registry_expansion");
+  }
+
+  for (const query of derivePostStagePathwayQueries(input.question)) {
     addSearchDimension(output, seen, query, "registry_expansion");
   }
 
