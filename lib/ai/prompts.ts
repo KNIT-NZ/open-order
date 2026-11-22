@@ -226,21 +226,41 @@ export function buildAnswerClaimValidationPrompt(input: {
   }>;
   authorities: ProceduralSearchResult[];
 }): string {
-  const citedLabels = new Set(
-    input.claims.flatMap((claim) => claim.citations),
+  // v28: citation subsection qualifiers are references WITHIN an already
+  // selected authority, not different authorities. Resolve only a tightly
+  // bounded numeric subsection or numeric range suffix; never infer other
+  // sources from a citation or presume a subsection claim is supported.
+  const sourceLabelForClaimCitation = (citation: string): string => {
+    const label = citation.trim();
+    const qualified = label.match(
+      /^((?:SO\s+\d+)|(?:\d+\/\d+))(\(\d+[a-z]?\)(?:\s*[-–]\s*\(\d+[a-z]?\))?)$/i,
+    );
+    return qualified ? qualified[1].replace(/\s+/g, " ") : label;
+  };
+  const citedLabels = input.claims.flatMap((claim) => claim.citations);
+  const citedSourceLabels = new Set(
+    citedLabels.map((citation) => sourceLabelForClaimCitation(citation)),
   );
 
   const renderedAuthorities = input.authorities
-    .filter((authority) => citedLabels.has(authority.citationLabel))
-    .map(
-      (authority) => `
+    .filter((authority) => citedSourceLabels.has(authority.citationLabel))
+    .map((authority) => {
+      const aliases = [...new Set(citedLabels.filter(
+        (citation) => citation !== authority.citationLabel &&
+          sourceLabelForClaimCitation(citation) === authority.citationLabel,
+      ))];
+      const subsectionNote = aliases.length > 0
+        ? `Cited subsection references: ${aliases.map((alias) => `[${alias}]`).join(" ")}. These refer to [${authority.citationLabel}] for source lookup only; check the cited subsections and the actual proposition against the text. This mapping does not establish support.`
+        : "";
+      return `
 [${authority.citationLabel}]
+${subsectionNote}
 Heading: ${authority.heading ?? "None"}
 Path: ${authority.path.join(" > ")}
 Text:
 ${authority.sectionContent}
-`.trim(),
-    )
+`.trim();
+    })
     .join("\n\n");
 
   const renderedClaims = input.claims
