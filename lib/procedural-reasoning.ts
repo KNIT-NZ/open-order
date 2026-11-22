@@ -445,6 +445,18 @@ export function deriveLegalEffectQueries(question: string): string[] {
   return ["held liable"];
 }
 
+// Narrowly retrieve the corpus-native procedural error rule when a user asks
+// about a second vote because of a disputed count or claimed error. The query
+// is not a citation or a positive entitlement; the selector remains decisive.
+export function deriveVoteErrorQueries(question: string): string[] {
+  const text = question.toLowerCase().replace(/\s+/g, " ");
+  const vote = /\b(?:votes?|voting|divisions?)\b/.test(text);
+  const secondVote = /\b(?:retak(?:e|en|ing)|repeat(?:ed|ing)?|second\s+vote|re-?vote|vote\s+(?:be\s+)?taken\s+again)\b/.test(text);
+  const errorIssue = /\b(?:wrong|error|errors|mistake|mistakes|confusion|confused|incorrect(?:ly)?|inaccurat(?:e|ely)|miscount\w*|count(?:ing)?|tally)\b/.test(text);
+  if (!vote || !secondVote || !errorIssue) return [];
+  return ["errors and mistakes"];
+}
+
 export function buildProceduralQueryPlan(input: {
   question: string;
   plannerQueries: string[];
@@ -522,6 +534,10 @@ export function buildProceduralQueryPlan(input: {
   }
 
   for (const query of deriveLegalEffectQueries(input.question)) {
+    addSearchDimension(output, seen, query, "registry_expansion");
+  }
+
+  for (const query of deriveVoteErrorQueries(input.question)) {
     addSearchDimension(output, seen, query, "registry_expansion");
   }
 
