@@ -430,6 +430,21 @@ export function derivePostStagePathwayQueries(question: string): string[] {
   return ["recommittal of bill"];
 }
 
+// Map requests about legal recourse for parliamentary speech to the consequence
+// expressed in governing authority text; no citation IDs or answer labels here.
+export function deriveLegalEffectQueries(question: string): string[] {
+  const text = question.toLowerCase().replace(/\s+/g, " ");
+  const asksAboutLiability = /\b(?:sue|sued|suing|lawsuit|litigat(?:e|ed|ing|ion)|civil (?:claim|liability|proceedings|action)|legal action|legally liable|held liable)\b/.test(text);
+  const concernsSpeech = /\b(?:statements?|words?|speeches|speech|speaking|spoken|said|say|remarks?|comments?|allegations?|accusations?|defam(?:ation|atory|ed|ing|e)|utterances?)\b/.test(text);
+  const inParliament = /\b(?:in|inside|within) (?:the )?(?:house|parliament|parliamentary chamber)\b/.test(text)
+    || /\b(?:during|in) (?:a |the )?parliamentary (?:sitting|debate|proceedings?)\b/.test(text)
+    || /\bin proceedings? of (?:the )?house\b/.test(text);
+  if (!(asksAboutLiability && concernsSpeech && inParliament)) {
+    return [];
+  }
+  return ["held liable"];
+}
+
 export function buildProceduralQueryPlan(input: {
   question: string;
   plannerQueries: string[];
@@ -503,6 +518,10 @@ export function buildProceduralQueryPlan(input: {
   }
 
   for (const query of derivePostStagePathwayQueries(input.question)) {
+    addSearchDimension(output, seen, query, "registry_expansion");
+  }
+
+  for (const query of deriveLegalEffectQueries(input.question)) {
     addSearchDimension(output, seen, query, "registry_expansion");
   }
 
