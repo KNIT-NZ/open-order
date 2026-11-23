@@ -1,12 +1,6 @@
 // components/open-order/Footer.tsx
 import styles from "./openOrder.module.css";
-import type { ThemeMode } from "../../lib/open-order/types";
-
-type FooterProps = {
-  theme: ThemeMode;
-};
-
-export function Footer({ theme }: FooterProps) {
+export function Footer() {
   return (
     <footer className={styles.footer}>
       <a
@@ -18,13 +12,15 @@ export function Footer({ theme }: FooterProps) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={
-            theme === "dark"
-              ? "/knit-logo-horizontal-dark.png"
-              : "/knit-logo-horizontal-light.png"
-          }
+          src="/knit-logo-horizontal-light.png"
           alt=""
-          className={styles.footerLogo}
+          className={`${styles.footerLogo} ${styles.themeLightAsset}`}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/knit-logo-horizontal-dark.png"
+          alt=""
+          className={`${styles.footerLogo} ${styles.themeDarkAsset}`}
         />
       </a>
       <div className={styles.footerText}>

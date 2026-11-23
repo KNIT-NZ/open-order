@@ -12,17 +12,23 @@ export function Hero({ theme, onToggleTheme }: HeroProps) {
     <div className={styles.heroTop}>
       <div className={styles.brand}>
         <h1 className={styles.visuallyHidden}>Open Order</h1>
+        {/* Logo visibility follows the document theme, not hydration-time props. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={
-            theme === "dark"
-              ? "/open-order-logo-dark.png"
-              : "/open-order-logo-light.png"
-          }
+          src="/open-order-logo-light.png"
           alt="Open Order"
           width={220}
           height={96}
-          className={styles.logo}
+          className={`${styles.logo} ${styles.themeLightAsset}`}
+          fetchPriority="high"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/open-order-logo-dark.png"
+          alt="Open Order"
+          width={220}
+          height={96}
+          className={`${styles.logo} ${styles.themeDarkAsset}`}
           fetchPriority="high"
         />
         <p className={styles.subtitle}>

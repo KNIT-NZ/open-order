@@ -67,7 +67,7 @@ export default function Page() {
         }
       />
 
-      <Footer theme={theme} />
+      <Footer />
     </main>
   );
 }

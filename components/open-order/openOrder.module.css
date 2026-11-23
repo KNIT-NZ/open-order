@@ -1024,3 +1024,21 @@
     line-height: 1.15;
   }
 }
+
+/* Theme images are fixed across server/client renders. The pre-paint HTML
+   data-theme value selects the correct logo even before React hydrates. */
+.themeLightAsset {
+  display: block;
+}
+
+.themeDarkAsset {
+  display: none;
+}
+
+:global(html[data-theme="dark"]) .themeLightAsset {
+  display: none;
+}
+
+:global(html[data-theme="dark"]) .themeDarkAsset {
+  display: block;
+}
