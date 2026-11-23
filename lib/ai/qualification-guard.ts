@@ -1,5 +1,5 @@
 /**
- * v34: source-attested qualification preservation for categorical legal claims.
+ * v35: source-attested qualification preservation for categorical legal claims.
  *
  * This is a narrow conservative check, not a replacement for semantic entailment.
  * Only an explicit exception in the same numbered source subsection as an
@@ -22,7 +22,10 @@ export type QualificationRejection = {
 };
 
 const RESTRICTION = /\b(?:may\s+not|must\s+not|shall\s+not|cannot|can't|must|shall|may\s+only|can\s+only|is\s+prohibited|are\s+prohibited|is\s+not\s+permitted|are\s+not\s+permitted)\b/i;
-const CATEGORICAL = /\b(?:may\s+not|must\s+not|shall\s+not|cannot|can't|must|shall|never|only\s+if|only\s+when|solely|exclusively|prohibit\w*|not\s+(?:permitted|allowed|authorised|authorized)|without\s+|unless\s+)\b/i;
+// A restriction can be expressed as a requirement for one specific permission,
+// not just as "may not ... unless". v34 missed the live phrasing
+// "Disclosing ... requires express authorisation" and let it survive pruning.
+const CATEGORICAL = /\b(?:may\s+not|must\s+not|shall\s+not|cannot|can't|must|shall|never|only|solely|exclusively|prohibit\w*|not\s+(?:permitted|allowed|authorised|authorized)|without\s+|unless\s+|require\w*|need(?:s|ed)?|necessar(?:y|ily)|prerequisite)\b/i;
 const EXCEPTION = /\b(?:except(?:\s+for|\s+to)?|unless|provided\s+that|subject\s+to|other\s+than)\b/gi;
 const GENERIC_ACKNOWLEDGEMENT = /\b(?:other\s+exceptions?|additional\s+exceptions?|specified\s+exceptions?|cross[- ]referenced\s+(?:exception|provision)|subject\s+to\s+(?:other|specified|the)\s+(?:exceptions?|provisions?)|except\s+as\s+otherwise\s+(?:provided|permitted)|unless\s+otherwise\s+(?:provided|permitted))\b/i;
 const NONCONTENT = new Set(["the","a","an","is","are","be","been","being","to","of","in","on","at","for","from","with","by","or","and","but","if","that","this","those","these","it","its","as","any","all","some","each","another","other","may","must","shall","not","only","can","could","will","would","should","who","which","where","when","while","under","over","their","there","person","persons","member","members","house","order","orders","standing","committee","committees","rule","rules","leave","given","required","evidence","result","secret","private","report","reported","authority","authorised","authorized","expressly","except","unless","without","give","effect","and","subsection","section","prohibited","permitted"]);
@@ -44,7 +47,17 @@ function includesAction(claim: string, operative: string): boolean {
   const after = operative.slice(match.index + match[0].length).split(/\s+/).slice(0, 12);
   const candidates = tokens(after.join(" "));
   const claimWords = new Set(tokens(claim));
-  return candidates.slice(0, 3).some((word) => claimWords.has(word));
+  return candidates.slice(0, 3).some((word) => {
+    if (claimWords.has(word)) return true;
+    // Conservative derivational equivalence: "disclosure"/"disclose" and
+    // "reporting"/"report" may differ by a short suffix. Do not substitute
+    // semantically related but distinct acts or use a heading as evidence.
+    return [...claimWords].some((claimWord) =>
+      word.length >= 6 && claimWord.length >= 6 &&
+      Math.abs(word.length - claimWord.length) <= 3 &&
+      (word.startsWith(claimWord) || claimWord.startsWith(word))
+    );
+  });
 }
 function hasSubjectOverlap(claim: string, operative: string): boolean {
   const modal = RESTRICTION.exec(operative);
