@@ -48,6 +48,7 @@ export type V517SelectionResult = {
   allObligationsComplete: boolean;
   obligationDetails: V517ObligationDetail[];
   candidateCount: number;
+  evidenceAdmission: string;
 };
 
 export function selectV517AuthorityPack(input: {

@@ -6,6 +6,8 @@ import { generateJson, streamText } from "@/lib/ai";
 import {
   ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
   ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
+  ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
+  buildBottomLineRecoveryPrompt,
   buildAnswerClaimAppealPrompt,
   ANSWER_STREAM_SYSTEM_PROMPT,
   buildAnswerClaimValidationPrompt,
@@ -74,6 +76,8 @@ const claimValidationSchema = z.object({
     }),
   ),
 });
+
+const bottomLineRecoverySchema = z.object({bottomLine: z.string().max(900)});
 
 const claimAppealSchema = z.object({
   claims: z.array(z.object({
@@ -401,6 +405,7 @@ export async function POST(request: NextRequest) {
               obligationDetails: v517Selection.obligationDetails,
               prePruneLabels: v517Selection.prePruneLabels,
               selectedLabels: v517Selection.selectedLabels,
+              evidenceAdmission: v517Selection.evidenceAdmission,
             },
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
@@ -475,6 +480,8 @@ export async function POST(request: NextRequest) {
               authorities: finalAuthorities,
               effectiveCorpus,
               fallbackReason: noAuthorityReason,
+              failureClass: "selection",
+              retrievedEvidenceCount: searches.reduce((count, search) => count + search.results.length, 0),
             });
 
             send("stage", {
@@ -904,20 +911,96 @@ export async function POST(request: NextRequest) {
               if (appealDiagnostic) claimValidationNote = appealDiagnostic;
             }
 
-            const remainingClaims = extractAnswerClaims(finalAnswer);
-            const finalCitationValidation = validateAnswerCitations({
+            let remainingClaims = extractAnswerClaims(finalAnswer);
+            let finalCitationValidation = validateAnswerCitations({
               answerText: finalAnswer,
               authorities: authorityPayload,
             });
-            const finalMentionValidation = validateAnswerAuthorityMentions({
+            let finalMentionValidation = validateAnswerAuthorityMentions({
               answerText: finalAnswer,
               authorities: authorityPayload,
             });
 
-            const hasBottomLine = answerSectionHasContent(
+            let hasBottomLine = answerSectionHasContent(
               finalAnswer,
               "Bottom line:",
             );
+            // v38: one bounded fresh rewrite when a correctly rejected Bottom
+            // line leaves other source-supported claims intact. This is NOT an
+            // appeal of the old claim and never overrides the qualification veto.
+            // The new line must independently pass citation, mention, semantic
+            // entailment and deterministic exception checks or we fail closed.
+            let reconstructionDiagnostic = "not_needed";
+            if (!hasBottomLine && remainingClaims.length > 0 &&
+                finalCitationValidation.ok && finalMentionValidation.ok) {
+              send("stage", {key:"validating",label:"Reconstructing a grounded Bottom line"});
+              reconstructionDiagnostic = "attempted_rejected";
+              try {
+                const rawRecovery = await generateJson<unknown>({
+                  task: "answer.validate",
+                  systemInstruction: ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
+                  prompt: buildBottomLineRecoveryPrompt({
+                    question,
+                    survivingAnswer: finalAnswer,
+                    authorities: finalAuthorities,
+                  }),
+                  temperature: 0,
+                });
+                const recovery = bottomLineRecoverySchema.parse(rawRecovery);
+                const line = recovery.bottomLine.trim();
+                if (line.length >= 20 && !line.includes("\n") &&
+                    /\[[^\]]+\]/.test(line)) {
+                  const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
+                  const candidateClaims = extractAnswerClaims(`Bottom line:\n${line}`);
+                  const citationOK = validateAnswerCitations({
+                    answerText: candidate,
+                    authorities: authorityPayload,
+                  }).ok;
+                  const mentionOK = validateAnswerAuthorityMentions({
+                    answerText: candidate,
+                    authorities: authorityPayload,
+                  }).ok;
+                  const qualificationOK = findOmittedSourceQualifications({
+                    claims: candidateClaims,
+                    authorities: finalAuthorities,
+                  }).length === 0;
+                  if (candidateClaims.length === 1 && citationOK && mentionOK && qualificationOK) {
+                    const rawReview = await generateJson<unknown>({
+                      task: "answer.validate",
+                      systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+                      prompt: buildAnswerClaimValidationPrompt({
+                        claims: candidateClaims,
+                        authorities: finalAuthorities,
+                      }),
+                      temperature: 0,
+                    });
+                    const decisions = claimValidationSchema.parse(rawReview);
+                    // Require one complete and unambiguous fresh judgement.
+                    // Duplicate/extra claim IDs do not constitute validation.
+                    if (decisions.claims.length === 1 &&
+                        decisions.claims[0].id === candidateClaims[0].id &&
+                        decisions.claims[0].supported === true) {
+                      finalAnswer = removeEmptyAnswerSections(candidate);
+                      remainingClaims = extractAnswerClaims(finalAnswer);
+                      finalCitationValidation = validateAnswerCitations({
+                        answerText: finalAnswer,
+                        authorities: authorityPayload,
+                      });
+                      finalMentionValidation = validateAnswerAuthorityMentions({
+                        answerText: finalAnswer,
+                        authorities: authorityPayload,
+                      });
+                      hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
+                      reconstructionDiagnostic = "accepted_independently_validated";
+                    }
+                  }
+                }
+              } catch {
+                reconstructionDiagnostic = "unavailable_original_rejection_preserved";
+              }
+              claimValidationNote = [claimValidationNote,
+                `v38 bottomLineRecovery=${reconstructionDiagnostic}`].filter(Boolean).join("; ");
+            }
 
             if (
               remainingClaims.length === 0 ||
@@ -1024,6 +1107,7 @@ export async function POST(request: NextRequest) {
               authorities: finalAuthorities,
               effectiveCorpus,
               fallbackReason: draftingMessage,
+              failureClass: "provider",
             });
 
             send("stage", {

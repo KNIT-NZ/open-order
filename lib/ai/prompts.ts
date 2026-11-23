@@ -446,3 +446,33 @@ Remember:
 - keep the answer compact, procedural, and grounded.
 `.trim();
 }
+// OPEN ORDER v38: a newly drafted Bottom line is independently validated,
+// never exempted from the claim validator or the deterministic source guard.
+export const ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT = `
+You repair a missing Bottom line in a New Zealand parliamentary procedure answer.
+Use ONLY the supplied authority texts and the already-surviving grounded claims.
+Write exactly ONE independently supportable Bottom line sentence; include all
+material source-stated conditions and exceptions relevant to that sentence.
+Do not copy a previously rejected overbroad conclusion or use unselected sources.
+Start with a direct qualified answer to the question, or explicitly state the
+remaining uncertainty. Append at least one citation from the supplied pack.
+Return JSON ONLY with the shape {"bottomLine":"... [SO 1]."}.
+If no safe direct line can be written, return {"bottomLine":""}.
+`.trim();
+
+export function buildBottomLineRecoveryPrompt(input: {
+  question: string;
+  survivingAnswer: string;
+  authorities: Array<{ citationLabel: string; sectionContent: string }>;
+}): string {
+  return JSON.stringify({
+    task: "Build a new single-line grounded Bottom line; the previous one was rejected",
+    question: input.question,
+    survivingClaims: input.survivingAnswer.slice(0, 3200),
+    selectedAuthorities: input.authorities.slice(0, 4).map((authority) => ({
+      citationLabel: authority.citationLabel,
+      sectionContent: authority.sectionContent,
+    })),
+    output: { bottomLine: "Single direct sentence with citation, or empty string" },
+  });
+}
