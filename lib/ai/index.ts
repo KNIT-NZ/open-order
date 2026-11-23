@@ -55,6 +55,17 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
   },
 };
 
+/** Prefer a diagnosed upstream failure over a later opaque failover error. */
+function preferDiagnosedError(
+  existing: AiProviderError | null,
+  incoming: AiProviderError,
+): AiProviderError {
+  if (!existing) return incoming;
+  const quality = (error: AiProviderError) =>
+    error.statusCode !== null ? 3 : error.kind !== "unknown" ? 2 : 0;
+  return quality(incoming) >= quality(existing) ? incoming : existing;
+}
+
 function noProviderConfigured(task: AiTask): AiProviderError {
   return new AiProviderError({
     message: "AI model configuration is missing on the server.",
@@ -82,7 +93,7 @@ export async function generateJson<T>(
     try {
       return await provider.generateJson<T>(request);
     } catch (error) {
-      lastError = normalizeAiProviderError(error, providerId);
+      lastError = preferDiagnosedError(lastError, normalizeAiProviderError(error, providerId));
     }
   }
 
@@ -133,7 +144,7 @@ export async function streamText(
         throw normalized;
       }
 
-      lastError = normalized;
+      lastError = preferDiagnosedError(lastError, normalized);
     }
   }
 

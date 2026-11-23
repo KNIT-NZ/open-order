@@ -94,39 +94,44 @@ function safeJsonParse(input: string): unknown | null {
 }
 
 function extractStatusCode(error: unknown): number | null {
-  if (!error || typeof error !== "object") return null;
-
-  const directStatus =
-    "status" in error && typeof error.status === "number" ? error.status : null;
-
-  if (directStatus) return directStatus;
-
-  const message =
-    "message" in error && typeof error.message === "string"
-      ? error.message
-      : "";
-
-  if (!message) return null;
-
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object" && !seen.has(current); depth += 1) {
+    seen.add(current);
+    const record = current as Record<string, unknown>;
+    const nested = record.error && typeof record.error === "object"
+      ? record.error as Record<string, unknown> : null;
+    for (const raw of [record.status, record.statusCode, nested?.code]) {
+      const status = typeof raw === "number" ? raw :
+        typeof raw === "string" && /^[45]\d\d$/.test(raw) ? Number(raw) : null;
+      if (status !== null && Number.isInteger(status) && status >= 400 && status <= 599) return status;
+    }
+    current = record.cause;
+  }
+  // Some SDK versions embed only a JSON error body in the exception message.
+  const message = error instanceof Error ? error.message : "";
   const parsed = safeJsonParse(message);
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    parsed !== null &&
-    "error" in parsed &&
-    parsed.error &&
-    typeof parsed.error === "object" &&
-    "code" in parsed.error &&
-    typeof parsed.error.code === "number"
-  ) {
-    return parsed.error.code;
+  if (parsed && typeof parsed === "object" && "error" in parsed &&
+      parsed.error && typeof parsed.error === "object" && "code" in parsed.error) {
+    const code = parsed.error.code;
+    if (typeof code === "number" && Number.isInteger(code) && code >= 400 && code <= 599) return code;
   }
+  return null;
+}
 
-  const codeMatch = message.match(/"code"\s*:\s*(\d{3})/);
-  if (codeMatch) {
-    return Number(codeMatch[1]);
+function extractErrorCode(error: unknown): string | null {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object" && !seen.has(current); depth += 1) {
+    seen.add(current);
+    const value = current as Record<string, unknown>;
+    const nested = value.error && typeof value.error === "object"
+      ? value.error as Record<string, unknown> : null;
+    for (const raw of [value.code, value.status, nested?.status, nested?.code]) {
+      if (typeof raw === "string" && /^[A-Za-z][A-Za-z0-9_]{0,47}$/.test(raw)) return raw.toUpperCase();
+    }
+    current = value.cause;
   }
-
   return null;
 }
 
@@ -157,76 +162,37 @@ function isRetryableStatus(statusCode: number | null): boolean {
 }
 
 function classifyError(error: unknown): AiProviderError {
-  if (error instanceof AiProviderError) {
-    return error;
-  }
-
+  if (error instanceof AiProviderError) return error;
   const rawMessage = extractRawMessage(error);
   const statusCode = extractStatusCode(error);
-
-  if (statusCode === 429) {
-    return new AiProviderError({
-      message: "The AI model is temporarily rate limited. Please try again.",
-      kind: "rate_limited",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
+  const errorCode = extractErrorCode(error);
+  const codeTransient = errorCode !== null && ["UNAVAILABLE", "RESOURCE_EXHAUSTED",
+    "DEADLINE_EXCEEDED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN"].includes(errorCode);
+  const retryable = isRetryableStatus(statusCode) || codeTransient;
+  if (statusCode === 429 || errorCode === "RESOURCE_EXHAUSTED") {
+    return new AiProviderError({ message: "The AI model is temporarily rate limited. Please try again.",
+      kind: "rate_limited", statusCode, retryable: true, provider: "gemini", rawMessage, cause: error });
   }
-
-  if (statusCode === 503) {
-    return new AiProviderError({
-      message:
-        "The AI model is temporarily unavailable due to high demand. Search still works, and you can retry in a moment.",
-      kind: "unavailable",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
+  if (statusCode === 503 || errorCode === "UNAVAILABLE") {
+    return new AiProviderError({ message: "The AI provider is temporarily unavailable.",
+      kind: "unavailable", statusCode, retryable: true, provider: "gemini", rawMessage, cause: error });
   }
-
-  if (statusCode !== null && isRetryableStatus(statusCode)) {
-    return new AiProviderError({
-      message:
-        "The AI provider is temporarily unavailable. Search still works, and you can retry in a moment.",
-      kind: "upstream",
-      statusCode,
-      retryable: true,
-      rawMessage,
-    });
+  if (retryable) {
+    return new AiProviderError({ message: "The AI provider is temporarily unavailable.",
+      kind: "upstream", statusCode, retryable: true, provider: "gemini", rawMessage, cause: error });
   }
-
   if (statusCode !== null) {
-    return new AiProviderError({
-      message:
-        statusCode === 404
-          ? `The configured Gemini model "${GEMINI_MODEL}" was not found or is not available to this API key.`
-          : `The AI provider returned an error${statusCode ? ` (${statusCode})` : ""}.`,
-      kind: "upstream",
-      statusCode,
-      retryable: false,
-      rawMessage,
-    });
+    return new AiProviderError({ message: statusCode === 404
+      ? `The configured Gemini model "${GEMINI_MODEL}" was not found or is unavailable.`
+      : `The AI provider returned HTTP ${statusCode}.`, kind: "upstream", statusCode,
+      retryable: false, provider: "gemini", rawMessage, cause: error });
   }
-
-  if (
-    rawMessage.includes("Missing GEMINI_API_KEY") ||
-    rawMessage.includes("server environment")
-  ) {
-    return new AiProviderError({
-      message: "AI model configuration is missing on the server.",
-      kind: "configuration",
-      retryable: false,
-      rawMessage,
-    });
+  if (rawMessage.includes("Missing GEMINI_API_KEY") || rawMessage.includes("server environment")) {
+    return new AiProviderError({ message: "AI model configuration is missing on the server.",
+      kind: "configuration", provider: "gemini", retryable: false, rawMessage, cause: error });
   }
-
-  return new AiProviderError({
-    message: "An unexpected AI provider error occurred.",
-    kind: "unknown",
-    retryable: false,
-    rawMessage,
-  });
+  return new AiProviderError({ message: "An unexpected AI provider error occurred.",
+    kind: "unknown", provider: "gemini", retryable: false, rawMessage, cause: error });
 }
 
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
@@ -313,13 +279,21 @@ export async function streamText({
   return withRetry(async () => {
     const gemini = await getClient();
 
+    // The answer route has no onChunk consumer: avoid an unnecessary streaming
+    // transport while retaining true streaming for callers that request it.
+    if (!onChunk) {
+      const response = await gemini.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: { systemInstruction, temperature },
+      });
+      return response.text ?? "";
+    }
+
     const response = await gemini.models.generateContentStream({
       model: GEMINI_MODEL,
       contents: prompt,
-      config: {
-        systemInstruction,
-        temperature,
-      },
+      config: { systemInstruction, temperature },
     });
 
     let fullText = "";

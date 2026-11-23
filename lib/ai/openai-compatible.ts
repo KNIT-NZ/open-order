@@ -425,6 +425,32 @@ async function consumeSse(
 export async function streamText(
   request: AiStreamTextRequest,
 ): Promise<string> {
+  // No consumer receives model chunks in the validated-answer route. Prefer
+  // a normal completion; retain SSE only when onChunk is explicitly supplied.
+  if (!request.onChunk) {
+    return withRetry(async () => {
+      const model = getModel(request.task);
+      if (!model) {
+        throw new AiProviderError({ message: "AI OpenAI-compatible model is not configured.",
+          kind: "configuration", provider: PROVIDER_ID });
+      }
+      const response = await fetch(getEndpoint(), {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(buildRequestBody({
+          task: request.task,
+          systemInstruction: request.systemInstruction,
+          prompt: request.prompt,
+          temperature: request.temperature ?? 0.2,
+          stream: false,
+        })),
+      });
+      if (!response.ok) throw await readErrorResponse(response, model);
+      const payload: unknown = await response.json();
+      return extractCompletionText(payload);
+    });
+  }
+
   let lastError: AiProviderError | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {

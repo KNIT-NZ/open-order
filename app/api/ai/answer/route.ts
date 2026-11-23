@@ -1164,7 +1164,7 @@ export async function POST(request: NextRequest) {
               answerText: fallbackAnswer,
               authorities: authorityPayload,
               fallbackReason,
-              claimValidationNote: `v38.1 operation=${operationFailure.phase}; kind=${operationFailure.kind}; status=${operationFailure.httpStatus ?? "none"}; code=${operationFailure.code ?? "none"}; retryable=${operationFailure.retryable}; attempts=${operationFailure.attempts}; elapsedMs=${operationFailure.elapsedMs}`,
+              claimValidationNote: `v38.1 operation=${operationFailure.phase}; kind=${operationFailure.kind}; status=${operationFailure.httpStatus ?? "none"}; code=${operationFailure.code ?? "none"}; provider=${operationFailure.provider ?? "none"}; upstreamName=${operationFailure.upstreamErrorName ?? "none"}; retryable=${operationFailure.retryable}; attempts=${operationFailure.attempts}; elapsedMs=${operationFailure.elapsedMs}`,
               operationFailure,
             });
 

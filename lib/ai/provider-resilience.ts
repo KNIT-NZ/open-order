@@ -21,6 +21,8 @@ export type AiFailureDiagnostic = {
   kind: AiFailureKind;
   httpStatus: number | null;
   code: string | null;
+  provider: string | null;
+  upstreamErrorName: string | null;
   retryable: boolean;
   attempts: number;
   elapsedMs: number;
@@ -74,10 +76,20 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   let next: unknown = error;
   let httpStatus: number | null = null;
   let code: string | null = null;
+  let provider: string | null = null;
+  let upstreamErrorName: string | null = null;
   let formatFailure = false;
   for (let depth = 0; depth < 4 && isObject(next) && !seen.has(next); depth += 1) {
     seen.add(next);
     const record = next;
+    if (provider === null && (record.provider === "gemini" ||
+      record.provider === "openai-compatible" || record.provider === "router")) {
+      provider = record.provider;
+    }
+    if (upstreamErrorName === null && typeof record.name === "string" &&
+      record.name !== "AiProviderError" && /^[A-Za-z][A-Za-z0-9]{0,47}$/.test(record.name)) {
+      upstreamErrorName = record.name;
+    }
     if (record.name === "ZodError" || record.name === "SyntaxError") {
       formatFailure = true;
     }
@@ -98,18 +110,18 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
 
   // A schema failure is an invalid validation result, not a capacity signal.
   if (formatFailure) {
-    return { phase, kind: "validation_format", httpStatus, code, retryable: false };
+    return { phase, kind: "validation_format", httpStatus, code, provider, upstreamErrorName, retryable: false };
   }
   const typedTransient = (httpStatus !== null && TRANSIENT_STATUSES.has(httpStatus)) ||
     (code !== null && TRANSIENT_CODES.has(code));
   if (typedTransient) {
-    return { phase, kind: "provider_transient", httpStatus, code, retryable: true };
+    return { phase, kind: "provider_transient", httpStatus, code, provider, upstreamErrorName, retryable: true };
   }
   const typedNonretryable = httpStatus !== null || (code !== null && NONRETRYABLE_CODES.has(code));
   if (typedNonretryable) {
-    return { phase, kind: "provider_nonretryable", httpStatus, code, retryable: false };
+    return { phase, kind: "provider_nonretryable", httpStatus, code, provider, upstreamErrorName, retryable: false };
   }
-  return { phase, kind: "application_or_unknown", httpStatus, code, retryable: false };
+  return { phase, kind: "application_or_unknown", httpStatus, code, provider, upstreamErrorName, retryable: false };
 }
 
 export class AiOperationFailure extends Error {
