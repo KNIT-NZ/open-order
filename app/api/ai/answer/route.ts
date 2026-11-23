@@ -786,6 +786,11 @@ export async function POST(request: NextRequest) {
               )
               .map((claim) => claim.id);
 
+            // v29: diagnostics only. Preserve the exact pre-prune bottom-line state.
+            const ooV29BottomLineBeforeSemanticPrune = answerSectionHasContent(
+              finalAnswer,
+              "Bottom line:",
+            );
             if (unsupportedClaimIds.length > 0) {
               const semanticPrune = pruneUnsupportedAnswerClaims({
                 answerText: finalAnswer,
@@ -834,6 +839,26 @@ export async function POST(request: NextRequest) {
               !finalCitationValidation.ok ||
               !finalMentionValidation.ok
             ) {
+              const ooV29RejectedClaimDetails = unsupportedClaimIds
+                .slice(0, 8)
+                .map((claimId) => {
+                  const rejectedClaim = answerClaims.find((claim) => claim.id === claimId);
+                  const reason = validationById.get(claimId)?.reason ?? "missing validation decision";
+                  const claimExcerpt = (rejectedClaim?.text ?? "").replace(/\s+/g, " ").slice(0, 130);
+                  return `${claimId}[${claimExcerpt}]: ${reason.replace(/\s+/g, " ").slice(0, 220)}`;
+                })
+                .join(" | ");
+              const ooV29FailureTrace = [
+                "v29-semantic-fallback-trace",
+                `bottomLineBeforePrune=${ooV29BottomLineBeforeSemanticPrune}`,
+                `bottomLineAfterPrune=${hasBottomLine}`,
+                `draftClaims=${answerClaims.length}`,
+                `rejectedClaims=${unsupportedClaimIds.length}`,
+                `remainingClaims=${remainingClaims.length}`,
+                `citationsValid=${finalCitationValidation.ok}`,
+                `mentionsValid=${finalMentionValidation.ok}`,
+                `rejected=${ooV29RejectedClaimDetails || "none"}`,
+              ].join("; ");
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
                 : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
@@ -863,6 +888,8 @@ export async function POST(request: NextRequest) {
                 answerText: fallbackAnswer,
                 authorities: authorityPayload,
                 fallbackReason,
+                // v29: existing debug-snapshot field, only for this failure path.
+                claimValidationNote: ooV29FailureTrace,
               });
 
               controller.close();
