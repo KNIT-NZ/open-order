@@ -192,6 +192,9 @@ Validation rules:
 - A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
 - Validation is an entailment test, not an exhaustiveness test. Do not reject an otherwise supported claim merely because it omits other true details, consequences, or adjacent rules from the authority.
 - An omitted qualification matters only when omitting it makes the proposition broader, false, or materially misleading.
+- For a categorical or exhaustive claim about a prohibition, duty, exclusive permission, or mandatory consequence, inspect the FULL operative subsection for explicit "except", "unless", "subject to", "provided that", or other limiting clauses. If the claim mentions one route but silently omits another express exception to that same rule, it is broader than the source and MUST be marked unsupported.
+- Distinguish "generally restricted" (a non-exhaustive summary) from "may never", "cannot", "prohibited without X", or "unless X" when the source expressly provides an additional route. Do not make every non-exhaustive description recite all unrelated source details.
+- If a source exception cites an unselected provision, validate its existence as an exception but do not assert the unselected provision's contents.
 - If an authority states that an actor may do X and also states a separate consequence Y, a claim stating only that the actor may do X is supported unless Y is a condition or qualification on X.
 - If a claim contains multiple factual or procedural propositions, mark it supported only when every proposition in that claim is supported by its cited authorities.
 - A merely related authority is not enough.
@@ -281,6 +284,7 @@ Available cited authority text:
 ${renderedAuthorities || "No cited authority text was available."}
 
 Return one validation result for every claim ID above.
+For each categorical negative or exclusive restriction, expressly test its cited source for qualifications in the same operative subsection before recording supported=true.
 `.trim();
 }
 

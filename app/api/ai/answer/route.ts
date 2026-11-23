@@ -11,6 +11,7 @@ import {
   buildSearchPlannerPrompt,
   SEARCH_PLANNER_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
+import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
@@ -780,9 +781,20 @@ export async function POST(request: NextRequest) {
               claimValidation.claims.map((claim) => [claim.id, claim]),
             );
 
+            // v34: independently check source-stated exceptions in the same
+            // operative subsection. A model validator cannot silently approve
+            // a categorical restriction that removes an express exception.
+            const qualificationRejections = findOmittedSourceQualifications({
+              claims: answerClaims,
+              authorities: finalAuthorities,
+            });
+            const qualificationById = new Map(
+              qualificationRejections.map((rejection) => [rejection.claimId, rejection]),
+            );
             const unsupportedClaimIds = answerClaims
               .filter(
-                (claim) => validationById.get(claim.id)?.supported !== true,
+                (claim) => validationById.get(claim.id)?.supported !== true ||
+                  qualificationById.has(claim.id),
               )
               .map((claim) => claim.id);
 
@@ -805,6 +817,7 @@ export async function POST(request: NextRequest) {
               const unsupportedReasons = semanticPrune.removedClaims
                 .map((claim) => {
                   const reason =
+                    qualificationById.get(claim.id)?.reason ??
                     validationById.get(claim.id)?.reason ??
                     "no supporting validation result";
                   return `${claim.id}: ${reason}`;
@@ -843,7 +856,8 @@ export async function POST(request: NextRequest) {
                 .slice(0, 8)
                 .map((claimId) => {
                   const rejectedClaim = answerClaims.find((claim) => claim.id === claimId);
-                  const reason = validationById.get(claimId)?.reason ?? "missing validation decision";
+                  const reason = qualificationById.get(claimId)?.reason ??
+                    validationById.get(claimId)?.reason ?? "missing validation decision";
                   const claimExcerpt = (rejectedClaim?.text ?? "").replace(/\s+/g, " ").slice(0, 130);
                   return `${claimId}[${claimExcerpt}]: ${reason.replace(/\s+/g, " ").slice(0, 220)}`;
                 })
