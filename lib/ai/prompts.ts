@@ -233,7 +233,7 @@ export function buildAnswerClaimValidationPrompt(input: {
   const sourceLabelForClaimCitation = (citation: string): string => {
     const label = citation.trim();
     const qualified = label.match(
-      /^((?:SO\s+\d+)|(?:\d+\/\d+))(\(\d+[a-z]?\)(?:\s*[-–]\s*\(\d+[a-z]?\))?)$/i,
+      /^((?:SO\s+\d+)|(?:\d+\/\d+))\s*(\(\d+[a-z]?\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]?\)(?:\([a-z]\))?)?)$/i,
     );
     return qualified ? qualified[1].replace(/\s+/g, " ") : label;
   };
