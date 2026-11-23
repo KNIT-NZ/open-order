@@ -2392,7 +2392,7 @@ export function buildFallbackAnswer(input: {
   fallbackReason: string;
   // v38: describe the actual failure boundary; do not claim that retrieved
   // evidence was absent merely because selection rejected every candidate.
-  failureClass?: "selection" | "provider" | "validation";
+  failureClass?: "selection" | "provider" | "validation" | "drafting_unavailable" | "validation_unavailable";
   retrievedEvidenceCount?: number;
 }): string {
   const best = input.authorities.slice(0, 4);
@@ -2400,16 +2400,26 @@ export function buildFallbackAnswer(input: {
   const foundButRejected = input.failureClass === "selection" &&
     (input.retrievedEvidenceCount ?? 0) > 0;
   const providerFailure = input.failureClass === "provider";
+  const draftingUnavailable = input.failureClass === "drafting_unavailable";
+  const validationUnavailable = input.failureClass === "validation_unavailable";
 
-  const bottomLine = providerFailure
+  const bottomLine = draftingUnavailable
     ? (best.length > 0
-      ? `The AI provider could not complete an answer; the selected authorities are available below for inspection ${citations.join(" ")}.`
-      : "The AI provider could not complete an answer.")
-    : foundButRejected
-      ? "Retrieval found possible authorities, but none passed source-grounded selection; no procedural conclusion can be made from this result."
-      : best.length > 0
-        ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
-        : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
+      ? `Answer generation did not complete; the selected authorities are available for inspection ${citations.join(" ")}.`
+      : "Answer generation did not complete.")
+    : validationUnavailable
+      ? (best.length > 0
+        ? `Grounded-claim verification did not complete; the selected authorities are available for inspection ${citations.join(" ")}.`
+        : "Grounded-claim verification did not complete.")
+      : providerFailure
+        ? (best.length > 0
+          ? `The AI provider could not complete an answer; the selected authorities are available below for inspection ${citations.join(" ")}.`
+          : "The AI provider could not complete an answer.")
+        : foundButRejected
+          ? "Retrieval found possible authorities, but none passed source-grounded selection; no procedural conclusion can be made from this result."
+          : best.length > 0
+            ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
+            : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
 
   const whatThisMeans = foundButRejected
     ? "The retrieval candidates and the final authority selection are separate checks; the latter was inconclusive."
@@ -2450,6 +2460,8 @@ export function buildFallbackAnswer(input: {
     "",
     "Risks or constraints:",
     `- A substantive answer was withheld because ${
+      input.failureClass === "drafting_unavailable" ? "answer generation did not complete" :
+      input.failureClass === "validation_unavailable" ? "grounded-claim verification did not complete" :
       input.failureClass === "provider" ? "drafting failed" :
       input.failureClass === "selection" ? "authority selection was inconclusive" :
       "validation failed"

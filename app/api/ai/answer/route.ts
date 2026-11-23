@@ -4,6 +4,12 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { generateJson, streamText } from "@/lib/ai";
 import {
+  failureDiagnostic,
+  publicFailureReason,
+  runClaimValidationWithRetry,
+  type AiOperationPhase,
+} from "@/lib/ai/provider-resilience";
+import {
   ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
   ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
   ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
@@ -512,6 +518,9 @@ export async function POST(request: NextRequest) {
             label: "Drafting answer",
           });
 
+          let activeAiOperation: AiOperationPhase = "drafting";
+          const aiOperationStartedAt = Date.now();
+          let claimValidationAttempts = 0;
           try {
             const draftedAnswer = await streamText({
               task: "answer.generate",
@@ -583,6 +592,7 @@ export async function POST(request: NextRequest) {
               key: "validating",
               label: "Validating grounded claims",
             });
+            activeAiOperation = "post_validation";
 
             const initialPrune = pruneValidatedAnswerContent({
               answerText: finalAnswer,
@@ -787,18 +797,34 @@ export async function POST(request: NextRequest) {
               return;
             }
 
-            const rawClaimValidation = await generateJson<unknown>({
+            // v38.1: retry ONLY a structured, transient provider error from
+            // claim validation. A successful draft must never be regenerated.
+            activeAiOperation = "claim_validation";
+            const validationResult = await runClaimValidationWithRetry({
+              requestStartedAt: started,
+              invoke: () => generateJson<unknown>({
                 task: "answer.validate",
-              systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
-              prompt: buildAnswerClaimValidationPrompt({
-                claims: answerClaims,
-                authorities: finalAuthorities,
+                systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+                prompt: buildAnswerClaimValidationPrompt({
+                  claims: answerClaims,
+                  authorities: finalAuthorities,
+                }),
+                temperature: 0,
               }),
-              temperature: 0,
+              onRetry: () => {
+                send("stage", {
+                  key: "validating",
+                  label: "Retrying grounded-claim validation after a transient AI-service error",
+                });
+              },
             });
-
+            claimValidationAttempts = validationResult.attempts;
             const claimValidation =
-              claimValidationSchema.parse(rawClaimValidation);
+              claimValidationSchema.parse(validationResult.value);
+            activeAiOperation = "post_validation";
+            if (claimValidationAttempts > 1) {
+              claimValidationNote = `v38.1 validated after ${claimValidationAttempts} provider attempts`;
+            }
             const validationById = new Map(
               claimValidation.claims.map((claim) => [claim.id, claim]),
             );
@@ -1074,6 +1100,12 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            if (claimValidationAttempts > 1 &&
+                !(claimValidationNote ?? "").includes("v38.1 validated after")) {
+              claimValidationNote = [claimValidationNote,
+                `v38.1 validated after ${claimValidationAttempts} provider attempts`]
+                .filter(Boolean).join("; ");
+            }
             send("answer_delta", { text: finalAnswer });
 
             send("done", {
@@ -1095,28 +1127,33 @@ export async function POST(request: NextRequest) {
 
             controller.close();
             return;
-          } catch (draftingError) {
-            const draftingMessage =
-              draftingError instanceof Error
-                ? draftingError.message
-                : "AI drafting failed.";
-
+          } catch (operationError) {
+            // v38.1: the original try includes drafting AND validation. Never
+            // misreport a validator/schema exception as a drafting failure.
+            const operationFailure = failureDiagnostic(
+              operationError,
+              activeAiOperation,
+              claimValidationAttempts || 1,
+              Date.now() - aiOperationStartedAt,
+            );
+            const fallbackReason = publicFailureReason(operationFailure);
+            const isDraftFailure = activeAiOperation === "drafting";
             const fallbackAnswer = buildFallbackAnswer({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
               effectiveCorpus,
-              fallbackReason: draftingMessage,
-              failureClass: "provider",
+              fallbackReason,
+              failureClass: isDraftFailure ? "drafting_unavailable" : "validation_unavailable",
             });
 
             send("stage", {
-              key: "answering",
-              label: "AI drafting failed; returning grounded fallback",
+              key: isDraftFailure ? "answering" : "validating",
+              label: isDraftFailure
+                ? "Answer drafting failed; returning source-only fallback"
+                : "Answer validation failed; returning source-only fallback",
             });
-
             send("answer_delta", { text: fallbackAnswer });
-
             send("done", {
               ok: true,
               degraded: true,
@@ -1126,7 +1163,9 @@ export async function POST(request: NextRequest) {
               plan,
               answerText: fallbackAnswer,
               authorities: authorityPayload,
-              fallbackReason: draftingMessage,
+              fallbackReason,
+              claimValidationNote: `v38.1 operation=${operationFailure.phase}; kind=${operationFailure.kind}; status=${operationFailure.httpStatus ?? "none"}; code=${operationFailure.code ?? "none"}; retryable=${operationFailure.retryable}; attempts=${operationFailure.attempts}; elapsedMs=${operationFailure.elapsedMs}`,
+              operationFailure,
             });
 
             controller.close();
