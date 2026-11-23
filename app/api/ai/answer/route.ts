@@ -5,6 +5,8 @@ import { z } from "zod";
 import { generateJson, streamText } from "@/lib/ai";
 import {
   ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+  ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
+  buildAnswerClaimAppealPrompt,
   ANSWER_STREAM_SYSTEM_PROMPT,
   buildAnswerClaimValidationPrompt,
   buildGroundedAnswerPrompt,
@@ -12,6 +14,7 @@ import {
   SEARCH_PLANNER_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
+import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
@@ -70,6 +73,18 @@ const claimValidationSchema = z.object({
       reason: z.string(),
     }),
   ),
+});
+
+const claimAppealSchema = z.object({
+  claims: z.array(z.object({
+    id: z.string().min(1),
+    supported: z.boolean(),
+    reason: z.string(),
+    witnesses: z.array(z.object({
+      citationLabel: z.string().min(1),
+      exactQuote: z.string(),
+    })).max(8),
+  })).max(2),
 });
 
 type SearchPlan = z.infer<typeof searchPlanSchema>;
@@ -791,11 +806,67 @@ export async function POST(request: NextRequest) {
             const qualificationById = new Map(
               qualificationRejections.map((rejection) => [rejection.claimId, rejection]),
             );
+            // v36: one bounded, independent source-quotation review ONLY when
+            // model rejections would erase the entire Bottom line. A v35
+            // deterministic qualification veto is never reconsidered.
+            const initialUnsupported = new Set(answerClaims
+              .filter((claim) => validationById.get(claim.id)?.supported !== true || qualificationById.has(claim.id))
+              .map((claim) => claim.id));
+            const qualificationVetoIds = new Set(qualificationRejections.map((item) => item.claimId));
+            const initialPruned = pruneUnsupportedAnswerClaims({
+              answerText: finalAnswer,
+              claims: answerClaims,
+              unsupportedClaimIds: [...initialUnsupported],
+            });
+            const acceptedAppeals = new Set<string>();
+            let appealDiagnostic: string | null = null;
+            if (answerSectionHasContent(finalAnswer, "Bottom line:") &&
+                !answerSectionHasContent(initialPruned.prunedText, "Bottom line:")) {
+              const disputed = rejectedBottomLineClaims({
+                answerText: finalAnswer,
+                claims: answerClaims,
+                rejectedIds: initialUnsupported,
+                qualificationVetoIds,
+              }).slice(0, 2);
+              if (disputed.length > 0) {
+                send("stage", { key: "validating", label: "Independently reviewing disputed source entailment" });
+                try {
+                  const rawAppeal = await generateJson<unknown>({
+                    task: "answer.validate",
+                    systemInstruction: ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
+                    prompt: buildAnswerClaimAppealPrompt({
+                      claims: disputed.map((claim) => ({
+                        id: claim.id,
+                        text: claim.text,
+                        citations: claim.citations,
+                        originalReason: validationById.get(claim.id)?.reason ?? "Unspecified rejection",
+                      })),
+                      authorities: finalAuthorities,
+                    }),
+                    temperature: 0,
+                  });
+                  const reviewed = claimAppealSchema.parse(rawAppeal);
+                  for (const claim of disputed) {
+                    const verdict = reviewed.claims.find((item) => item.id === claim.id);
+                    if (!verdict || qualificationVetoIds.has(claim.id)) continue;
+                    const attestation = corroborateClaimAppeal({
+                      claim,
+                      verdict,
+                      authorities: finalAuthorities,
+                    });
+                    if (attestation.accepted) acceptedAppeals.add(claim.id);
+                  }
+                  appealDiagnostic = `v36 source-quotation review attempted=${disputed.length}, corroborated=${acceptedAppeals.size}`;
+                } catch (appealError) {
+                  // Reviewer errors, malformed JSON, missing or fake quotations
+                  // are not a reason to waive the original rejection.
+                  appealDiagnostic = `v36 independent review unavailable; original rejection preserved (${appealError instanceof Error ? appealError.name : "error"})`;
+                }
+              }
+            }
             const unsupportedClaimIds = answerClaims
-              .filter(
-                (claim) => validationById.get(claim.id)?.supported !== true ||
-                  qualificationById.has(claim.id),
-              )
+              .filter((claim) => qualificationVetoIds.has(claim.id) ||
+                (validationById.get(claim.id)?.supported !== true && !acceptedAppeals.has(claim.id)))
               .map((claim) => claim.id);
 
             // v29: diagnostics only. Preserve the exact pre-prune bottom-line state.
@@ -827,8 +898,10 @@ export async function POST(request: NextRequest) {
               claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}${
                 unsupportedReasons ? ` (${unsupportedReasons})` : ""
               }`;
+              if (appealDiagnostic) claimValidationNote += `; ${appealDiagnostic}`;
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
+              if (appealDiagnostic) claimValidationNote = appealDiagnostic;
             }
 
             const remainingClaims = extractAnswerClaims(finalAnswer);
@@ -872,6 +945,7 @@ export async function POST(request: NextRequest) {
                 `citationsValid=${finalCitationValidation.ok}`,
                 `mentionsValid=${finalMentionValidation.ok}`,
                 `rejected=${ooV29RejectedClaimDetails || "none"}`,
+                `appeal=${appealDiagnostic || "not attempted"}`,
               ].join("; ");
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."

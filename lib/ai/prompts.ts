@@ -288,6 +288,47 @@ For each categorical negative or exclusive restriction, expressly test its cited
 `.trim();
 }
 
+
+// v36: only used when ordinary entailment validation would otherwise remove
+// the last grounded Bottom line. The independent reviewer must quote the
+// actual cited sources; its verdict alone cannot restore a claim.
+export const ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT = `
+You are an independent evidence-entailment reviewer. Reconsider only the
+specific claim that another validator rejected. An earlier rejection is not
+proof of error, and an apparent quotation is not proof of entailment.
+
+Read ALL citations attached to the claim together. A comparative claim may
+require two provisions, with one source supporting each side. Read complete
+numbered subsections rather than titles or isolated words. Distinguish a
+proposition stated by the sources from an inference, and do not overlook a
+qualification or exception. Do not supply general procedural knowledge.
+
+Return supported=true only if ALL elements of the original claim follow from
+the cited sources. For EACH cited authority, supply a contiguous VERBATIM
+quotation of at least 24 characters from its provided source body. Quote the
+operative language, not a heading. If any side, exception or condition is
+unproven, mark unsupported and do not fabricate quotations. Never use an
+uncited source. Return JSON only, in this shape:
+{"claims":[{"id":"claim-1","supported":false,"reason":"...","witnesses":[{"citationLabel":"SO 222","exactQuote":"..."}]}]}
+`.trim();
+
+export function buildAnswerClaimAppealPrompt(input: {
+  claims: Array<{ id: string; text: string; citations: string[]; originalReason: string }>;
+  authorities: ProceduralSearchResult[];
+}): string {
+  const parentLabel = (label: string): string => {
+    const qualified = label.trim().match(/^((?:SO\s+\d+[a-z]?)|(?:\d+\/\d+))\s*(\(\d+[a-z]?\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]?\)(?:\([a-z]\))?)?)$/i);
+    return (qualified ? qualified[1] : label).replace(/\s+/g, " ");
+  };
+  const allowed = new Set(input.claims.flatMap((claim) => claim.citations.map(parentLabel)));
+  const sources = input.authorities.filter((authority) => allowed.has(authority.citationLabel))
+    .map((authority) => `[${authority.citationLabel}]\n${authority.sectionContent}`).join("\n\n");
+  const disputes = input.claims.map((claim) =>
+    `ID: ${claim.id}\nClaim: ${claim.text}\nCited: ${claim.citations.map((c) => `[${c}]`).join(" ")}\nOriginal rejection reason: ${claim.originalReason}`,
+  ).join("\n\n");
+  return `Claims needing independent review:\n${disputes}\n\nExact cited sources:\n${sources || "NONE"}\n\nReview every proposition and return a JSON verdict plus source quotations for EACH listed claim.`;
+}
+
 export function buildSearchPlannerPrompt(input: {
   question: string;
   corpus?: string | null;
