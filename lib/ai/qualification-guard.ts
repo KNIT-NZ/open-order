@@ -136,7 +136,24 @@ export function findOmittedSourceQualifications(input: {
         // spurious matching against an unrelated exception in a cited section.
         const sourceWithoutArms = subsection.replace(EXCEPTION, " ");
         if (!includesAction(claim.text, sourceWithoutArms) || !hasSubjectOverlap(claim.text, sourceWithoutArms)) continue;
-        const missing = arms.filter((arm) => !acknowledgesArm(claim.text, arm));
+        // An "other than" qualification may govern an unrelated sentence in
+        // the same numbered subsection, despite governing a different act.
+        // Preserve same-sentence carve-outs and every other explicit exception
+        // type under the existing conservative guard.
+        const modalStart = operativeMatch.index;
+        const sentenceStart = Math.max(0, subsection.lastIndexOf(".", modalStart) + 1);
+        const sentenceEndFound = subsection.indexOf(".", modalStart);
+        const sentenceEnd = sentenceEndFound < 0 ? subsection.length : sentenceEndFound + 1;
+        const restrictionSentence = subsection.slice(sentenceStart, sentenceEnd);
+        const missing = arms.filter((arm) => {
+          if (arm.kind !== "other than") return !acknowledgesArm(claim.text, arm);
+          const armPhrase = `${arm.kind} ${arm.text}`.toLowerCase();
+          const armPosition = subsection.toLowerCase().indexOf(armPhrase);
+          // Only the exception to the very same operative sentence qualifies.
+          const sameSentence = armPosition >= sentenceStart && armPosition < sentenceEnd;
+          if (!sameSentence) return false;
+          return !acknowledgesArm(claim.text, arm);
+        });
         if (!missing.length) continue;
         rejected.push({
           claimId: claim.id,

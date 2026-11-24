@@ -140,7 +140,7 @@ Critical grounding rules:
 - When a decisive proposition is unsupported but other procedural steps are supported, answer those supported steps directly and leave the unsupported proposition unresolved.
 
 Answer-responsiveness rules:
-- Start the "Bottom line" with a direct, source-grounded answer to the act or entitlement actually asked about. When the supplied authority supports it, use a qualified "Yes", "No", or "Not simply" before discussing an alternative procedure. When it does not settle the question, explicitly say the supplied evidence is insufficient; do not manufacture a prohibition from silence.
+- Start the "Bottom line" with a direct, source-grounded answer to the act or entitlement actually asked about. Prefer "Yes", "No", "Yes, but ...", or a direct statement of the governing condition. Do not open an answer with "Not simply" or another evasive stock phrase. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.
 - Distinguish the act the user proposes from a different mechanism that might later achieve a related result. Answer the first question before explaining the alternative.
 - Distinguish who can APPLY for an action, who DECIDES it, and which requirements must be satisfied. A necessary condition is not automatically sufficient; permission to request is not authority to compel.
 - Where the relevant source states a negative limit with an exception or threshold, express the limit as a qualified negative. Never infer that satisfying the threshold guarantees the opposite outcome.
@@ -190,9 +190,9 @@ You are checking whether each drafted claim is actually supported by the authori
 
 Validation rules:
 - Assess only the proposition as written.
-- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary paraphrase.
+- A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary logical consequence of its express terms. A necessary consequence is not a guess from silence: an exhaustive, expressly defined threshold excludes lower thresholds without the source having to enumerate every disallowed threshold.
 - Validation is an entailment test, not an exhaustiveness test. Do not reject an otherwise supported claim merely because it omits other true details, consequences, or adjacent rules from the authority.
-- An omitted qualification matters only when omitting it makes the proposition broader, false, or materially misleading.
+- An omitted qualification matters only when omitting it makes the proposition broader, false, or materially misleading. Determine whether each exception actually qualifies the SAME operative action and actor. An "other than" phrase governing a separate practice does not create an exception to another sentence's independent prohibition.
 - For a categorical or exhaustive claim about a prohibition, duty, exclusive permission, or mandatory consequence, inspect the FULL operative subsection for explicit "except", "unless", "subject to", "provided that", or other limiting clauses. If the claim mentions one route but silently omits another express exception to that same rule, it is broader than the source and MUST be marked unsupported.
 - Distinguish "generally restricted" (a non-exhaustive summary) from "may never", "cannot", "prohibited without X", or "unless X" when the source expressly provides an additional route. Do not make every non-exhaustive description recite all unrelated source details.
 - If a source exception cites an unselected provision, validate its existence as an exception but do not assert the unselected provision's contents.
@@ -301,8 +301,11 @@ proof of error, and an apparent quotation is not proof of entailment.
 Read ALL citations attached to the claim together. A comparative claim may
 require two provisions, with one source supporting each side. Read complete
 numbered subsections rather than titles or isolated words. Distinguish a
-proposition stated by the sources from an inference, and do not overlook a
-qualification or exception. Do not supply general procedural knowledge.
+proposition stated by the sources from a close necessary consequence of their
+explicit conditions. A defined exhaustive threshold excludes lesser thresholds;
+that is not an inference from silence. Do not overlook a qualification or
+exception, but test whether it qualifies this exact action and not a separate
+sentence's practice. Do not supply general procedural knowledge.
 
 Return supported=true only if ALL elements of the original claim follow from
 the cited sources. For EACH cited authority, supply a contiguous VERBATIM
@@ -454,8 +457,10 @@ Use ONLY the supplied authority texts and the already-surviving grounded claims.
 Write exactly ONE independently supportable Bottom line sentence; include all
 material source-stated conditions and exceptions relevant to that sentence.
 Do not copy a previously rejected overbroad conclusion or use unselected sources.
-Start with a direct qualified answer to the question, or explicitly state the
-remaining uncertainty. Append at least one citation from the supplied pack.
+Start with a direct grounded answer, not "Not simply". If a categorical
+formulation was rejected, express the source's operative condition or defined
+threshold itself rather than repeating the disputed paraphrase. An exception
+for an adjacent practice does not qualify a separate express prohibition. Append at least one citation from the supplied pack.
 Return JSON ONLY with the shape {"bottomLine":"... [SO 1]."}.
 If no safe direct line can be written, return {"bottomLine":""}.
 `.trim();
@@ -464,11 +469,16 @@ export function buildBottomLineRecoveryPrompt(input: {
   question: string;
   survivingAnswer: string;
   authorities: Array<{ citationLabel: string; sectionContent: string }>;
+  rejectedClaims?: Array<{ text: string; reason: string }>;
 }): string {
   return JSON.stringify({
     task: "Build a new single-line grounded Bottom line; the previous one was rejected",
     question: input.question,
     survivingClaims: input.survivingAnswer.slice(0, 3200),
+    rejectedClaims: (input.rejectedClaims ?? []).slice(0, 2).map((claim) => ({
+      text: claim.text.slice(0, 500),
+      reason: claim.reason.slice(0, 500),
+    })),
     selectedAuthorities: input.authorities.slice(0, 4).map((authority) => ({
       citationLabel: authority.citationLabel,
       sectionContent: authority.sectionContent,

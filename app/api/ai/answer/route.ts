@@ -969,6 +969,14 @@ export async function POST(request: NextRequest) {
                     question,
                     survivingAnswer: finalAnswer,
                     authorities: finalAuthorities,
+                    rejectedClaims: answerClaims
+                      .filter((claim) => unsupportedClaimIds.includes(claim.id))
+                      .slice(0, 2)
+                      .map((claim) => ({
+                        text: claim.text,
+                        reason: qualificationById.get(claim.id)?.reason ??
+                          validationById.get(claim.id)?.reason ?? "Unsupported claim",
+                      })),
                   }),
                   temperature: 0,
                 });
