@@ -20,8 +20,14 @@ import {
   buildGroundedAnswerPrompt,
   buildSearchPlannerPrompt,
   SEARCH_PLANNER_SYSTEM_PROMPT,
+  V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
+  buildV40SourceAdjudicationPrompt,
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
+import {
+  buildV40Dossier, validateV40Proposal, v40MustAdjudicate,
+  v40SourceScopeMismatch, type V40Situation,
+} from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
@@ -71,6 +77,34 @@ const searchPlanSchema = z.object({
     .transform((queries) => queries.slice(0, 3)),
   salientTerms: z.array(z.string().min(1)).max(4).default([]),
   notes: z.string(),
+  // Optional on purpose: an earlier planner JSON remains valid, and the
+  // production selector survives if this new context field is unavailable.
+  situation: z.object({
+    kind: z.enum(["incident", "procedure"]),
+    actor: z.string().max(180),
+    setting: z.string().max(180),
+    action: z.string().max(240),
+    affectedPerson: z.string().max(180),
+    proceduralMoment: z.string().max(180),
+    decisionQuestion: z.string().max(260),
+    materialFacts: z.array(z.string().max(240)).max(5),
+    evidenceQueries: z.array(z.string().min(2).max(90)).max(2),
+  }).optional(),
+});
+
+const v40SourceAdjudicationSchema = z.object({
+  selected: z.array(z.object({
+    citationLabel: z.string().min(1).max(24),
+    role: z.enum(["governing", "qualification", "implementation"]),
+    exactQuote: z.string().min(1).max(900),
+    actorMatches: z.boolean(),
+    settingMatches: z.boolean(),
+    actionMatches: z.boolean(),
+    stageMatches: z.boolean(),
+    rationale: z.string().max(400),
+  })).max(10),
+  remainingUncertainties: z.array(z.string().max(280)).max(5),
+  explanation: z.string().max(500),
 });
 
 const claimValidationSchema = z.object({
@@ -81,6 +115,11 @@ const claimValidationSchema = z.object({
       reason: z.string(),
     }),
   ),
+  responsiveness: z.object({
+    answersUserQuestion: z.boolean(),
+    reason: z.string().max(500),
+    unaddressedParts: z.array(z.string().max(180)).max(5),
+  }).optional(),
 });
 
 const bottomLineRecoverySchema = z.object({bottomLine: z.string().max(900)});
@@ -200,9 +239,14 @@ export async function POST(request: NextRequest) {
             label: "Retrieving authorities",
           });
 
+          const additionalScenarioQueries = (plan.situation?.kind === "incident"
+            ? plan.situation.evidenceQueries : []).filter((value, index, all) =>
+              !plan.searchQueries.some((prior) => prior.toLowerCase() === value.toLowerCase()) &&
+              all.findIndex((prior) => prior.toLowerCase() === value.toLowerCase()) === index,
+            ).slice(0, 2);
           const queryPlan = buildProceduralQueryPlan({
             question,
-            plannerQueries: plan.searchQueries,
+            plannerQueries: [...plan.searchQueries, ...additionalScenarioQueries],
             salientTerms: plan.salientTerms,
             effectiveCorpus,
           });
@@ -224,6 +268,20 @@ export async function POST(request: NextRequest) {
               provenance: dimension.provenance,
               results: searchResponse.results,
             });
+          }
+          // The legacy query-plan utility may cap planned queries at three.
+          // Run the two distinct incident facets independently if omitted;
+          // never pretend they were included merely because the planner named them.
+          for (const query of additionalScenarioQueries) {
+            if (searches.some((search) => search.query.toLowerCase() === query.toLowerCase())) continue;
+            const searchResponse = await searchProceduralAuthorities({
+              q: query, corpus: effectiveCorpus, limit: 10, offset: 0,
+            });
+            searches.push({
+              query, corpus: effectiveCorpus, provenance: "planner",
+              results: searchResponse.results,
+            });
+            expandedQueries.push(query);
           }
 
           let selected = selectFinalAuthorities({
@@ -358,9 +416,78 @@ export async function POST(request: NextRequest) {
             question,
             searchProceduralAuthorities,
           });
+
+          // V40: preserve the established selector for procedure-first queries;
+          // for natural incidents, adjudicate actual source-body evidence across
+          // different actors/forums/stages. A model citation is never trusted
+          // without a retrieved source and a verbatim supporting quotation.
+          const v40IncidentGate = v40MustAdjudicate(
+            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0,
+          );
+          let v40AuthoritySet = [...v517Selection.finalAuthorities];
+          let v40Diagnostic: {
+            status: string; candidateCount: number; selected: string[];
+            rejected: string[]; gaps: string[]; providerAttempts: number;
+          } = {
+            status: "not_invoked", candidateCount: 0, selected: [], rejected: [], gaps: [], providerAttempts: 0,
+          };
+          if (v40IncidentGate) {
+            const dossier = buildV40Dossier({
+              question, searches, legacySelected: v40AuthoritySet,
+            });
+            v40Diagnostic.candidateCount = dossier.length;
+            if (dossier.length > 0) {
+              send("stage", {
+                key: "selecting", label: "Adjudicating source scope and operative evidence",
+              });
+              try {
+                const v40Provider = await runClaimValidationWithRetry({
+                  requestStartedAt: started,
+                  invoke: () => generateJson<unknown>({
+                    // Evidence adjudication is a strict validation operation.
+                    task: "answer.validate",
+                    systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
+                    prompt: buildV40SourceAdjudicationPrompt({
+                      question, situation: plan.situation as V40Situation | undefined,
+                      candidates: dossier, legacySelected: v40AuthoritySet,
+                    }),
+                    temperature: 0,
+                  }),
+                  onRetry: () => send("stage", {
+                    key: "selecting", label: "Retrying source adjudication after a transient provider error",
+                  }),
+                });
+                const v40Parsed = v40SourceAdjudicationSchema.parse(v40Provider.value);
+                const v40Review = validateV40Proposal({
+                  question, candidates: dossier, proposal: v40Parsed,
+                });
+                v40AuthoritySet = v40Review.authorities;
+                v40Diagnostic = {
+                  status: v40Review.reason,
+                  candidateCount: dossier.length,
+                  selected: v40Review.accepted,
+                  rejected: v40Review.rejected,
+                  gaps: v40Review.gaps,
+                  providerAttempts: v40Provider.attempts,
+                };
+              } catch {
+                // Provider failure cannot be mistaken for a source judgment.
+                // A source-scope-compatible baseline is preferable to an
+                // unscreened new source; otherwise decline to answer.
+                v40AuthoritySet = v40AuthoritySet.filter((authority) =>
+                  !v40SourceScopeMismatch(question, authority),
+                );
+                v40Diagnostic.status = "adjudication_unavailable";
+                v40Diagnostic.selected = v40AuthoritySet.map((authority) => authority.citationLabel);
+              }
+            } else {
+              v40AuthoritySet = [];
+              v40Diagnostic.status = "no_retrieved_source_bodies";
+            }
+          }
           selected = {
             ...selected,
-            finalAuthorities: v517Selection.finalAuthorities,
+            finalAuthorities: v40AuthoritySet,
           };
 
           const legacyEvidenceGaps = describeMissingAuthoritySlots({
@@ -371,7 +498,7 @@ export async function POST(request: NextRequest) {
           // The legacy slot blueprint controls recovery and diagnostics, not the
           // authoritative semantic evidence pack. A missing legacy slot must
           // not add a contradictory user-facing gap to a grounded answer.
-          const evidenceGaps = v517Selection.finalAuthorities.length > 0
+          const evidenceGaps = v40AuthoritySet.length > 0
             ? []
             : legacyEvidenceGaps;
 
@@ -410,8 +537,14 @@ export async function POST(request: NextRequest) {
               allObligationsComplete: v517Selection.allObligationsComplete,
               obligationDetails: v517Selection.obligationDetails,
               prePruneLabels: v517Selection.prePruneLabels,
-              selectedLabels: v517Selection.selectedLabels,
-              evidenceAdmission: v517Selection.evidenceAdmission,
+              selectedLabels: finalAuthorities.map((authority) => authority.citationLabel),
+              legacySelectedLabels: v517Selection.selectedLabels,
+              // These coverage scores belong to the lexical v5.18 selector,
+              // not the incident adjudicator. Do not misstate them as v40 scores.
+              evidenceAdmission: v40IncidentGate
+                ? v40Diagnostic.status : v517Selection.evidenceAdmission,
+              legacyEvidenceAdmission: v517Selection.evidenceAdmission,
+              scenarioAdjudication: v40Diagnostic,
             },
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
@@ -457,8 +590,9 @@ export async function POST(request: NextRequest) {
             }),
             // The final selection diagnostic must describe the semantic pack
             // actually supplied to drafting, not the earlier legacy ranking.
-            finalAuthoritySelection: v517Selection.finalAuthorities.map((result) => ({
-              query: "semantic_authority_pack",
+            finalAuthoritySelection: finalAuthorities.map((result) => ({
+              query: v40IncidentGate
+                ? "scenario_source_adjudication" : "semantic_authority_pack",
               citationLabel: result.citationLabel,
               heading: result.heading,
               documentCorpus: result.documentCorpus,
@@ -808,6 +942,8 @@ export async function POST(request: NextRequest) {
                 prompt: buildAnswerClaimValidationPrompt({
                   claims: answerClaims,
                   authorities: finalAuthorities,
+                  question,
+                  answerText: finalAnswer,
                 }),
                 temperature: 0,
               }),
@@ -828,6 +964,28 @@ export async function POST(request: NextRequest) {
             const validationById = new Map(
               claimValidation.claims.map((claim) => [claim.id, claim]),
             );
+            if (v40IncidentGate &&
+                claimValidation.responsiveness?.answersUserQuestion !== true) {
+              const fallbackReason =
+                "The cited draft did not demonstrably answer the question asked.";
+              const fallbackAnswer = buildFallbackAnswer({
+                question, planIntent: plan.intent, authorities: finalAuthorities,
+                effectiveCorpus, fallbackReason,
+              });
+              send("stage", {
+                key: "validating", label: "Answer failed incident-responsiveness gate",
+              });
+              send("answer_delta", {text: fallbackAnswer});
+              send("done", {
+                ok: true, degraded: true, question, corpus: effectiveCorpus,
+                latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
+                authorities: authorityPayload, fallbackReason,
+                claimValidationNote: claimValidation.responsiveness?.reason ??
+                  "Validator omitted the mandatory responsiveness verdict",
+              });
+              controller.close();
+              return;
+            }
 
             // v34: independently check source-stated exceptions in the same
             // operative subsection. A model validator cannot silently approve

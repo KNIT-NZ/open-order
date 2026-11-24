@@ -1,0 +1,206 @@
+/**
+ * Open Order v40: source-adjudication contracts, candidate diversity and evidence gates.
+ * No authority IDs, benchmark answers or preferred rulings are embedded here.
+ * Model proposals are untrusted until validated against exact retrieved source text.
+ */
+export type V40Authority = {
+  sectionId: string;
+  citationLabel: string;
+  documentCorpus: string;
+  heading?: string | null;
+  path: string[];
+  sectionContent: string;
+  rank?: number;
+};
+export type V40Search<T extends V40Authority> = {
+  query: string;
+  corpus: string | null;
+  provenance?: string;
+  results: T[];
+};
+export type V40Situation = {
+  kind: "incident" | "procedure";
+  actor: string;
+  setting: string;
+  action: string;
+  affectedPerson: string;
+  proceduralMoment: string;
+  decisionQuestion: string;
+  materialFacts: string[];
+  evidenceQueries: string[];
+};
+export type V40ProposedWitness = {
+  citationLabel: string;
+  role: "governing" | "qualification" | "implementation";
+  exactQuote: string;
+  actorMatches: boolean;
+  settingMatches: boolean;
+  actionMatches: boolean;
+  stageMatches: boolean;
+  rationale: string;
+};
+export type V40Adjudication = {
+  selected: V40ProposedWitness[];
+  remainingUncertainties: string[];
+  explanation: string;
+};
+export type V40Review<T extends V40Authority> = {
+  authorities: T[];
+  rejected: string[];
+  accepted: string[];
+  gaps: string[];
+  reason: string;
+};
+
+const COMMON = new Set([
+  "a", "an", "the", "of", "to", "and", "in", "or", "on", "at", "for", "by", "is", "are", "be", "do", "does", "can", "could", "would", "should", "with", "as", "it", "their", "them", "that", "this", "there", "what", "which", "when", "where", "who", "how", "from", "during", "after", "before", "about", "under", "into", "members", "member", "parliament", "parliamentary", "speaker", "house", "rules", "ruling", "order", "procedure", "proceedings",
+]);
+function words(input: string): Set<string> {
+  return new Set(input.toLowerCase().normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.replace(/(?:ing|ed|es|s)$/,""))
+    .filter((word) => word.length >= 3 && !COMMON.has(word)));
+}
+function intersection(a: Set<string>, b: Set<string>): number {
+  let count = 0;
+  for (const value of a) if (b.has(value)) count += 1;
+  return count;
+}
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Diverse, deterministic SOURCE DISCOVERY, never a source-validity decision.
+ * Round-robin top results from separate searches so large heading clusters
+ * cannot bury later evidence dimensions. Exact model citations are still checked.
+ */
+export function buildV40Dossier<T extends V40Authority>(input: {
+  question: string;
+  searches: V40Search<T>[];
+  legacySelected: T[];
+  max?: number;
+}): T[] {
+  const max = Math.max(8, Math.min(40, input.max ?? 32));
+  const result = new Map<string, T>();
+  const insert = (source: T): void => {
+    if (!source || !source.sectionId || !source.citationLabel ||
+        !source.sectionContent?.trim() ||
+        !["standing_orders", "speakers_rulings"].includes(source.documentCorpus)) return;
+    result.set(`${source.documentCorpus}:${source.citationLabel}`, source);
+  };
+  input.legacySelected.forEach(insert);
+  const question = words(input.question);
+  const queues = input.searches.map((search) => {
+    const query = words(search.query);
+    const ranked = [...search.results].map((source, index) => {
+      const heading = words(`${source.heading ?? ""} ${(source.path ?? []).join(" ")}`);
+      const body = words(source.sectionContent.slice(0, 1800));
+      const headingAffinity = intersection(query, heading);
+      const questionAffinity = intersection(question, heading);
+      const bodyAffinity = intersection(question, body);
+      // Source ranking is local to each search. No cross-query rank comparison.
+      return { source, index, score: headingAffinity * 3 + questionAffinity * 2 +
+        Math.min(bodyAffinity, 7) * 0.4 - index * 0.01 };
+    }).sort((a,b)=>b.score-a.score || a.index-b.index);
+    // Retain a few independently discovered results even if they share a heading.
+    return ranked.slice(0, 8).map((item)=>item.source);
+  });
+  let cursor = 0;
+  while(result.size < max && queues.some((queue)=>queue.length>cursor)) {
+    for (const queue of queues) {
+      if (result.size >= max) break;
+      if (queue[cursor]) insert(queue[cursor]);
+    }
+    cursor += 1;
+  }
+  return [...result.values()].slice(0,max);
+}
+
+export function v40SourceScopeMismatch(question: string, source: V40Authority): string | null {
+  const q = question.toLowerCase();
+  const path = (source.path ?? []).join(" ").toLowerCase();
+  const heading = (source.heading ?? "").toLowerCase();
+  // Generic FORUM and ACTIVITY exclusions, not authority-number exceptions.
+  const chamberActivity = /\b(chamber|house debate|in the house|speech|speaking|mp tells the house|another mp)\b/.test(q);
+  const committeeActivity = /\b(select committee|committee hearing|committee evidence)\b/.test(q);
+  if (chamberActivity && !committeeActivity && /\bselect committees\b/.test(path))
+    return "select-committee source for chamber question";
+  if (/\b(speech|speaking|address the house|in a debate|during debate)\b/.test(q) &&
+      !/\b(petition|petitions)\b/.test(q) &&
+      /\bpetitions\b/.test(path))
+    return "petition procedure for speech question";
+  if (/\bdivision\b/.test(q) && /\b(vote|voting|voters|mps|members)\b/.test(q) &&
+      /\bdivid(?:e|ing) (?:a |the )?bill\b/.test(heading))
+    return "dividing a bill is not a vote division";
+  return null;
+}
+
+export function validateV40Proposal<T extends V40Authority>(input: {
+  question: string;
+  candidates: T[];
+  proposal: V40Adjudication;
+  limit?: number;
+}): V40Review<T> {
+  const limit = Math.max(1,Math.min(4,input.limit ?? 4));
+  const byLabel = new Map(input.candidates.map((source)=>[source.citationLabel,source]));
+  const accepted: string[] = [];
+  const rejected: string[] = [];
+  const authorities: T[] = [];
+  const seen = new Set<string>();
+  for(const item of input.proposal.selected.slice(0,12)) {
+    const source = byLabel.get(item.citationLabel);
+    if(!source || seen.has(item.citationLabel)) { rejected.push(`${item.citationLabel}:unavailable-or-duplicate`); continue; }
+    seen.add(item.citationLabel);
+    if(!(item.actorMatches && item.settingMatches && item.actionMatches && item.stageMatches)) {
+      rejected.push(`${item.citationLabel}:scope-not-established`);continue;
+    }
+    const mismatch = v40SourceScopeMismatch(input.question,source);
+    if(mismatch) { rejected.push(`${item.citationLabel}:${mismatch}`);continue; }
+    const quote = normalizeWhitespace(item.exactQuote);
+    const body = normalizeWhitespace(source.sectionContent);
+    if(quote.length < 24 || !body.includes(quote)) {
+      rejected.push(`${item.citationLabel}:unverified-verbatim-witness`);continue;
+    }
+    // A real quotation is necessary, not sufficient: the model must nominate
+    // a governing or limiting rule. A mere shared topic is not admitted.
+    if(!["governing","qualification","implementation"].includes(item.role)) {
+      rejected.push(`${item.citationLabel}:invalid-source-role`);continue;
+    }
+    authorities.push(source);
+    accepted.push(item.citationLabel);
+    if(authorities.length === limit) break;
+  }
+  // A pack containing only peripheral qualifiers cannot answer the question.
+  const primaryAdmitted = input.proposal.selected.some((item) =>
+    item.role === "governing" && accepted.includes(item.citationLabel),
+  );
+  if (!primaryAdmitted) {
+    return { authorities: [], accepted: [],
+      rejected: [...rejected, "missing-primary-governing-witness"],
+      gaps: input.proposal.remainingUncertainties.slice(0,5),
+      reason: "v40_no_governing_witness" };
+  }
+  return { authorities,accepted,rejected,
+    gaps: input.proposal.remainingUncertainties.slice(0,5),
+    reason: "v40_quoted_source_adjudication" };
+}
+
+export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,
+  hasLegacy: boolean): boolean {
+  if(!hasLegacy)return true;
+  // On established procedural GEN questions, retain v39.1's tested selector.
+  // The planner's incident classification is advisory: corroborate it with an
+  // expressed event, actor or physical setting in the original question.
+  const q=question.toLowerCase();
+  const actorOrSetting = /\b(?:mp|mps|member|members|gallery|chamber|speaker|whanau|whānau)\b/.test(q);
+  const event = actorOrSetting && /\b(?:wear\w*|say\w*|tell\w*|bring\w*|shout\w*|stand\w*|start\w*|begin\w*|swear\w*|trie\w*|try\w*|stays?|turn\w*|speak\w*|during|when|after|before|while|as|want\w*|display\w*|object\w*|record\w*|live\w*|vote\w*|can|may|could|what)\b/.test(q);
+  if (kind === "procedure") return false;
+  if (kind === "incident") return event;
+  // Backwards-compatible contingency if the planner omits the optional
+  // situation DTO: distinguish narrative incident openers from the procedural
+  // interrogatives used by the already-frozen GEN20 regression.
+  return event && /^(?:an?\s|several\s|members?\s|during\s|in the middle\s|as a\s|the speaker\s|wh[aā]nau\s)/.test(q);
+}

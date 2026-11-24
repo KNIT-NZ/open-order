@@ -18,7 +18,10 @@ Important constraints:
 - Retain legally material timing, exclusivity, jurisdiction and procedural-stage conditions; never discard them as unimportant context.
 - When the question asks whether someone may refuse, prevent, compel, reverse, repeat or reopen an action, search for the applicable constraint or decision authority as well as a possible procedural pathway.
 - Prefer complementary queries with different procedural functions (governing rule, limitation, remedy) over multiple broad synonyms for the same topic. Do not guess citation numbers or presume a conclusion.
-- Keep this internal proposition analysis out of the JSON response; use the existing search-plan schema unchanged.
+- For a natural incident, return the additional structured situation below. Treat the situation as search context, NOT a procedural conclusion or a claim of source support. An actor, the affected person, the forum, the action, the procedural moment and the decision being asked about are different things.
+- Distinguish, for example, criticism of a member from criticism of a non-member, a contribution from a gallery visitor from a member's speech, a bill being divided from members voting, and interpretation of language from a rule's definitional interpretation. These are conceptual contrasts, not source selections.
+- Identify at most two short additional heading-like evidenceQueries for incident facts that the main queries may overlook. If there is no genuine separate dimension, use an empty list. Do not invent authority numbers.
+- For procedure-first questions, situation.kind="procedure" and evidenceQueries=[].
 - Separately preserve up to 4 short, salient terms or phrases from the user's own wording when they may plausibly appear verbatim in the parliamentary corpus.
 - Salient terms are not substitutes for canonical procedural queries; they are literal retrieval companions. Preserve the user's wording rather than paraphrasing it.
 - Prefer the shortest distinctive user phrase that preserves the relevant meaning, because literal corpus matches are especially valuable.
@@ -103,7 +106,18 @@ Return this exact shape:
   "preferredCorpus": "standing_orders" | "speakers_rulings" | null,
   "searchQueries": ["..."],
   "salientTerms": ["literal user term or short phrase", "..."],
-  "notes": "brief note"
+  "notes": "brief note",
+  "situation": {
+    "kind": "incident" | "procedure",
+    "actor": "who performs the disputed act",
+    "setting": "the forum or physical place",
+    "action": "what the actor does",
+    "affectedPerson": "who is acted on or discussed, if relevant",
+    "proceduralMoment": "speech, debate, voting, committee etc",
+    "decisionQuestion": "the decision the user actually asks about",
+    "materialFacts": ["up to five facts affecting scope"],
+    "evidenceQueries": ["up to two additional short source-heading queries"]
+  }
 }
 `.trim();
 
@@ -182,6 +196,68 @@ If the retrieved material is thin or ambiguous, say that explicitly with citatio
 Do not return JSON.
 `.trim();
 
+
+// v40: source-level, incident-grounded adjudication; selection proposals must be
+// verified against real retrieved texts in scenario-adjudication.ts.
+export const V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT = `
+You are an independent New Zealand parliamentary PROCEDURAL SOURCE adjudicator.
+You receive a real-world incident, the question being asked, the preliminary
+selector's choices, and a finite collection of actual retrieved source texts.
+Do NOT draft an answer or rely on outside knowledge. Select at most four sources
+which OPERATIVELY govern the questioned act, actor, forum, and procedural stage.
+For each selected source, copy a continuous VERBATIM passage of at least 24
+characters from its provided Text. Do not quote headings or invent a citation.
+The quote must establish the operative permission, restriction, discretion,
+procedure or limitation, not just mention a subject in common with the question.
+
+Critically distinguish actors (MP, member of the public, committee witness),
+forums (Chamber, gallery, select committee), activities (speech, petition,
+recording, vote) and stages (personal vote, party vote, reading, committee).
+A rule about a different actor or procedure is NOT a valid analogy when the
+question requires a direct governing rule. Reject a previous selected source
+when it covers an unrelated context. Prefer a source directly governing the
+asked decision over the highest-ranked result or a generic heading.
+
+For each proposed source return four true/false checks for actor, setting,
+asked action and procedural stage. All four must be true to nominate a source.
+Where multiple provisions interact, nominate the primary governing rule and
+up to three genuinely necessary qualifications, separately. When source
+coverage is partial, preserve remainingUncertainties; never infer a prohibition
+from missing evidence. Do not pick a source merely to avoid abstention.
+
+Return JSON only:
+{
+  "selected":[{"citationLabel":"SO 123","role":"governing",
+    "exactQuote":"verbatim supporting source text of at least 24 characters",
+    "actorMatches":true,"settingMatches":true,"actionMatches":true,
+    "stageMatches":true,"rationale":"how the quoted text governs the question"}],
+  "remainingUncertainties":[], "explanation":"source-scope reasoning"
+}
+`.trim();
+
+export function buildV40SourceAdjudicationPrompt(input: {
+  question: string;
+  situation?: import("@/lib/ai/scenario-adjudication").V40Situation;
+  candidates: ProceduralSearchResult[];
+  legacySelected: ProceduralSearchResult[];
+}): string {
+  const sources = input.candidates.map((source) => ({
+    citationLabel: source.citationLabel,
+    corpus: source.documentCorpus,
+    heading: source.heading,
+    path: source.path.join(" > "),
+    // Limit model context, not the original source used for proof checking.
+    text: source.sectionContent.slice(0, 1350),
+  }));
+  return JSON.stringify({
+    question: input.question,
+    situation: input.situation ?? null,
+    preliminarySelection: input.legacySelected.map((source)=>source.citationLabel),
+    sources,
+    instruction: "Adjudicate only these texts. Source quotations are mandatory; do not guess or import another provision.",
+  });
+}
+
 export const ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT = `
 You are a strict evidence-entailment validator for New Zealand parliamentary procedure.
 
@@ -211,9 +287,11 @@ Validation rules:
 - Do not rewrite claims.
 - Do not add authorities.
 - Return JSON only.
+- When a user question and answer draft are supplied, independently judge whether the draft actually answers the user's requested act and forum. A true claim about a different matter is not responsive. Do not mark a draft responsive solely because its citations exist or its prose is true. The responsiveness verdict is independent of the per-claim support verdicts.
 
 Return this exact shape:
 {
+  "responsiveness":{"answersUserQuestion":true,"reason":"brief relevance finding","unaddressedParts":[]},
   "claims": [
     {
       "id": "claim-1",
@@ -231,6 +309,8 @@ export function buildAnswerClaimValidationPrompt(input: {
     citations: string[];
   }>;
   authorities: ProceduralSearchResult[];
+  question?: string;
+  answerText?: string;
 }): string {
   // v28: citation subsection qualifiers are references WITHIN an already
   // selected authority, not different authorities. Resolve only a tightly
@@ -280,13 +360,17 @@ Cited authorities: ${claim.citations.map((citation) => `[${citation}]`).join(" "
     .join("\n\n");
 
   return `
+Original user question: ${input.question ?? "NOT SUPPLIED"}
+Full drafted answer for responsiveness review:
+${input.answerText ?? "NOT SUPPLIED"}
+
 Claims to validate:
 ${renderedClaims}
 
 Available cited authority text:
 ${renderedAuthorities || "No cited authority text was available."}
 
-Return one validation result for every claim ID above.
+Return one validation result for every claim ID above, and the separate responsiveness verdict.
 For each categorical negative or exclusive restriction, expressly test its cited source for qualifications in the same operative subsection before recording supported=true.
 `.trim();
 }
@@ -443,6 +527,8 @@ If useful, distinguish between:
 
 Remember:
 - every substantive line should carry inline citations,
+- answer the precise questioned action and actor, not merely a source that shares a heading,
+- ensure the Bottom line exists and directly answers the incident before adding details,
 - omit unsupported propositions rather than guessing,
 - if the answer intent is "tactic" or "options", the first Bottom line sentence and first Your options bullet should state the strongest grounded procedural move when one is supported,
 - reconcile distinct permissions and constraints explicitly rather than collapsing them,
