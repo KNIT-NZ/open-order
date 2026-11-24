@@ -17,3 +17,9 @@ Be constructive and respectful. Use [SECURITY.md](SECURITY.md) for sensitive vul
 ## Procedural accuracy
 
 Changes to retrieval, source classification, citation handling, generation or fallback behaviour should include reproducible evaluation evidence. Identify the source edition and authority for any procedural claim. Distinguish source text from interpretation, inference and generated output. Preserve appropriate abstention when evidence is insufficient. Do not imply that the tool has official parliamentary authority or endorsement.
+
+## Automated regression and release assurance
+
+Major new functionality must be accompanied by automated tests exercising the actual implementation. Behavioural fixes should include regression tests where practical. Run the documented test command and CI checks before merging; explain any coverage gaps. Do not use production databases, live model credentials or real user queries in automated tests.
+
+Before a major production release, run the automated test suite and static security analysis on the exact release candidate, address warnings and confirm that medium or higher severity exploitable findings are resolved in a timely way. Review dependency advisories and credential exposure reports. Record the release identifier and human-readable notes in [CHANGELOG.md](CHANGELOG.md). Do not treat a successful scan as proof of security.

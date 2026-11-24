@@ -26,7 +26,8 @@
     "db:ingest-speakers-rulings-html": "node --env-file=.env.local --import tsx scripts/ingest-speakers-rulings-html.ts",
     "db:ingest-standing-orders-html": "node --env-file=.env.local --import tsx scripts/ingest-standing-orders-html.ts",
     "db:chunk-sections": "node --env-file=.env.local --import tsx scripts/chunk-sections.ts",
-    "db:count-chunks": "node --env-file=.env.local --import tsx scripts/count-chunks.ts"
+    "db:count-chunks": "node --env-file=.env.local --import tsx scripts/count-chunks.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.48.0",
@@ -38,7 +39,7 @@
     "playwright": "^1.59.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "zod": "^3.23.8"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",

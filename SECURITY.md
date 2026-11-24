@@ -13,3 +13,7 @@ The maintainers will assess reports, prioritise remediation according to risk an
 The maintained branch is `main`. Report vulnerabilities in the current code or deployed service; third-party dependency issues may also need to be reported upstream. Older commits are not guaranteed security support. Ordinary bugs and documentation corrections may be reported through public issues, without sensitive information.
 
 Open Order handles questions about parliamentary procedure. Queries can contain confidential procedural intentions even where the source corpus is public. Do not include sensitive query contents in public reports. A source or answer error that creates a security or privacy risk should be reported privately; other procedural accuracy concerns can be submitted as corrections with public source references. Do not treat generated answers as authoritative procedural rulings or professional advice.
+
+## Response and remediation targets
+
+The maintainer aims to acknowledge all vulnerability reports within 14 days, prioritise critical findings for rapid remediation and resolve publicly known medium-or-higher severity vulnerabilities within 60 days. Confirmed exploitable medium-or-higher static or dynamic analysis findings are tracked privately where appropriate and remedied promptly. These are operational targets, not claims about past response times or findings. See the [private reporting form](https://github.com/KNIT-NZ/open-order/security/advisories/new).

@@ -1,6 +1,7 @@
 // lib/db.ts
 import { Pool } from 'pg'
 import { env } from '@/lib/env'
+import { verifiedDatabaseUrl } from './db-transport'
 
 declare global {
   var __openOrderPool: Pool | undefined
@@ -9,11 +10,7 @@ declare global {
 export const db =
   global.__openOrderPool ??
   new Pool({
-    connectionString: env.DATABASE_URL,
-    ssl:
-      env.DATABASE_URL.includes('sslmode=require')
-        ? { rejectUnauthorized: false }
-        : false
+    connectionString: verifiedDatabaseUrl(env.DATABASE_URL, env.NODE_ENV)
   })
 
 if (process.env.NODE_ENV !== 'production') {

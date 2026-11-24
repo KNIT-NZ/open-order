@@ -1,0 +1,26 @@
+name: Static security analysis
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 2 * * *'
+permissions:
+  contents: read
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install Semgrep Community Edition
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep"
+          "$RUNNER_TEMP/semgrep/bin/python" -m pip install 'semgrep==1.186.0'
+      - name: Analyse source
+        run: |
+          "$RUNNER_TEMP/semgrep/bin/semgrep" scan --oss-only --metrics=off --disable-version-check --config p/owasp-top-ten --config p/security-audit --error .

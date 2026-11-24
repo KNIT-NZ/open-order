@@ -24,7 +24,11 @@ export function Footer() {
         />
       </a>
       <div className={styles.footerText}>
-        Open Order is an experimental civics app developed by knit.
+        Open Order is an independent experimental parliamentary procedural navigator developed by KNIT.
+        {" "}<a href="https://github.com/KNIT-NZ/open-order">Source code</a>
+        {" · "}<a href="https://github.com/KNIT-NZ/open-order/issues">Feedback</a>
+        {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/CONTRIBUTING.md">Contribute</a>
+        {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/SECURITY.md">Security</a>
       </div>
     </footer>
   );

@@ -6,8 +6,8 @@ import {
   buildCanonicalCitationHref,
   copyText,
   corpusLabel,
-  renderAiAnswerHtml,
 } from "../../lib/open-order/format";
+import { renderAiAnswerNodes } from "../../lib/open-order/answer-markup";
 import type {
   ThemeMode,
   UseOpenOrderAssistantReturn,
@@ -36,8 +36,8 @@ export function AssistantPanel({
   corpus,
   currentSearchQuery,
 }: AssistantPanelProps) {
-  const aiAnswerHtml = assistant.answerText.trim()
-    ? renderAiAnswerHtml(assistant.answerText)
+  const aiAnswerNodes = assistant.answerText.trim()
+    ? renderAiAnswerNodes(assistant.answerText)
     : null;
 
   const hasAiTrace = Boolean(
@@ -128,13 +128,10 @@ export function AssistantPanel({
         <div className={styles.error}>{assistant.error}</div>
       ) : null}
 
-      {aiAnswerHtml ? (
+      {aiAnswerNodes ? (
         <div className={styles.aiAnswerCard}>
           <div className={styles.aiAnswerLabel}>Answer</div>
-          <div
-            className={styles.aiAnswerBody}
-            dangerouslySetInnerHTML={{ __html: aiAnswerHtml }}
-          />
+          <div className={styles.aiAnswerBody}>{aiAnswerNodes}</div>
         </div>
       ) : null}
 

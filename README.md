@@ -145,3 +145,13 @@ Open Order serves as a working demonstration of how those systems might be built
 
 Original software is licensed under the [Apache License, Version 2.0](LICENSE). See [licensing scope](LICENSE-SCOPE.md) for separate rights and exclusions, including third-party materials, publications, data and branding.
 <!-- /KNIT-OSS-01 -->
+
+## Development and assurance
+
+Use Node.js 24 (the CI baseline) and npm. Clone the repository and run `npm ci` to install the locked dependencies. `npm test` runs the offline regression suite; `npx --no-install next typegen`, `npm run typecheck`, and `npm run lint` perform the source checks. Tests use synthetic data, require no database or AI credentials, and do not invoke model providers.
+
+For local application use, configure a **separate development** PostgreSQL database in `.env.local` using `DATABASE_URL` (never commit credentials), then review the SQL and ingestion scripts before running them against that database. `npm run db:apply` applies the SQL files, and the ingestion/seed scripts populate the corpus from separately governed sources. The tester inference mode requires its separately provisioned quota function; the general schema alone does not establish that mode. Use the source manifest and script sources for corpus provenance and ingestion parameters. AI answers also require an appropriately configured server-side provider (for example `GEMINI_API_KEY`); never place keys in public environment variables. Remote PostgreSQL connections use certificate and hostname verification; plaintext is permitted only for loopback development databases.
+
+Run `npm run dev` and open http://localhost:3000. `npm run build` produces the production application; `npm start` serves the built application. Database-backed functionality requires a populated, compatible database; model-backed functionality requires provider configuration. See [external interfaces](docs/interfaces.md) and [architecture](docs/architecture.md).
+
+Report ordinary issues through [GitHub Issues](https://github.com/KNIT-NZ/open-order/issues); see [contribution guidance](CONTRIBUTING.md), [private security reporting](SECURITY.md), and the [changelog](CHANGELOG.md). Formal release candidates require regression tests and static security analysis before publication.
