@@ -21,6 +21,7 @@ type ResultsListProps = {
   isLoadingMore: boolean;
   summaryText: string | null;
   focusKey: string | null;
+  citationNavigationSerial: number;
   submittedQuery: string;
   submittedCorpus: string;
   onLoadMore: (offset: number) => void;
@@ -34,6 +35,7 @@ export function ResultsList({
   isLoadingMore,
   summaryText,
   focusKey,
+  citationNavigationSerial,
   submittedQuery,
   submittedCorpus,
   onLoadMore,
@@ -63,10 +65,11 @@ export function ResultsList({
       submittedQuery,
       submittedCorpus,
       resultCount,
+      citationNavigationSerial,
       hasError: Boolean(error),
       isLoading,
     });
-  }, [submittedQuery, submittedCorpus, resultCount, error, isLoading]);
+  }, [submittedQuery, submittedCorpus, resultCount, citationNavigationSerial, error, isLoading]);
 
   const isDrawerOpen =
     hasDrawerContent && dismissedDrawerSignature !== drawerSignature;
@@ -80,6 +83,10 @@ export function ResultsList({
 
     return () => window.clearTimeout(timeout);
   }, [copiedToken]);
+
+  useEffect(() => {
+    focusAttemptedRef.current = false;
+  }, [citationNavigationSerial]);
 
   useEffect(() => {
     if (!focusKey || !response || response.results.length === 0) return;
