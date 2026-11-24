@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use Open Order's software in research, please cite it and identify the commit or release used."
+title: "Open Order: Procedural Assistant for the New Zealand House of Representatives"
+type: software
+authors:
+  - name: KNIT
+repository-code: "https://github.com/KNIT-NZ/open-order"
+url: "https://openorder.knit.nz/"
+license: Apache-2.0

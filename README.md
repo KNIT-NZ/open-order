@@ -139,3 +139,9 @@ The same approach — combining:
 can be extended to much larger corpora, including legislation and regulatory frameworks.
 
 Open Order serves as a working demonstration of how those systems might be built.
+
+<!-- KNIT-OSS-01 -->
+## Licence
+
+Original software is licensed under the [Apache License, Version 2.0](LICENSE). See [licensing scope](LICENSE-SCOPE.md) for separate rights and exclusions, including third-party materials, publications, data and branding.
+<!-- /KNIT-OSS-01 -->
