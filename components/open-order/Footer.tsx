@@ -1,4 +1,5 @@
 // components/open-order/Footer.tsx
+import { LaunchPrivacyNotice } from "./LaunchNotice";
 import styles from "./openOrder.module.css";
 export function Footer() {
   return (
@@ -24,7 +25,7 @@ export function Footer() {
         />
       </a>
       <div className={styles.footerText}>
-        Open Order is an independent, unofficial experimental parliamentary procedural navigator developed by KNIT, not operated or endorsed by Parliament. AI requests are processed by external providers. Do not enter confidential, privileged or identifying information. Check original authorities and official guidance. Do not post sensitive questions or diagnostic snapshots in public feedback.
+        <LaunchPrivacyNotice />
         {" "}<a href="https://github.com/KNIT-NZ/open-order">Source code</a>
         {" · "}<a href="https://github.com/KNIT-NZ/open-order/issues">Feedback</a>
         {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/CONTRIBUTING.md">Contribute</a>

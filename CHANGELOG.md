@@ -1,5 +1,11 @@
 # Open Order changelog
 
+## Privacy — launch notices and source currency
+
+- Publish near-input independent-status, privacy and corpus currency warnings, with public attribution and private correction contact.
+- Keep persistent telemetry disabled pending writer integration and independently monitored expiry.
+
+
 ## Privacy — operational observability foundation
 
 - Introduce closed metadata-only search and AI-stream event DTO, isolated writer and separate review-only SQL schema.
