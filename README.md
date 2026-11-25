@@ -1,5 +1,7 @@
 ## Open Order
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17088/badge)](https://www.bestpractices.dev/projects/17088)
+
 Open Order is a procedural search and reasoning tool for New Zealand parliamentary rules, designed to make complex institutional material accessible through natural language queries.
 
 It focuses on two core documents:
