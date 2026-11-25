@@ -1,6 +1,8 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
+import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
@@ -159,6 +161,21 @@ export async function POST(request: NextRequest) {
       // Vercel supplies the public deployment commit when available.
       const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
       const stageTimeline: Array<{ key: string; label: string; atMs: number }> = [];
+      // Capture only a closed, content-free projection of the existing stream lifecycle.
+      let opsOutcome: OperationalOutcome = "incomplete";
+      let opsElapsed: number | null = null;
+      const markOperationalTerminal = <T extends "done" | "error">(event: T): T => {
+        if (opsOutcome === "incomplete") {
+          opsOutcome = event === "done" ? "completed" : "failed";
+          opsElapsed = boundedElapsed(startedAt);
+        }
+        return event;
+      };
+      scheduleOperationalEvent(() => ({ schemaVersion: 1, requestId, route: "ai_answer",
+        outcome: opsOutcome, elapsedMs: opsElapsed ?? boundedElapsed(startedAt), resultCount: null,
+        stageCount: Math.min(stageTimeline.length, 1000),
+        lastStage: stageTimeline.length ? operationalStage(stageTimeline[stageTimeline.length - 1]?.key) : "none",
+        releaseSha: operationalRelease(process.env.VERCEL_GIT_COMMIT_SHA) }));
       const send = (event: string, data: unknown) => {
         if (event === "stage" && data && typeof data === "object") {
           const stage = data as { key?: unknown; label?: unknown };
@@ -609,7 +626,7 @@ export async function POST(request: NextRequest) {
 
             send("answer_delta", { text: fallbackAnswer });
 
-            send("done", {
+            send(markOperationalTerminal("done"), {
               ok: true,
               degraded: true,
               question,
@@ -684,7 +701,7 @@ export async function POST(request: NextRequest) {
 
               send("answer_delta", { text: fallbackAnswer });
 
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true,
                 degraded: true,
                 question,
@@ -735,7 +752,7 @@ export async function POST(request: NextRequest) {
 
               send("answer_delta", { text: fallbackAnswer });
 
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true,
                 degraded: true,
                 question,
@@ -776,7 +793,7 @@ export async function POST(request: NextRequest) {
 
               send("answer_delta", { text: fallbackAnswer });
 
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true,
                 degraded: true,
                 question,
@@ -855,7 +872,7 @@ export async function POST(request: NextRequest) {
 
                 send("answer_delta", { text: fallbackAnswer });
 
-                send("done", {
+                send(markOperationalTerminal("done"), {
                   ok: true,
                   degraded: true,
                   question,
@@ -893,7 +910,7 @@ export async function POST(request: NextRequest) {
 
               send("answer_delta", { text: fallbackAnswer });
 
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true,
                 degraded: true,
                 question,
@@ -1056,7 +1073,7 @@ export async function POST(request: NextRequest) {
                 key: "validating", label: "Answer failed incident-responsiveness gate",
               });
               send("answer_delta", {text: fallbackAnswer});
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
                 authorities: authorityPayload, fallbackReason,
@@ -1324,7 +1341,7 @@ export async function POST(request: NextRequest) {
 
               send("answer_delta", { text: fallbackAnswer });
 
-              send("done", {
+              send(markOperationalTerminal("done"), {
                 ok: true,
                 degraded: true,
                 question,
@@ -1357,7 +1374,7 @@ export async function POST(request: NextRequest) {
             }
             send("answer_delta", { text: finalAnswer });
 
-            send("done", {
+            send(markOperationalTerminal("done"), {
               ok: true,
               degraded: evidenceGaps.length > 0,
               question,
@@ -1403,7 +1420,7 @@ export async function POST(request: NextRequest) {
                 : "Answer validation failed; returning source-only fallback",
             });
             send("answer_delta", { text: fallbackAnswer });
-            send("done", {
+            send(markOperationalTerminal("done"), {
               ok: true,
               degraded: true,
               question,
@@ -1423,7 +1440,7 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           // Never expose raw provider payloads or Zod errors to the browser.
           // The request ID in trace still permits internal correlation.
-          send("error", {
+          send(markOperationalTerminal("error"), {
             message: "The parliamentary answer request could not complete. Please try again.",
             retryable:
               typeof error === "object" &&

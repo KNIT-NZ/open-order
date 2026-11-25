@@ -1,6 +1,8 @@
 // app/api/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { boundedElapsed, operationalRelease, type OperationalOutcome } from "@/lib/open-order/operational-event";
+import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { readPrivateSearchParams } from "@/lib/open-order/private-search-transport";
 import { searchParamsSchema } from "@/lib/search";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
@@ -84,7 +86,7 @@ function buildTargetedHighlight(originalText: string, query: string): string {
   return highlightSingleWords(originalText, query);
 }
 
-async function executeSearch(params: URLSearchParams) {
+async function executeSearch(params: URLSearchParams, observeCount: (count: number) => void) {
   const parsed = searchParamsSchema.safeParse({
     q: params.get("q") ?? "",
     corpus: params.get("corpus") ?? undefined,
@@ -112,6 +114,7 @@ async function executeSearch(params: URLSearchParams) {
     offset,
     includeDebug: false,
   });
+  observeCount(response.results.length);
 
   const latencyMs = Date.now() - started;
 
@@ -166,18 +169,30 @@ function privateSearchResponse(response: NextResponse, requestId: string): NextR
 
 export async function POST(request: NextRequest) {
   const requestId = randomUUID();
+  const startedAt = Date.now();
+  let outcome: OperationalOutcome = "incomplete";
+  let elapsedMs = 0;
+  let resultCount: number | null = null;
+  scheduleOperationalEvent(() => ({ schemaVersion: 1, requestId, route: "search", outcome,
+    elapsedMs, resultCount, stageCount: 0, lastStage: "none",
+    releaseSha: operationalRelease(process.env.VERCEL_GIT_COMMIT_SHA) }));
+  const finish = (response: NextResponse): NextResponse => {
+    outcome = response.status < 400 ? "completed" : response.status < 500 ? "invalid" : "failed";
+    elapsedMs = boundedElapsed(startedAt);
+    return privateSearchResponse(response, requestId);
+  };
   try {
     // Reject URL query parameters without inspecting or echoing their contents.
     if (request.nextUrl.search) {
-      return privateSearchResponse(NextResponse.json({ error: "Use the JSON request body." }, { status: 400 }), requestId);
+      return finish(NextResponse.json({ error: "Use the JSON request body." }, { status: 400 }));
     }
     const params = await readPrivateSearchParams(request);
     if (!params) {
-      return privateSearchResponse(NextResponse.json({ error: "Invalid search request." }, { status: 400 }), requestId);
+      return finish(NextResponse.json({ error: "Invalid search request." }, { status: 400 }));
     }
-    return privateSearchResponse(await executeSearch(params), requestId);
+    return finish(await executeSearch(params, (count) => { resultCount = count; }));
   } catch {
-    return privateSearchResponse(NextResponse.json({ error: "Search is temporarily unavailable." }, { status: 500 }), requestId);
+    return finish(NextResponse.json({ error: "Search is temporarily unavailable." }, { status: 500 }));
   }
 }
 

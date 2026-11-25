@@ -1,5 +1,11 @@
 # Open Order changelog
 
+## Privacy — operational observability foundation
+
+- Introduce closed metadata-only search and AI-stream event DTO, isolated writer and separate review-only SQL schema.
+- Persistence disabled pending separately approved roles, expiry scheduler, notices and live acceptance. No migration applied.
+
+
 ## Privacy P0 — content-retention cessation
 
 - Remove routine search query and debug persistence; move search to JSON POST and reject GET.
