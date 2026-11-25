@@ -9,7 +9,7 @@ const privacyContact = "admin@knit.nz";
 const operator = "KNIT Aotearoa Charitable Trust";
 export function LaunchFooter() {
   return <div className={styles.footerNotice}>
-    <p>Independent experimental guidance — AI can be wrong. Verify official sources. Standing Orders: {standingOrders.split(" (")[0]}{standingOrders === "2023 (database edition labels; coverage not certified)" ? " (superseded)" : ""}. Do not submit confidential, privileged or identifying information.</p>
+    <p>Independent experimental guidance — AI can be wrong. Verify official sources. Do not submit confidential, privileged or identifying information.</p>
     <nav aria-label="Open Order information" className={styles.links}>
       <Link href="/privacy">Privacy</Link>
       <Link href="/sources">Sources</Link>
@@ -17,6 +17,7 @@ export function LaunchFooter() {
       <Link href="/about">About</Link>
       <a href="https://github.com/KNIT-NZ/open-order">Source code</a>
       <a href="https://github.com/KNIT-NZ/open-order/blob/main/CONTRIBUTING.md">Contribute</a>
+      <a href="https://github.com/KNIT-NZ/open-order/blob/main/SECURITY.md">Security</a>
     </nav>
   </div>;
 }

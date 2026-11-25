@@ -26,7 +26,6 @@ export function Footer() {
       </a>
       <div className={styles.footerText} style={{ flex: "1 1 20rem", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", whiteSpace: "normal", overflowWrap: "anywhere" }}>
         <LaunchFooter />
-        {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/SECURITY.md">Security</a>
       </div>
     </footer>
   );

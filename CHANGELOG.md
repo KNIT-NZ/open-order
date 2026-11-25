@@ -1,5 +1,10 @@
 # Open Order changelog
 
+## Privacy — footer polish
+
+- Group Security with the footer navigation links; keep edition-specific disclosures on Sources rather than the homepage.
+
+
 ## Privacy — compact trust surfaces
 
 - Remove duplicated in-panel notices; retain a compact, wrapping footer with fidelity, source-currency and sensitivity cues.
