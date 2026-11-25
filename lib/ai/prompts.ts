@@ -112,7 +112,7 @@ Return this exact shape:
     "actor": "who performs the disputed act",
     "setting": "the forum or physical place",
     "action": "what the actor does",
-    "affectedPerson": "who is acted on or discussed, if relevant",
+    "affectedPerson": "who is acted on or discussed, or an empty string when not relevant; never null",
     "proceduralMoment": "speech, debate, voting, committee etc",
     "decisionQuestion": "the decision the user actually asks about",
     "materialFacts": ["up to five facts affecting scope"],
@@ -154,6 +154,8 @@ Critical grounding rules:
 - When a decisive proposition is unsupported but other procedural steps are supported, answer those supported steps directly and leave the unsupported proposition unresolved.
 
 Answer-responsiveness rules:
+- Output a literal heading "Bottom line:" followed by at least one substantive, citation-bearing sentence. Do not replace the heading with markdown emphasis, a synonym, or an empty label.
+- Address the primary permission, prohibition, intervention or consequence BEFORE peripheral rules about equipment, etiquette or background context. Permission to USE a device is not permission to RECORD proceedings. Where the primary permission source is missing, explicitly identify the unanswered authorisation question instead of starting with "Yes" based on a related practice.
 - For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. Do not open with "Not simply" or another evasive stock phrase. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.
 - Distinguish the act the user proposes from a different mechanism that might later achieve a related result. Answer the first question before explaining the alternative.
 - Distinguish who can APPLY for an action, who DECIDES it, and which requirements must be satisfied. A necessary condition is not automatically sufficient; permission to request is not authority to compel.
@@ -209,6 +211,11 @@ For each selected source, copy a continuous VERBATIM passage of at least 24
 characters from its provided Text. Do not quote headings or invent a citation.
 The quote must establish the operative permission, restriction, discretion,
 procedure or limitation, not just mention a subject in common with the question.
+
+If an incident concerns taking or streaming images or sound of proceedings,
+separate the right to operate an electronic device from AUTHORISATION to make
+recordings. A device-use permission is not an operative recording permission.
+Identify a source governing the recording act or acknowledge the evidence gap.
 
 Critically distinguish actors (MP, member of the public, committee witness),
 forums (Chamber, gallery, select committee), activities (speech, petition,
@@ -288,6 +295,7 @@ Validation rules:
 - Do not add authorities.
 - Return JSON only.
 - When a user question and answer draft are supplied, independently judge whether the draft actually answers the user's requested act and forum. A true claim about a different matter is not responsive. Do not mark a draft responsive solely because its citations exist or its prose is true. The responsiveness verdict is independent of the per-claim support verdicts.
+- Check ALL material decision facets: the central act, whose permission is needed, applicable forum and procedural moment, any necessary authorisation, consequences, and expressly asked objections. Addressing electronic-device etiquette does not answer recording permission. Report each unresolved facet in unaddressedParts unless the draft explicitly states that the selected sources cannot settle it, without implying permission from silence.
 
 Return this exact shape:
 {
@@ -572,5 +580,49 @@ export function buildBottomLineRecoveryPrompt(input: {
       sectionContent: authority.sectionContent,
     })),
     output: { bottomLine: "Single direct sentence with citation, or empty string" },
+  });
+}
+
+
+// V40.1: one bounded repair for a natural incident draft that missed the
+// primary decision, omitted a formal Bottom line, or skipped a specific objection.
+// The replacement is still untrusted until independently claim-validated.
+export const ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT = `
+You are repairing an incomplete parliamentary procedure answer, not judging it.
+Write a complete replacement answer solely from the selected authority texts.
+The previous draft was nonresponsive or lacked a substantive Bottom line.
+Answer the exact decision, actor, forum and objections the user actually asked
+about, using the source's qualifications and never importing outside law.
+
+Start with the literal line "Bottom line:" then immediately state a concise
+substantive decision supported by inline citations. If the source pack cannot
+settle a central permission or objection, say this explicitly, citing whatever
+selected source establishes the partial governing framework. Do not turn a
+restriction on phone use into a recording ban or permission. No unsupported
+claims, invented citations, or conclusions inferred from missing evidence.
+
+Use the exact section headings Bottom line:, What this means:, Your options:,
+Risks or constraints:, Best authorities to inspect or cite:; omit optional
+sections if no grounded content belongs there. Each factual claim in prose or
+bullets must have its supporting source citation. Use 1-2 lines per section.
+Output the replacement plain text answer only; no JSON or markdown fences.
+`.trim();
+
+export function buildV401IncidentRepairPrompt(input: {
+  question: string;
+  currentAnswer: string;
+  missingParts: string[];
+  authorities: ProceduralSearchResult[];
+}): string {
+  return JSON.stringify({
+    task: "Repair an incident answer, independently validated afterwards",
+    question: input.question,
+    previousDraft: input.currentAnswer.slice(0, 3600),
+    criticalMissingParts: input.missingParts.slice(0, 6).map((value)=>value.slice(0, 250)),
+    selectedSources: input.authorities.slice(0, 4).map((source)=>({
+      citationLabel: source.citationLabel, heading: source.heading,
+      path: source.path.join(" > "), text: source.sectionContent.slice(0, 4000),
+    })),
+    constraints: "No other authorities; direct Bottom line, full critical-facet coverage, inline citations, source-stated qualifications. Rewrite all sections, not one line.",
   });
 }

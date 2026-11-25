@@ -29,6 +29,44 @@ export type V40Situation = {
   materialFacts: string[];
   evidenceQueries: string[];
 };
+/**
+ * A recording or broadcast question requires an authorisation source, not
+ * merely a source allowing the device used to make a recording. These are
+ * topic-level retrieval queries, not embedded authorities or benchmark answers.
+ */
+export function v401MaterialEvidenceQueries(question: string): string[] {
+  const recording = /\b(?:live[\s-]?stream\w*|(?:take|takes|taking|make|makes|making)\s+(?:an?\s+)?(?:photo|picture|image)|film(?:ing)?|broadcast\w*|photograph\w*|video(?:ing)?|(?:make|take|capture)\s+(?:an?\s+)?(?:video\s+|sound\s+|audio\s+)?recording(?:s)?|record(?:ing)?\s+(?:a\s+|the\s+|his\s+|her\s+|their\s+|own\s+)?(?:speech|debate|proceedings))\b/i.test(question);
+  const parliamentary = /\b(?:mp|mps|member|members|chamber|house|parliament|speech|debate|committee)\b/i.test(question);
+  return recording && parliamentary
+    ? ["coverage of proceedings", "making recordings"]
+    : [];
+}
+
+function v401MediaWitnessMatches(question: string, quote: string): boolean {
+  if (v401MaterialEvidenceQueries(question).length === 0) return true;
+  return /\b(?:record(?:ing|ings|ed|s)?|broadcast\w*|image|images|filming|film|photograph\w*|video|live[\s-]?stream\w*)\b/i.test(quote);
+}
+
+export function v401AcceptIndependentRepair(input: {
+  claimIds: string[];
+  validatedClaims: Array<{id:string; supported:boolean}>;
+  responsive: boolean;
+  unaddressedParts: string[];
+  hasBottomLine: boolean;
+  citationValid: boolean;
+  mentionValid: boolean;
+  sourceQualificationVetoes: number;
+}): boolean {
+  const ids = new Set(input.claimIds);
+  return input.hasBottomLine && input.citationValid && input.mentionValid &&
+    input.sourceQualificationVetoes === 0 && input.responsive &&
+    input.unaddressedParts.length === 0 &&
+    input.claimIds.length > 0 && ids.size === input.claimIds.length &&
+    input.validatedClaims.length === input.claimIds.length &&
+    input.validatedClaims.every((claim) => ids.has(claim.id) && claim.supported) &&
+    new Set(input.validatedClaims.map((claim) => claim.id)).size === input.validatedClaims.length;
+}
+
 export type V40ProposedWitness = {
   citationLabel: string;
   role: "governing" | "qualification" | "implementation";
@@ -160,6 +198,11 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     const mismatch = v40SourceScopeMismatch(input.question,source);
     if(mismatch) { rejected.push(`${item.citationLabel}:${mismatch}`);continue; }
     const quote = normalizeWhitespace(item.exactQuote);
+    // The quoted witness, not the surrounding heading or a separate device
+    // provision, must address the recording activity when offered as GOVERNING.
+    if (item.role === "governing" && !v401MediaWitnessMatches(input.question, quote)) {
+      rejected.push(`${item.citationLabel}:recording-permission-not-attested`);continue;
+    }
     const body = normalizeWhitespace(source.sectionContent);
     if(quote.length < 24 || !body.includes(quote)) {
       rejected.push(`${item.citationLabel}:unverified-verbatim-witness`);continue;

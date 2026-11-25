@@ -2,6 +2,7 @@
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
 import {
   failureDiagnostic,
@@ -22,11 +23,14 @@ import {
   SEARCH_PLANNER_SYSTEM_PROMPT,
   V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
   buildV40SourceAdjudicationPrompt,
+  ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
+  buildV401IncidentRepairPrompt,
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
   buildV40Dossier, validateV40Proposal, v40MustAdjudicate,
-  v40SourceScopeMismatch, type V40Situation,
+  v40SourceScopeMismatch, v401MaterialEvidenceQueries,
+  v401AcceptIndependentRepair, type V40Situation,
 } from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
@@ -58,38 +62,6 @@ import {
 const aiAnswerRequestSchema = z.object({
   question: z.string().min(1, "Question is required"),
   corpus: z.enum(["standing_orders", "speakers_rulings"]).nullable().optional(),
-});
-
-const searchPlanSchema = z.object({
-  intent: z.enum([
-    "explain_rule",
-    "explain_statement",
-    "options",
-    "admissibility",
-    "tactic",
-    "compare_authorities",
-    "clarification",
-  ]),
-  preferredCorpus: z.enum(["standing_orders", "speakers_rulings"]).nullable(),
-  searchQueries: z
-    .array(z.string().min(1))
-    .min(1)
-    .transform((queries) => queries.slice(0, 3)),
-  salientTerms: z.array(z.string().min(1)).max(4).default([]),
-  notes: z.string(),
-  // Optional on purpose: an earlier planner JSON remains valid, and the
-  // production selector survives if this new context field is unavailable.
-  situation: z.object({
-    kind: z.enum(["incident", "procedure"]),
-    actor: z.string().max(180),
-    setting: z.string().max(180),
-    action: z.string().max(240),
-    affectedPerson: z.string().max(180),
-    proceduralMoment: z.string().max(180),
-    decisionQuestion: z.string().max(260),
-    materialFacts: z.array(z.string().max(240)).max(5),
-    evidenceQueries: z.array(z.string().min(2).max(90)).max(2),
-  }).optional(),
 });
 
 const v40SourceAdjudicationSchema = z.object({
@@ -136,7 +108,6 @@ const claimAppealSchema = z.object({
   })).max(2),
 });
 
-type SearchPlan = z.infer<typeof searchPlanSchema>;
 type AuthorityPayload = ReturnType<typeof buildAuthorityPayload>[number];
 
 function sseEvent(event: string, data: unknown): string {
@@ -239,11 +210,16 @@ export async function POST(request: NextRequest) {
             label: "Retrieving authorities",
           });
 
-          const additionalScenarioQueries = (plan.situation?.kind === "incident"
-            ? plan.situation.evidenceQueries : []).filter((value, index, all) =>
+          // A bounded, question-level recording facet is distinct from the
+          // incidental permission to use a phone, camera or other device.
+          const scenarioFacets = [
+            ...(plan.situation?.kind === "incident" ? plan.situation.evidenceQueries : []),
+            ...(plan.situation?.kind === "procedure" ? [] : v401MaterialEvidenceQueries(question)),
+          ];
+          const additionalScenarioQueries = scenarioFacets.filter((value, index, all) =>
               !plan.searchQueries.some((prior) => prior.toLowerCase() === value.toLowerCase()) &&
               all.findIndex((prior) => prior.toLowerCase() === value.toLowerCase()) === index,
-            ).slice(0, 2);
+            ).slice(0, 4);
           const queryPlan = buildProceduralQueryPlan({
             question,
             plannerQueries: [...plan.searchQueries, ...additionalScenarioQueries],
@@ -894,7 +870,7 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            const answerClaims = extractAnswerClaims(finalAnswer);
+            let answerClaims = extractAnswerClaims(finalAnswer);
 
             if (answerClaims.length === 0) {
               const fallbackReason =
@@ -955,17 +931,119 @@ export async function POST(request: NextRequest) {
               },
             });
             claimValidationAttempts = validationResult.attempts;
-            const claimValidation =
+            let claimValidation =
               claimValidationSchema.parse(validationResult.value);
             activeAiOperation = "post_validation";
             if (claimValidationAttempts > 1) {
               claimValidationNote = `v38.1 validated after ${claimValidationAttempts} provider attempts`;
             }
+            // V40.1: one bounded repair of an incident answer that omitted the
+            // question's decision or its required Bottom line. Never accept a
+            // replacement until ALL its claims and responsiveness are validated
+            // independently against the same selected authority pack.
+            const v401NeedsRepair = v40IncidentGate && (
+              !answerSectionHasContent(finalAnswer, "Bottom line:") ||
+              claimValidation.responsiveness?.answersUserQuestion !== true ||
+              (claimValidation.responsiveness?.unaddressedParts.length ?? 0) > 0
+            );
+            let v401RepairDiagnostic = "not_needed";
+            if (v401NeedsRepair) {
+              v401RepairDiagnostic = "not_admitted";
+              send("stage", {key:"validating", label:"Repairing the missing incident decision"});
+              try {
+                const proposedRepair = await streamText({
+                  task: "answer.generate",
+                  systemInstruction: ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
+                  prompt: buildV401IncidentRepairPrompt({
+                    question, currentAnswer: finalAnswer,
+                    missingParts: [
+                      ...(!answerSectionHasContent(finalAnswer, "Bottom line:")
+                        ? ["A substantive Bottom line directly answering the question"] : []),
+                      ...(claimValidation.responsiveness?.unaddressedParts ?? []),
+                      ...(claimValidation.responsiveness?.reason
+                        ? [claimValidation.responsiveness.reason] : []),
+                    ],
+                    authorities: finalAuthorities,
+                  }),
+                  temperature: 0.1,
+                });
+                let repairedAnswer = normalizeAnswerFormatting(
+                  normalizeAnswerCitationLabels({
+                    answerText: proposedRepair, authorities: authorityPayload,
+                  }),
+                );
+                const repairedPrune = pruneValidatedAnswerContent({
+                  answerText: repairedAnswer, authorities: authorityPayload,
+                });
+                repairedAnswer = removeEmptyAnswerSections(
+                  normalizeAnswerFormatting(repairedPrune.prunedText),
+                );
+                const repairedClaims = extractAnswerClaims(repairedAnswer);
+                const repairedCitations = validateAnswerCitations({
+                  answerText: repairedAnswer, authorities: authorityPayload,
+                });
+                const repairedMentions = validateAnswerAuthorityMentions({
+                  answerText: repairedAnswer, authorities: authorityPayload,
+                });
+                const qualificationVetoes = findOmittedSourceQualifications({
+                  claims: repairedClaims, authorities: finalAuthorities,
+                });
+                if (repairedClaims.length > 0 && repairedCitations.ok &&
+                    repairedMentions.ok && qualificationVetoes.length === 0 &&
+                    answerSectionHasContent(repairedAnswer, "Bottom line:")) {
+                  const repairedReview = await runClaimValidationWithRetry({
+                    requestStartedAt: started,
+                    invoke: () => generateJson<unknown>({
+                      task: "answer.validate",
+                      systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
+                      prompt: buildAnswerClaimValidationPrompt({
+                        claims: repairedClaims, authorities: finalAuthorities,
+                        question, answerText: repairedAnswer,
+                      }),
+                      temperature: 0,
+                    }),
+                    onRetry: () => send("stage", {
+                      key:"validating", label:"Retrying independent incident-repair validation",
+                    }),
+                  });
+                  claimValidationAttempts += repairedReview.attempts;
+                  const reviewedRepair = claimValidationSchema.parse(repairedReview.value);
+                  if (v401AcceptIndependentRepair({
+                    claimIds: repairedClaims.map((claim) => claim.id),
+                    validatedClaims: reviewedRepair.claims,
+                    responsive: reviewedRepair.responsiveness?.answersUserQuestion === true,
+                    unaddressedParts: reviewedRepair.responsiveness?.unaddressedParts ?? ["missing verdict"],
+                    hasBottomLine: answerSectionHasContent(repairedAnswer, "Bottom line:"),
+                    citationValid: repairedCitations.ok,
+                    mentionValid: repairedMentions.ok,
+                    sourceQualificationVetoes: qualificationVetoes.length,
+                  })) {
+                    finalAnswer = repairedAnswer;
+                    answerClaims = repairedClaims;
+                    claimValidation = reviewedRepair;
+                    v401RepairDiagnostic = "accepted_independently_validated";
+                    claimValidationNote = [claimValidationNote,
+                      `v40.1 repair=accepted; attempts=${claimValidationAttempts}`]
+                      .filter(Boolean).join("; ");
+                  }
+                }
+              } catch {
+                // A failed rewrite or provider call must NEVER bypass an
+                // initial grounding, citation, or responsiveness rejection.
+                v401RepairDiagnostic = "unavailable_or_unverified";
+              }
+              send("stage", {key:"validating", label:
+                v401RepairDiagnostic === "accepted_independently_validated"
+                  ? "Incident decision repaired and independently validated"
+                  : "Incident repair not admitted; preserving safety verdict"});
+            }
             const validationById = new Map(
               claimValidation.claims.map((claim) => [claim.id, claim]),
             );
-            if (v40IncidentGate &&
-                claimValidation.responsiveness?.answersUserQuestion !== true) {
+            if (v40IncidentGate && (
+                claimValidation.responsiveness?.answersUserQuestion !== true ||
+                !answerSectionHasContent(finalAnswer, "Bottom line:") ||
+                (claimValidation.responsiveness?.unaddressedParts.length ?? 0) > 0)) {
               const fallbackReason =
                 "The cited draft did not demonstrably answer the question asked.";
               const fallbackAnswer = buildFallbackAnswer({
@@ -980,8 +1058,11 @@ export async function POST(request: NextRequest) {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
                 authorities: authorityPayload, fallbackReason,
-                claimValidationNote: claimValidation.responsiveness?.reason ??
-                  "Validator omitted the mandatory responsiveness verdict",
+                claimValidationNote: [
+                  claimValidation.responsiveness?.reason ??
+                    "Validator omitted the mandatory responsiveness verdict",
+                  `v40.1 incidentRepair=${v401RepairDiagnostic}`,
+                ].join("; "),
               });
               controller.close();
               return;
@@ -1338,11 +1419,10 @@ export async function POST(request: NextRequest) {
             return;
           }
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Unknown AI answer error";
-
+          // Never expose raw provider payloads or Zod errors to the browser.
+          // The request ID in trace still permits internal correlation.
           send("error", {
-            message,
+            message: "The parliamentary answer request could not complete. Please try again.",
             retryable:
               typeof error === "object" &&
               error !== null &&
