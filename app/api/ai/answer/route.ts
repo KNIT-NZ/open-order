@@ -124,7 +124,8 @@ export async function POST(request: NextRequest) {
       status: 400,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
+        "Cache-Control": "private, no-store, no-transform",
+        "Referrer-Policy": "no-referrer",
       },
     });
   }
@@ -141,7 +142,8 @@ export async function POST(request: NextRequest) {
         status: 400,
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
+          "Cache-Control": "private, no-store, no-transform",
+          "Referrer-Policy": "no-referrer",
         },
       },
     );
@@ -1449,7 +1451,8 @@ export async function POST(request: NextRequest) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
+      "Cache-Control": "private, no-store, no-transform",
+      "Referrer-Policy": "no-referrer",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     },

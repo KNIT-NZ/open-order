@@ -1,5 +1,13 @@
 # Open Order changelog
 
+## Privacy P0 — content-retention cessation
+
+- Remove routine search query and debug persistence; move search to JSON POST and reject GET.
+- Stop writing ordinary query text into browser URLs; mark search and AI responses no-store.
+- Clarify external AI processing, independent status and sensitive diagnostic feedback.
+- No legacy data deletion or database schema change; durable metadata-only traces and verified expiry remain outstanding.
+
+
 ## Unreleased
 
 - Update runtime and development dependencies to address known vulnerabilities; migrate validation to Zod 4.

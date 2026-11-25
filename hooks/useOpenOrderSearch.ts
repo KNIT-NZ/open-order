@@ -59,8 +59,11 @@ export function useOpenOrderSearch() {
           params.set("focus", nextFocusKey);
         }
 
-        const res = await fetch(`/api/search?${params.toString()}`, {
-          method: "GET",
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.fromEntries(params)),
+          cache: "no-store",
         });
 
         const json = (await res.json()) as SearchResponse | { error?: unknown };

@@ -97,7 +97,7 @@ export function AssistantPanel({
           >
             {assistant.copiedToken === "ai-debug-snapshot"
               ? "Debug copied"
-              : "Copy debug snapshot"}
+              : "Copy debug snapshot (includes question and answer)"}
           </button>
         </div>
       </div>

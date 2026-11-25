@@ -13,3 +13,7 @@ Visit https://openorder.knit.nz/ to search for procedural material or ask a natu
 - `POST /api/ai/answer`: JSON body with required nonempty string `question`, and optional `corpus` (`standing_orders`, `speakers_rulings`, or null). The response uses server-sent events (`text/event-stream`). Events include `stage`, `plan`, `authorities`, `diagnostics`, `answer_delta`, `done`, and `error`. `answer_delta` carries `text`; `done` includes `ok`, `question`, `corpus`, `answerText`, `authorities`, and `latencyMs`, with additional fields including degraded/fallback information where applicable. An `error` event contains a message and may include retryability and diagnostic metadata. Invalid JSON or request schema returns HTTP 400 with an error event. Operational errors after streaming starts can occur within HTTP 200; consumers must inspect terminal events. The API, event payloads and limits may evolve prior to v1.0.
 
 For exact implementation, consult the [route sources](../app/api) and [client hooks](../hooks). See [CONTRIBUTING](../CONTRIBUTING.md) for changes and [SECURITY](../SECURITY.md) for private vulnerability reporting.
+
+### P0 search transport cutover
+
+The current search interface supersedes any GET description above: `POST /api/search` with JSON `q`, optional `corpus`, `limit`, `offset`. GET returns 405; no query should appear in the request URL. See [privacy cutover](privacy-cutover.md).

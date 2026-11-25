@@ -24,6 +24,8 @@ export function updateUrlState(
     params.set("focus", focus);
   }
 
+  // Ordinary search state must not persist question text in browser URLs.
+  params.delete("q");
   const next = params.toString() ? `/?${params.toString()}` : "/";
   window.history.replaceState({}, "", next);
 }
