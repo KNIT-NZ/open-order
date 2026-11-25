@@ -1,7 +1,6 @@
 // components/open-order/AssistantPanel.tsx
 "use client";
 
-import { LaunchNotice } from "./LaunchNotice";
 import styles from "./openOrder.module.css";
 import {
   buildCanonicalCitationHref,
@@ -57,8 +56,6 @@ export function AssistantPanel({
 
   return (
     <div className={styles.panel}>
-      <LaunchNotice />
-
       <div className={styles.aiPanelHeader}>
         <div>
           <div className={styles.aiKicker}>Procedural Assistant</div>

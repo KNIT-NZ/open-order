@@ -1,5 +1,11 @@
 # Open Order changelog
 
+## Privacy — compact trust surfaces
+
+- Remove duplicated in-panel notices; retain a compact, wrapping footer with fidelity, source-currency and sensitivity cues.
+- Move full published disclosures to dedicated Privacy, Sources, Corrections and About pages. No data-processing or reasoning changes.
+
+
 ## Privacy — launch notices and source currency
 
 - Publish near-input independent-status, privacy and corpus currency warnings, with public attribution and private correction contact.

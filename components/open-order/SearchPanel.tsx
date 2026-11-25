@@ -1,5 +1,4 @@
 // components/open-order/SearchPanel.tsx
-import { LaunchNotice } from "./LaunchNotice";
 import styles from "./openOrder.module.css";
 
 type SearchPanelProps = {
@@ -29,8 +28,6 @@ export function SearchPanel({
         onSubmit();
       }}
     >
-      <LaunchNotice />
-
       <div className={styles.searchHeader}>
         <div className={styles.searchKicker}>Direct search</div>
         <h2 className={styles.searchTitle}>Search the texts directly</h2>

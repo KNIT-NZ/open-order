@@ -1,0 +1,53 @@
+/* Scoped presentation styles. No changes to application theme or global layout. */
+.footerNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.footerNotice p { margin: 0; white-space: normal; }
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+.links a, .policy a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.links a:focus-visible, .policy a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+.policy {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 2.5rem);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.policy h1 { font-size: clamp(1.6rem, 4vw, 2.25rem); line-height: 1.25; margin: 1.5rem 0 1rem; }
+.back { font-size: 0.9rem; }
+.content { font-size: 1rem; margin-bottom: 2rem; }
+.content p { margin: 0 0 1rem; white-space: normal; }
+.policy .links { border-top: 1px solid currentColor; padding-top: 1rem; font-size: 0.9rem; }

@@ -1,9 +1,9 @@
 // components/open-order/Footer.tsx
-import { LaunchPrivacyNotice } from "./LaunchNotice";
+import { LaunchFooter } from "./LaunchNotice";
 import styles from "./openOrder.module.css";
 export function Footer() {
   return (
-    <footer className={styles.footer}>
+    <footer className={styles.footer} style={{ minWidth: 0, maxWidth: "100%", width: "100%", boxSizing: "border-box", flexWrap: "wrap", whiteSpace: "normal", overflowWrap: "anywhere" }}>
       <a
         href="https://knit.nz/"
         target="_blank"
@@ -24,11 +24,8 @@ export function Footer() {
           className={`${styles.footerLogo} ${styles.themeDarkAsset}`}
         />
       </a>
-      <div className={styles.footerText}>
-        <LaunchPrivacyNotice />
-        {" "}<a href="https://github.com/KNIT-NZ/open-order">Source code</a>
-        {" · "}<a href="https://github.com/KNIT-NZ/open-order/issues">Feedback</a>
-        {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/CONTRIBUTING.md">Contribute</a>
+      <div className={styles.footerText} style={{ flex: "1 1 20rem", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", whiteSpace: "normal", overflowWrap: "anywhere" }}>
+        <LaunchFooter />
         {" · "}<a href="https://github.com/KNIT-NZ/open-order/blob/main/SECURITY.md">Security</a>
       </div>
     </footer>
