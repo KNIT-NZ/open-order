@@ -131,7 +131,21 @@ export function buildV40Dossier<T extends V40Authority>(input: {
         !["standing_orders", "speakers_rulings"].includes(source.documentCorpus)) return;
     result.set(`${source.documentCorpus}:${source.citationLabel}`, source);
   };
-  input.legacySelected.forEach(insert);
+  input.legacySelected.forEach((source) => {
+    if (result.size < max) insert(source);
+  });
+  // v40.2.1: preserve the original retrieval leaders for the first three
+  // planner dimensions before the lexical diversity rerank. This is only a
+  // bounded opportunity to be reviewed, not a source admission or boost.
+  // Incidental user-term/bridge searches must not consume this reservation.
+  const primarySearches = input.searches.filter((search) => search.provenance === "planner").slice(0, 3);
+  for (let rank = 0; rank < 2; rank += 1) {
+    for (const search of primarySearches) {
+      if (result.size >= max) break;
+      const source = search.results[rank];
+      if (source) insert(source);
+    }
+  }
   const question = words(input.question);
   const queues = input.searches.map((search) => {
     const query = words(search.query);
