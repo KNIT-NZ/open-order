@@ -539,6 +539,27 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ].join("\n")
     : "Semantic selection summary: Not received";
 
+  const adjudication = selector?.scenarioAdjudication;
+  const adjudicationSummary = adjudication ? [
+    `Status: ${adjudication.status}`,
+    `Dossier count: ${adjudication.candidateCount}; primary review attempts: ${adjudication.providerAttempts}`,
+    `Dossier: ${adjudication.dossier?.join(", ") || "None reported"}`,
+    `Retrieved outside dossier (bounded): ${adjudication.retrievedOutsideDossier?.join(", ") || "None reported"}`,
+    `Final accepted: ${adjudication.selected.join(", ") || "None"}`,
+    `Primary refusals: ${adjudication.rejected.join(" | ") || "None"}`,
+    `Unknown nominations: ${adjudication.unavailableNominations ?? "Not reported"}`,
+    ...(adjudication.dispositions ?? []).map((row) =>
+      `  ${row.corpus}:${row.citationLabel} — ${row.status}; ${row.role ?? "no role"}; ${row.reason}`),
+    `Recovery: ${adjudication.recovery?.status ?? "Not reported"}`,
+    `Recovery candidates: ${adjudication.recovery?.candidates.join(", ") || "None"}`,
+    `Recovery accepted: ${adjudication.recovery?.selected.join(", ") || "None"}`,
+    `Recovery refusals: ${adjudication.recovery?.rejected.join(" | ") || "None"}`,
+    `Recovery unknown nominations: ${adjudication.recovery?.unavailableNominations ?? "Not reported"}`,
+    ...(adjudication.recovery?.dispositions ?? []).map((row) =>
+      `  ${row.corpus}:${row.citationLabel} — ${row.status}; ${row.role ?? "no role"}; ${row.reason}`),
+    `Unresolved facets: ${adjudication.gaps.join(" | ") || "None reported"}`,
+  ].join("\n") : "Scenario adjudication: Not received";
+
   const trace = input.pipelineTrace;
   const traceSummary = trace
     ? [
@@ -586,6 +607,11 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     "SEMANTIC AUTHORITY COVERAGE",
     "---------------------------",
     semanticSummary,
+    "",
+    "SCENARIO SOURCE ADJUDICATION",
+    "----------------------------",
+    adjudicationSummary,
+    `Incident repair: ${trace?.incidentRepair ?? "Not attempted or not reported"}`,
     "",
     "VALIDATION OUTCOME",
     "------------------",

@@ -24,6 +24,7 @@ import {
   buildSearchPlannerPrompt,
   SEARCH_PLANNER_SYSTEM_PROMPT,
   V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
+  V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
   buildV40SourceAdjudicationPrompt,
   ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
   buildV401IncidentRepairPrompt,
@@ -32,7 +33,8 @@ import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
   buildV40Dossier, validateV40Proposal, v40MustAdjudicate,
   v40SourceScopeMismatch, v401MaterialEvidenceQueries,
-  v401AcceptIndependentRepair, type V40Situation,
+  v401AcceptIndependentRepair, v402RecoveryCandidates, v402RepairRefusals,
+  type V402Disposition, type V40Situation,
 } from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
@@ -161,6 +163,7 @@ export async function POST(request: NextRequest) {
       // Vercel supplies the public deployment commit when available.
       const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
       const stageTimeline: Array<{ key: string; label: string; atMs: number }> = [];
+      let incidentRepair: string | null = null;
       // Capture only a closed, content-free projection of the existing stream lifecycle.
       let opsOutcome: OperationalOutcome = "incomplete";
       let opsElapsed: number | null = null;
@@ -191,6 +194,7 @@ export async function POST(request: NextRequest) {
               requestId,
               buildCommit,
               stageTimeline,
+              incidentRepair,
             },
           };
         }
@@ -423,14 +427,24 @@ export async function POST(request: NextRequest) {
           let v40Diagnostic: {
             status: string; candidateCount: number; selected: string[];
             rejected: string[]; gaps: string[]; providerAttempts: number;
+            dossier: string[]; retrievedOutsideDossier: string[];
+            dispositions: V402Disposition[]; unavailableNominations: number;
+            recovery: { status: string; candidates: string[]; dispositions: V402Disposition[]; unavailableNominations: number; selected: string[]; rejected: string[] };
           } = {
             status: "not_invoked", candidateCount: 0, selected: [], rejected: [], gaps: [], providerAttempts: 0,
+            dossier: [], retrievedOutsideDossier: [], dispositions: [], unavailableNominations: 0,
+            recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
           };
           if (v40IncidentGate) {
             const dossier = buildV40Dossier({
               question, searches, legacySelected: v40AuthoritySet,
             });
             v40Diagnostic.candidateCount = dossier.length;
+            const dossierIds = new Set(dossier.map((source) => source.sectionId));
+            v40Diagnostic.dossier = dossier.map((source) => `${source.documentCorpus}:${source.citationLabel}`);
+            v40Diagnostic.retrievedOutsideDossier = [...new Set(searches.flatMap((search) => search.results)
+              .filter((source) => !dossierIds.has(source.sectionId))
+              .map((source) => `${source.documentCorpus}:${source.citationLabel}`))].slice(0, 200);
             if (dossier.length > 0) {
               send("stage", {
                 key: "selecting", label: "Adjudicating source scope and operative evidence",
@@ -458,21 +472,68 @@ export async function POST(request: NextRequest) {
                 });
                 v40AuthoritySet = v40Review.authorities;
                 v40Diagnostic = {
+                  ...v40Diagnostic,
                   status: v40Review.reason,
                   candidateCount: dossier.length,
                   selected: v40Review.accepted,
                   rejected: v40Review.rejected,
                   gaps: v40Review.gaps,
                   providerAttempts: v40Provider.attempts,
+                  dispositions: v40Review.dispositions,
+                  unavailableNominations: v40Review.unavailableNominations,
                 };
-              } catch {
+                if (v40Review.reason === "v40_no_governing_witness") {
+                  const candidates = v402RecoveryCandidates({ question, candidates: dossier, review: v40Review });
+                  v40Diagnostic.recovery.candidates = candidates.map((source) => `${source.documentCorpus}:${source.citationLabel}`);
+                  v40Diagnostic.recovery.status = candidates.length === 0 ? "no_eligible_sources" : "time_budget_exhausted";
+                  if (candidates.length > 0 && Date.now() - started < 20_000) {
+                    send("stage", { key: "selecting", label: "Independently reviewing eligible governing evidence" });
+                    v40Diagnostic.recovery.status = "provider_unavailable";
+                    try {
+                      const rawRecovery = await generateJson<unknown>({
+                        task: "answer.validate", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
+                        prompt: buildV40SourceAdjudicationPrompt({ question,
+                          situation: plan.situation as V40Situation | undefined,
+                          candidates, legacySelected: [] }), temperature: 0,
+                      });
+                      v40Diagnostic.recovery.status = "invalid_structured_result";
+                      const proposal = v40SourceAdjudicationSchema.parse(rawRecovery);
+                      // Only quotations from the presented text can establish a
+                      // recovery witness. Restore full original bodies after checking.
+                      const review = validateV40Proposal({ question,
+                        candidates: candidates.map((source) => ({ ...source, sectionContent: source.sectionContent.slice(0, 1350) })),
+                        proposal });
+                      v40Diagnostic.recovery.dispositions = review.dispositions;
+                      v40Diagnostic.recovery.unavailableNominations = review.unavailableNominations;
+                      v40Diagnostic.recovery.selected = review.accepted;
+                      v40Diagnostic.recovery.rejected = review.rejected;
+                      v40Diagnostic.recovery.status = review.reason;
+                      if (review.authorities.length > 0) {
+                        const fullById = new Map(candidates.map((source) => [source.sectionId, source]));
+                        const restored = review.authorities.flatMap((source) => {
+                          const full = fullById.get(source.sectionId);
+                          return full ? [full] : [];
+                        });
+                        if (restored.length === review.authorities.length) {
+                          v40AuthoritySet = restored;
+                          v40Diagnostic.status = "v402_independent_governing_recovery";
+                          v40Diagnostic.selected = review.accepted;
+                          v40Diagnostic.gaps = review.gaps;
+                          v40Diagnostic.recovery.status = "accepted_source_witness";
+                        }
+                      }
+                    } catch { /* Preserve the empty pack. No raw provider error is exposed. */ }
+                  }
+                }
+              } catch (adjudicationError) {
                 // Provider failure cannot be mistaken for a source judgment.
                 // A source-scope-compatible baseline is preferable to an
                 // unscreened new source; otherwise decline to answer.
                 v40AuthoritySet = v40AuthoritySet.filter((authority) =>
                   !v40SourceScopeMismatch(question, authority),
                 );
-                v40Diagnostic.status = "adjudication_unavailable";
+                const failure = failureDiagnostic(adjudicationError, "claim_validation", 1, Date.now() - started);
+                v40Diagnostic.status = `adjudication_unavailable:${failure.kind}`;
                 v40Diagnostic.selected = v40AuthoritySet.map((authority) => authority.citationLabel);
               }
             } else {
@@ -660,7 +721,8 @@ export async function POST(request: NextRequest) {
                 // Do not misreport the final authority corpus as a user constraint.
                 corpus,
                 intent: plan.intent,
-                evidenceGaps: evidenceGaps.map((gap) => gap.description),
+                evidenceGaps: [...evidenceGaps.map((gap) => gap.description),
+                  ...(v40Diagnostic.status === "v402_independent_governing_recovery" ? v40Diagnostic.gaps : [])],
                 searches: [
                   {
                     query: "final_authority_pack",
@@ -966,6 +1028,7 @@ export async function POST(request: NextRequest) {
               (claimValidation.responsiveness?.unaddressedParts.length ?? 0) > 0
             );
             let v401RepairDiagnostic = "not_needed";
+            let repairPhase = "generation";
             if (v401NeedsRepair) {
               v401RepairDiagnostic = "not_admitted";
               send("stage", {key:"validating", label:"Repairing the missing incident decision"});
@@ -986,6 +1049,7 @@ export async function POST(request: NextRequest) {
                   }),
                   temperature: 0.1,
                 });
+                repairPhase = "deterministic_checks";
                 let repairedAnswer = normalizeAnswerFormatting(
                   normalizeAnswerCitationLabels({
                     answerText: proposedRepair, authorities: authorityPayload,
@@ -1007,9 +1071,19 @@ export async function POST(request: NextRequest) {
                 const qualificationVetoes = findOmittedSourceQualifications({
                   claims: repairedClaims, authorities: finalAuthorities,
                 });
+                const preliminaryRefusals = [
+                  !repairedAnswer.trim() && "empty_repair",
+                  !repairedClaims.length && "no_claims",
+                  !repairedCitations.ok && "invalid_citations",
+                  !repairedMentions.ok && "invalid_authority_mentions",
+                  qualificationVetoes.length > 0 && "qualification_veto",
+                  !answerSectionHasContent(repairedAnswer, "Bottom line:") && "missing_bottom_line",
+                ].filter(Boolean);
+                v401RepairDiagnostic = preliminaryRefusals.length ? `refused:${preliminaryRefusals.join(",")}` : "independent_review_pending";
                 if (repairedClaims.length > 0 && repairedCitations.ok &&
                     repairedMentions.ok && qualificationVetoes.length === 0 &&
                     answerSectionHasContent(repairedAnswer, "Bottom line:")) {
+                  repairPhase = "independent_validation";
                   const repairedReview = await runClaimValidationWithRetry({
                     requestStartedAt: started,
                     invoke: () => generateJson<unknown>({
@@ -1026,8 +1100,9 @@ export async function POST(request: NextRequest) {
                     }),
                   });
                   claimValidationAttempts += repairedReview.attempts;
+                  repairPhase = "independent_verdict_schema";
                   const reviewedRepair = claimValidationSchema.parse(repairedReview.value);
-                  if (v401AcceptIndependentRepair({
+                  const repairAdmission = {
                     claimIds: repairedClaims.map((claim) => claim.id),
                     validatedClaims: reviewedRepair.claims,
                     responsive: reviewedRepair.responsiveness?.answersUserQuestion === true,
@@ -1036,7 +1111,10 @@ export async function POST(request: NextRequest) {
                     citationValid: repairedCitations.ok,
                     mentionValid: repairedMentions.ok,
                     sourceQualificationVetoes: qualificationVetoes.length,
-                  })) {
+                  };
+                  const refusals = v402RepairRefusals(repairAdmission);
+                  v401RepairDiagnostic = refusals.length ? `refused:${refusals.join(",")}` : "independent_gate_refused";
+                  if (v401AcceptIndependentRepair(repairAdmission)) {
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
                     claimValidation = reviewedRepair;
@@ -1046,11 +1124,13 @@ export async function POST(request: NextRequest) {
                       .filter(Boolean).join("; ");
                   }
                 }
-              } catch {
+              } catch (repairError) {
                 // A failed rewrite or provider call must NEVER bypass an
                 // initial grounding, citation, or responsiveness rejection.
-                v401RepairDiagnostic = "unavailable_or_unverified";
+                const failure = failureDiagnostic(repairError, "post_validation", 1, Date.now() - started);
+                v401RepairDiagnostic = `unavailable:${repairPhase}:${failure.kind}`;
               }
+              incidentRepair = v401RepairDiagnostic;
               send("stage", {key:"validating", label:
                 v401RepairDiagnostic === "accepted_independently_validated"
                   ? "Incident decision repaired and independently validated"

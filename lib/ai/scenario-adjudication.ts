@@ -88,6 +88,8 @@ export type V40Review<T extends V40Authority> = {
   accepted: string[];
   gaps: string[];
   reason: string;
+  dispositions: V402Disposition[];
+  unavailableNominations: number;
 };
 
 const COMMON = new Set([
@@ -176,59 +178,122 @@ export function v40SourceScopeMismatch(question: string, source: V40Authority): 
   return null;
 }
 
+export type V402Disposition = {
+  citationLabel: string;
+  corpus: string;
+  status: "not_nominated" | "rejected" | "admitted" | "withheld_no_primary" | "not_reviewed_limit";
+  reason: string;
+  role: V40ProposedWitness["role"] | null;
+};
+
 export function validateV40Proposal<T extends V40Authority>(input: {
   question: string;
   candidates: T[];
   proposal: V40Adjudication;
   limit?: number;
 }): V40Review<T> {
-  const limit = Math.max(1,Math.min(4,input.limit ?? 4));
-  const byLabel = new Map(input.candidates.map((source)=>[source.citationLabel,source]));
-  const accepted: string[] = [];
+  const limit = Math.max(1, Math.min(4, input.limit ?? 4));
+  const byLabel = new Map<string, T>();
+  const ambiguous = new Set<string>();
+  for (const source of input.candidates) {
+    const prior = byLabel.get(source.citationLabel);
+    if (prior && prior.sectionId !== source.sectionId) ambiguous.add(source.citationLabel);
+    byLabel.set(source.citationLabel, source);
+  }
+  const dispositions: V402Disposition[] = input.candidates.map((source) => ({
+    citationLabel: source.citationLabel, corpus: source.documentCorpus,
+    status: "not_nominated", reason: "model_did_not_nominate", role: null,
+  }));
   const rejected: string[] = [];
+  const accepted: string[] = [];
   const authorities: T[] = [];
+  let primaryAdmitted = false;
+  let unavailableNominations = 0;
   const seen = new Set<string>();
-  for(const item of input.proposal.selected.slice(0,12)) {
+  for (const item of input.proposal.selected.slice(0, 12)) {
     const source = byLabel.get(item.citationLabel);
-    if(!source || seen.has(item.citationLabel)) { rejected.push(`${item.citationLabel}:unavailable-or-duplicate`); continue; }
+    if (!source) { unavailableNominations += 1; rejected.push("unknown-source:unavailable-or-duplicate"); continue; }
+    const rows = dispositions.filter((row) => row.citationLabel === source.citationLabel);
+    if (seen.has(item.citationLabel)) {
+      rejected.push(`${source.citationLabel}:unavailable-or-duplicate`);
+      continue;
+    }
     seen.add(item.citationLabel);
-    if(!(item.actorMatches && item.settingMatches && item.actionMatches && item.stageMatches)) {
-      rejected.push(`${item.citationLabel}:scope-not-established`);continue;
+    const mark = (status: V402Disposition["status"], reason: string) => {
+      for (const row of rows) { row.status = status; row.reason = reason; row.role = item.role; }
+      if (status === "rejected") rejected.push(`${source.citationLabel}:${reason}`);
+    };
+    if (ambiguous.has(item.citationLabel)) { mark("rejected", "ambiguous-source-identity"); continue; }
+    if (authorities.length >= limit) { mark("not_reviewed_limit", "admission_limit"); continue; }
+    if (!(item.actorMatches && item.settingMatches && item.actionMatches && item.stageMatches)) {
+      const failed = [!item.actorMatches && "actor", !item.settingMatches && "setting",
+        !item.actionMatches && "action", !item.stageMatches && "stage"].filter(Boolean).join(",");
+      mark("rejected", `scope-not-established:${failed}`); continue;
     }
-    const mismatch = v40SourceScopeMismatch(input.question,source);
-    if(mismatch) { rejected.push(`${item.citationLabel}:${mismatch}`);continue; }
+    const mismatch = v40SourceScopeMismatch(input.question, source);
+    if (mismatch) { mark("rejected", mismatch); continue; }
     const quote = normalizeWhitespace(item.exactQuote);
-    // The quoted witness, not the surrounding heading or a separate device
-    // provision, must address the recording activity when offered as GOVERNING.
     if (item.role === "governing" && !v401MediaWitnessMatches(input.question, quote)) {
-      rejected.push(`${item.citationLabel}:recording-permission-not-attested`);continue;
+      mark("rejected", "recording-permission-not-attested"); continue;
     }
-    const body = normalizeWhitespace(source.sectionContent);
-    if(quote.length < 24 || !body.includes(quote)) {
-      rejected.push(`${item.citationLabel}:unverified-verbatim-witness`);continue;
+    if (quote.length < 24 || !normalizeWhitespace(source.sectionContent).includes(quote)) {
+      mark("rejected", "unverified-verbatim-witness"); continue;
     }
-    // A real quotation is necessary, not sufficient: the model must nominate
-    // a governing or limiting rule. A mere shared topic is not admitted.
-    if(!["governing","qualification","implementation"].includes(item.role)) {
-      rejected.push(`${item.citationLabel}:invalid-source-role`);continue;
+    if (!["governing", "qualification", "implementation"].includes(item.role)) {
+      mark("rejected", "invalid-source-role"); continue;
     }
     authorities.push(source);
-    accepted.push(item.citationLabel);
-    if(authorities.length === limit) break;
+    accepted.push(source.citationLabel);
+    mark("admitted", "verified_source_witness");
+    if (item.role === "governing") primaryAdmitted = true;
   }
-  // A pack containing only peripheral qualifiers cannot answer the question.
-  const primaryAdmitted = input.proposal.selected.some((item) =>
-    item.role === "governing" && accepted.includes(item.citationLabel),
-  );
   if (!primaryAdmitted) {
-    return { authorities: [], accepted: [],
-      rejected: [...rejected, "missing-primary-governing-witness"],
-      gaps: input.proposal.remainingUncertainties.slice(0,5),
-      reason: "v40_no_governing_witness" };
+    for (const row of dispositions) if (row.status === "admitted") {
+      row.status = "withheld_no_primary"; row.reason = "missing-primary-governing-witness";
+    }
+    return { authorities: [], accepted: [], rejected: [...rejected, "missing-primary-governing-witness"],
+      gaps: input.proposal.remainingUncertainties.slice(0, 5), reason: "v40_no_governing_witness",
+      dispositions, unavailableNominations };
   }
-  return { authorities,accepted,rejected,
-    gaps: input.proposal.remainingUncertainties.slice(0,5),
-    reason: "v40_quoted_source_adjudication" };
+  return { authorities, accepted, rejected, gaps: input.proposal.remainingUncertainties.slice(0, 5),
+    reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations };
+}
+
+/** A second review may reconsider omitted or previously non-governing sources,
+ * never any source with a failed deterministic or model scope check. */
+export function v402RecoveryCandidates<T extends V40Authority>(input: {
+  question: string; candidates: T[]; review: V40Review<T>;
+}): T[] {
+  if (input.review.reason !== "v40_no_governing_witness") return [];
+  const dispositions = new Map(input.review.dispositions.map((row) => [row.citationLabel, row]));
+  const rejected = new Set(input.review.rejected.map((entry) => entry.split(":")[0]));
+  return input.candidates.filter((source) => {
+    const row = dispositions.get(source.citationLabel);
+    return !!row && !rejected.has(source.citationLabel) &&
+      (row.status === "not_nominated" || row.status === "withheld_no_primary") &&
+      !v40SourceScopeMismatch(input.question, source);
+  });
+}
+
+/** Diagnostic projection of the existing repair gate, without relaxing it. */
+export function v402RepairRefusals(input: Parameters<typeof v401AcceptIndependentRepair>[0]): string[] {
+  const reasons: string[] = [];
+  if (!input.hasBottomLine) reasons.push("missing_bottom_line");
+  if (!input.citationValid) reasons.push("invalid_citations");
+  if (!input.mentionValid) reasons.push("invalid_authority_mentions");
+  if (input.sourceQualificationVetoes !== 0) reasons.push("qualification_veto");
+  if (!input.responsive) reasons.push("not_responsive_or_missing_verdict");
+  if (input.unaddressedParts.length) reasons.push("unaddressed_parts");
+  const ids = new Set(input.claimIds);
+  const verdictIds = new Set(input.validatedClaims.map((claim) => claim.id));
+  if (!ids.size) reasons.push("no_claims");
+  if (ids.size !== input.claimIds.length) reasons.push("duplicate_claim_ids");
+  if (input.validatedClaims.length !== input.claimIds.length) reasons.push("verdict_count_mismatch");
+  if (verdictIds.size !== input.validatedClaims.length) reasons.push("duplicate_verdict_ids");
+  if (input.validatedClaims.some((claim) => !ids.has(claim.id))) reasons.push("unexpected_verdict_id");
+  if ([...ids].some((id) => !verdictIds.has(id))) reasons.push("missing_claim_verdict");
+  if (input.validatedClaims.some((claim) => !claim.supported)) reasons.push("unsupported_claim");
+  return reasons;
 }
 
 export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,

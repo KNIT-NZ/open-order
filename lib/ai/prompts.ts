@@ -626,3 +626,18 @@ export function buildV401IncidentRepairPrompt(input: {
     constraints: "No other authorities; direct Bottom line, full critical-facet coverage, inline citations, source-stated qualifications. Rewrite all sections, not one line.",
   });
 }
+
+
+/** v40.2: fresh source review only after no primary witness was admitted. */
+export const V402_SOURCE_RECOVERY_SYSTEM_PROMPT = V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT + `
+
+This is a fresh bounded review of sources eligible for reconsideration. Do not
+assume a governing source exists. Separate independently answerable decision
+facets from unresolved ones: an express rule may govern one material part of
+the requested decision even if it cannot settle every circumstance. Identify
+that precise part in the rationale and list the unresolved facets explicitly.
+A contextual source is not a governing witness. Never treat a related rule,
+shared terminology, or the absence of evidence as proof of permission.
+Return at most one governing source and any necessary qualification within
+the existing four-source limit. If none qualifies, return selected=[].
+`;

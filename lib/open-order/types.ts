@@ -145,7 +145,19 @@ export type AiDiagnosticSlotMatch = {
   heading: string | null;
 };
 
+export type AiSourceDisposition = {
+  citationLabel: string; corpus: string; status: string; reason: string; role: string | null;
+};
+export type AiScenarioAdjudication = {
+  status: string; candidateCount: number; selected: string[]; rejected: string[];
+  gaps: string[]; providerAttempts: number; dossier: string[]; retrievedOutsideDossier: string[];
+  dispositions: AiSourceDisposition[]; unavailableNominations: number;
+  recovery: { status: string; candidates: string[]; dispositions: AiSourceDisposition[];
+    unavailableNominations: number; selected: string[]; rejected: string[] };
+};
+
 export type AiSelectorSummary = {
+  scenarioAdjudication?: AiScenarioAdjudication;
   candidateCount: number;
   minObligationCoverage: number;
   allObligationsComplete: boolean;
@@ -156,6 +168,7 @@ export type AiSelectorSummary = {
 
 export type AiPipelineTrace = {
   schemaVersion: 2;
+  incidentRepair?: string | null;
   requestId: string;
   buildCommit: string | null;
   stageTimeline: Array<{ key: string; label: string; atMs: number }>;
