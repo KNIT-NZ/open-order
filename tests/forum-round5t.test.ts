@@ -56,7 +56,11 @@ test("house in committee is the whole-house forum", () => {
   assert.equal(forumIdentityOutcome("Quill Committee", leaf), "reject");
   assert.equal(
     forumIdentityOutcome("Business Committee", ["HOUSE IN COMMITTEE", "SO 5", "Meetings"]),
-    "reject",
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("the House in committee", ["Chapter 2", "Sittings", "SO 9", "Committee of the whole House"]),
+    "match",
   );
 });
 
