@@ -374,6 +374,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       };
 
       let send = (_event: string, _data?: unknown) => { void _event; void _data; };
+      let citationList = (_answerText: string): Array<{ citationLabel?: string; unconfirmed?: boolean }> => [];
       const run = async () => {
         const started = startedAt;
         const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
@@ -670,11 +671,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const has = (set: Set<string>) => set.has(text) || [...set].some((item) => item.toLowerCase() === text.toLowerCase());
             return has(actLabels) || has(forumLabels);
           };
-          // Filter first. Survivors are confirmed, so the flag is false. The client lists this array as authorities.
+          // Every admitted source stays in the citation list. A qualified admission is labelled.
           const listedAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
-            list
-              .filter((item) => !hiddenLabel(String(item.citationLabel ?? "")))
-              .map((item) => ({ ...item, unconfirmed: false }));
+            list.map((item) => ({
+              ...item,
+              unconfirmed: hiddenLabel(String(item.citationLabel ?? "")),
+            }));
           const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
             const authorities = input.authorities ?? [];
             const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
@@ -940,9 +942,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const shownAuthorities = listedAuthorities(authorityPayload);
           const shownLabels = new Set(shownAuthorities.map((authority) => authority.citationLabel.toLowerCase()));
           const shownResults = finalAuthorities.filter((authority) => shownLabels.has(authority.citationLabel.toLowerCase()));
-          send("authorities", {
-            authorities: shownAuthorities,
-          });
+          citationList = (answerText: string) => {
+            const cited = listedAuthorities(authoritiesReferencedByAnswer(answerText, authorityPayload));
+            const fallback = String(outcomeState.fallbackCode ?? "none").trim();
+            const declined = outcomeState.abstained === true || fallback !== "none";
+            return declined ? cited.filter((item) => !item.unconfirmed) : cited;
+          };
 
           const diagnosticConcepts = [
             ...new Set([
@@ -1894,7 +1899,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
             }
-            const citedAuthorities = listedAuthorities(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {
@@ -1904,7 +1908,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
               answerText: finalAnswer,
-              authorities: citedAuthorities,
+              authorities: shownAuthorities,
               rewriteNote,
               pruneNote,
               claimValidationNote,
@@ -1995,6 +1999,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         bindSend(rawSend) {
           send = (event, data) => {
             if (event === "done" || event === "error") markOperationalTerminal(event);
+            if (event === "done" && data && typeof data === "object") {
+              const record = data as { answerText?: unknown };
+              const authorities = citationList(typeof record.answerText === "string" ? record.answerText : "");
+              rawSend("authorities", decorate("authorities", { authorities }));
+              rawSend(event, decorate(event, { ...data, authorities }));
+              return;
+            }
             rawSend(event, decorate(event, data));
           };
           return send;

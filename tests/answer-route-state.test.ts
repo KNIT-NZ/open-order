@@ -470,11 +470,11 @@ test("an overlooked soft act miss is qualified and is not the sole authority", a
   }>;
   const labels = listed.map((item) => item.citationLabel);
   assert.ok(labels.includes("SO 1"));
-  assert.equal(labels.includes("SO 2"), false);
+  assert.equal(listed.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
   assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
   const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
-  assert.equal(doneAuthorities.some((item) => item.citationLabel === "SO 2"), false);
-  assert.ok(doneAuthorities.every((item) => item.unconfirmed === false));
+  assert.equal(doneAuthorities.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
+  assert.equal(doneAuthorities.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
 });
 
 test("a qualified source is not listed as an authority when the answer is withheld", async () => {
@@ -528,9 +528,10 @@ test("an ambiguous committee parse is never a supported answer", async () => {
   assert.equal(done.answerState, "partial");
   assert.notEqual(done.answerState, "supported");
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to be the body the question is about/);
-  assert.deepEqual(done.authorities, []);
-  const panel = events.find((item) => item.event === "authorities")?.data.authorities as Array<{ citationLabel?: string }>;
-  assert.equal(panel.some((item) => item.citationLabel === "SO 1"), false);
+  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
+  const panel = events.find((item) => item.event === "authorities")?.data.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.equal(panel.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
   const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
   assert.ok(facets.some((item) => item.class === "retrieval_uncertainty" && item.facet === "forum_identity_unconfirmed"));
   const codes = ((events.find((item) => item.event === "diagnostics")?.data.selectorSummary as { forumCodes?: string[] }).forumCodes) ?? [];
@@ -548,7 +549,7 @@ test("the selector route applies all four forum outcomes", async () => {
 
   const generic = doneOf(await withCorpusCommitteeNames(["Widget Oversight Committee"], () => ask("forum_generic")));
   assert.equal(generic.answerState, "partial");
-  assert.equal((generic.authorities as Array<{ unconfirmed?: boolean }>).every((item) => item.unconfirmed === false), true);
+  assert.equal((generic.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>).find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
 
   const rejectedEvents = await withCorpusCommitteeNames(
     ["Widget Committee", "Gadget Review Committee"],
@@ -565,12 +566,12 @@ test("the selector route applies all four forum outcomes", async () => {
   assert.equal(longer.answerState, "partial");
   assert.notEqual(longer.answerState, "supported");
   assert.match(String(longer.answerText), /has not been confirmed to be the body the question is about/);
-  assert.deepEqual(longer.authorities, []);
+  assert.equal((longer.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>).find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
 
   const subclass = doneOf(await withCorpusCommitteeNames(["Widget Oversight Committee"], () => ask("forum_subclass")));
   assert.equal(subclass.answerState, "partial");
   assert.notEqual(subclass.answerState, "supported");
-  assert.deepEqual(subclass.authorities, []);
+  assert.equal((subclass.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>).find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
 });
 
 test("a body's own multi-segment path is admitted, and a different proceeding is qualified", async () => {
@@ -590,7 +591,7 @@ test("a body's own multi-segment path is admitted, and a different proceeding is
     const done = doneOf(await ask(scenario));
     assert.equal(done.answerState, "partial", scenario);
     assert.notEqual(done.answerState, "supported", scenario);
-    assert.deepEqual(done.authorities, [], scenario);
+    assert.equal((done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>).find((item) => item.citationLabel === "SO 1")?.unconfirmed, true, scenario);
   }
 });
 
@@ -701,7 +702,6 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
     });
     const done = doneOf(events);
     assert.equal(done.fallbackCode, site.code, `${site.kind} ${site.code}`);
-    if (site.code === "ungrounded_mentions") assert.deepEqual(done.authorities, [], site.kind);
     const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
     const panel = (events.find((item) => item.event === "authorities")?.data.authorities ?? []) as Array<{
       citationLabel?: string;

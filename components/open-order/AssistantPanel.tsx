@@ -298,6 +298,11 @@ export function AssistantPanel({
                                 {authority.heading}
                               </span>
                             ) : null}
+                            {authority.unconfirmed ? (
+                              <span className={styles.aiAuthorityHeading} aria-label="Qualified authority, not confirmed to govern">
+                                Qualified
+                              </span>
+                            ) : null}
                           </div>
 
                           <div className={styles.aiAuthorityPath}>

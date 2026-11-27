@@ -211,7 +211,8 @@ test("every decision-table cell runs on both routes", async () => {
         } else {
           assert.equal(done.answerState, "partial", label);
           assert.notEqual(done.answerState, "supported", label);
-          assert.deepEqual(done.authorities, [], label);
+          const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+          assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true, label);
         }
       }
     }
