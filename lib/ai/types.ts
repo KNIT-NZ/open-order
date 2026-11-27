@@ -12,6 +12,7 @@ export type AiGenerateJsonRequest = {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
+  onProviderRetry?: () => void;
 };
 
 export type AiStreamTextRequest = {
@@ -20,4 +21,5 @@ export type AiStreamTextRequest = {
   prompt: string;
   temperature?: number;
   onChunk?: (text: string) => void;
+  onProviderRetry?: () => void;
 };

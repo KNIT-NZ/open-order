@@ -5,6 +5,24 @@ import { AiProviderError } from "./errors";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
+const FREE_TIER_MODEL_PATTERN = /^gemini-[a-z0-9][a-z0-9._-]{0,60}$/i;
+
+/** Ordered free-tier models with separate quotas. Tester mode stays on the pinned model. */
+export function geminiFreeTierChain(): string[] {
+  if (process.env.OPEN_ORDER_INFERENCE_MODE?.trim() === "zero-billed-test") {
+    return [GEMINI_MODEL];
+  }
+  const listed = (process.env.GEMINI_FREE_TIER_MODELS ?? "gemini-3.5-flash-lite,gemini-3.6-flash")
+    .split(",")
+    .map((model) => model.trim())
+    .filter((model) => FREE_TIER_MODEL_PATTERN.test(model));
+  const chain: string[] = [];
+  const preferred = process.env.GEMINI_MODEL?.trim();
+  if (preferred && FREE_TIER_MODEL_PATTERN.test(preferred)) chain.push(preferred);
+  for (const model of listed) if (!chain.includes(model)) chain.push(model);
+  return chain.length > 0 ? chain : ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
+}
+
 // Disable application-managed retries for the zero-billed tester mode.
 // An SDK-level retry audit is still required before live tester authorisation.
 const GEMINI_MAX_RETRIES =
@@ -195,50 +213,56 @@ function classifyError(error: unknown): AiProviderError {
     kind: "unknown", provider: "gemini", retryable: false, rawMessage, cause: error });
 }
 
-async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+export async function runGeminiChain<T>(
+  operation: (model: string) => Promise<T>,
+  hooks?: { sleep?: (ms: number) => Promise<void>; onRetry?: () => void },
+): Promise<T> {
+  const pause = hooks?.sleep ?? sleep;
+  const chain = geminiFreeTierChain();
   let lastError: AiProviderError | null = null;
-
-  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      const classified = classifyError(error);
-      lastError = classified;
-
-      const shouldRetry = classified.retryable && attempt < GEMINI_MAX_RETRIES;
-
-      if (!shouldRetry) {
+  for (const model of chain) {
+    const attempts = GEMINI_MAX_RETRIES > 0 ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await operation(model);
+      } catch (error) {
+        const classified = classifyError(error);
+        lastError = classified;
+        const rateLimited = classified.kind === "rate_limited" || classified.statusCode === 429;
+        if (classified.retryable && attempt + 1 < attempts) {
+          hooks?.onRetry?.();
+          await pause(computeBackoffMs(attempt));
+          continue;
+        }
+        if (rateLimited || classified.retryable) break;
         throw classified;
       }
-
-      await sleep(computeBackoffMs(attempt));
     }
   }
-
-  throw (
-    lastError ??
-    new AiProviderError({
-      message: "The AI provider failed after retries.",
-      kind: "unknown",
-      retryable: false,
-    })
-  );
+  throw lastError ?? new AiProviderError({
+    message: "The AI provider failed after retries.",
+    kind: "unknown",
+    retryable: false,
+    provider: "gemini",
+  });
 }
 
 export async function generateJson<T>({
   systemInstruction,
   prompt,
   temperature = 0.2,
+  onProviderRetry,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
+  onProviderRetry?: () => void;
 }): Promise<T> {
-  return withRetry(async () => {
+  return runGeminiChain(async (model) => {
     const gemini = await getClient();
 
     const response = await gemini.models.generateContent({
-      model: GEMINI_MODEL,
+      model,
       contents: prompt,
       config: {
         systemInstruction,
@@ -262,7 +286,7 @@ export async function generateJson<T>({
         }`,
       });
     }
-  });
+  }, { onRetry: onProviderRetry });
 }
 
 export async function streamText({
@@ -270,20 +294,22 @@ export async function streamText({
   prompt,
   temperature = 0.2,
   onChunk,
+  onProviderRetry,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
   onChunk?: (text: string) => void;
+  onProviderRetry?: () => void;
 }): Promise<string> {
-  return withRetry(async () => {
+  return runGeminiChain(async (model) => {
     const gemini = await getClient();
 
     // The answer route has no onChunk consumer: avoid an unnecessary streaming
     // transport while retaining true streaming for callers that request it.
     if (!onChunk) {
       const response = await gemini.models.generateContent({
-        model: GEMINI_MODEL,
+        model,
         contents: prompt,
         config: { systemInstruction, temperature },
       });
@@ -291,7 +317,7 @@ export async function streamText({
     }
 
     const response = await gemini.models.generateContentStream({
-      model: GEMINI_MODEL,
+      model,
       contents: prompt,
       config: { systemInstruction, temperature },
     });
@@ -307,5 +333,5 @@ export async function streamText({
     }
 
     return fullText;
-  });
+  }, { onRetry: onProviderRetry });
 }

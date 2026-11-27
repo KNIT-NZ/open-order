@@ -13,6 +13,15 @@ test("private search accepts transient query and preserves pagination/filtering"
   assert.equal(result?.get("limit"), "10");
   assert.equal(result?.get("offset"), "20");
 });
+test("private search accepts a bounded citation focus and rejects malformed focus", async () => {
+  const accepted = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "so-12" })));
+  assert.equal(accepted?.get("focus"), "so-12");
+  const label = await readPrivateSearchParams(request(JSON.stringify({ q: "49/5", focus: "Speakers' ruling 49/5" })));
+  assert.equal(label?.get("focus"), "Speakers' ruling 49/5");
+  for (const focus of ["", "  so-12", "../so-12", "<script>", "x".repeat(121), "so-12\nso-13", "so--12"]) {
+    assert.equal(await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus }))), null, focus);
+  }
+});
 test("private search rejects malformed, oversized and unknown-field inputs", async () => {
   for (const body of ["{", "null", "[]", JSON.stringify({ q: canary, debug: { query: canary } }), JSON.stringify({ q: {} }), JSON.stringify({ q: "x".repeat(4097) }), "x".repeat(SEARCH_BODY_MAX_BYTES + 1)]) {
     assert.equal(await readPrivateSearchParams(request(body)), null);

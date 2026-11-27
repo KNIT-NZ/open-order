@@ -1,26 +1,10 @@
 import { AiProviderError } from "./errors";
 import type { AiLane, AiProviderId, AiTask } from "./types";
 
-const ROUTES: Record<
-  AiTask,
-  Record<AiLane, readonly AiProviderId[]>
-> = {
-  "query.plan": {
-    development: ["openai-compatible", "gemini"],
-    staging: ["gemini", "openai-compatible"],
-    production: ["gemini", "openai-compatible"],
-  },
-  "answer.generate": {
-    development: ["openai-compatible", "gemini"],
-    staging: ["gemini", "openai-compatible"],
-    production: ["gemini", "openai-compatible"],
-  },
-  "answer.validate": {
-    development: ["openai-compatible", "gemini"],
-    staging: ["gemini", "openai-compatible"],
-    production: ["gemini", "openai-compatible"],
-  },
-};
+/** Non-Gemini providers stay off unless this flag is exactly "1". */
+export function nonGeminiProvidersAllowed(): boolean {
+  return process.env.OPEN_ORDER_ALLOW_NON_GEMINI?.trim() === "1";
+}
 
 const VALID_LANES: readonly AiLane[] = [
   "development",
@@ -59,8 +43,9 @@ export function getAiLane(): AiLane {
 }
 
 export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
-  // Explicit opt-in. Unset mode preserves the v5.19 production behaviour.
+  void task;
   // The tester mode may call ONLY the pinned Gemini model on an unbilled project.
+  // Every other lane is free-tier Gemini unless a non-Gemini fallback is opted in.
   const inferenceMode = process.env.OPEN_ORDER_INFERENCE_MODE?.trim();
   if (inferenceMode) {
     if (inferenceMode !== "zero-billed-test") {
@@ -103,8 +88,17 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
         provider: "router",
       });
     }
+    if (override !== "gemini" && !nonGeminiProvidersAllowed()) {
+      throw new AiProviderError({
+        message: "Non-Gemini providers are disabled unless OPEN_ORDER_ALLOW_NON_GEMINI=1.",
+        kind: "configuration",
+        provider: "router",
+      });
+    }
     return [override];
   }
 
-  return ROUTES[task][getAiLane()];
+  // Default chain is free-tier Gemini only. A non-Gemini provider is a
+  // fallback after Gemini, and only when explicitly enabled.
+  return nonGeminiProvidersAllowed() ? ["gemini", "openai-compatible"] : ["gemini"];
 }
