@@ -59,7 +59,22 @@ type PublicAdjudication = {
     selected: string[];
     rejected: string[];
   };
+  rejectedGoverning?: Array<{ id: string; inDossier: boolean }>;
 };
+
+const NOMINATION_ID = /^(?:[A-Za-z0-9][A-Za-z0-9_.:-]{0,64}|SO\s+\d+[A-Za-z]*|\d+\/\d+)$/;
+
+function publicNominations(entries: Array<{ id?: string; inDossier?: boolean }> | undefined): Array<{ id: string; inDossier: boolean }> {
+  const seen = new Set<string>();
+  const kept: Array<{ id: string; inDossier: boolean }> = [];
+  for (const entry of entries ?? []) {
+    const id = String(entry?.id ?? "").trim();
+    if (!NOMINATION_ID.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    kept.push({ id, inDossier: entry?.inDossier === true });
+  }
+  return kept;
+}
 
 function asRefusalCode(value: string): string | null {
   const text = value.trim().toLowerCase();
@@ -146,6 +161,7 @@ export function publicScenarioAdjudication(input: PublicAdjudication | null | un
       selected: [],
       rejected: publicRefusals("recovery_refusal", recovery.rejected ?? [], recovery.dispositions),
     },
+    rejectedGoverning: publicNominations(input.rejectedGoverning),
   };
 }
 

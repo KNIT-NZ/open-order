@@ -45,7 +45,9 @@ test("v40.1: a regulated act retrieves its own authorising rule", () => {
   assert.deepEqual(v401MaterialEvidenceQueries(""), []);
 });
 
-test("v40.1: equipment permission does not attest a different act", () => {
+test("v40.1: a different act is admitted only with an act qualification", () => {
+  // This used to hard-reject on a lexical verb miss (act-not-attested). A wording
+  // mismatch is now a qualified admission. Unverifiable quotes still reject.
   const body="Carrying a device is permitted when it does not disrupt the forum.";
   const candidate={sectionId:"e",citationLabel:"QX 1",documentCorpus:"speakers_rulings",
     heading:"Devices",path:["Forum conduct"],sectionContent:body};
@@ -57,8 +59,10 @@ test("v40.1: equipment permission does not attest a different act", () => {
       actorMatches:true,settingMatches:true,actionMatches:true,stageMatches:true,
       rationale:"claimed authority"}],remainingUncertainties:[],explanation:""},
   });
-  assert.deepEqual(result.authorities,[]);
-  assert.ok(result.rejected.some((line)=>line.includes("act-not-attested")));
+  assert.equal(result.authorities.length, 1);
+  assert.equal(result.reason, "v40_quoted_source_adjudication");
+  assert.deepEqual(result.qualifications, ["act_attestation_unconfirmed"]);
+  assert.equal(result.rejected.some((line)=>line.includes("act-not-attested")), false);
 });
 
 test("v40.1: repair requires complete independent, responsive claim approval", () => {

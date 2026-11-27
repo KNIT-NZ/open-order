@@ -26,7 +26,6 @@ import {
   freezeFirstDraft,
   labelBareRulings,
   parseSettlement,
-  mustAdjudicateFromPlanner,
   obligationPartialFacets,
   presidingOfficerAppealQuery,
   proceedingConsequenceQueries,
@@ -63,7 +62,7 @@ import {
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
-  admitJudgedOverlooked, buildV40Dossier, validateV40Proposal,
+  adjudicationRouting, admitJudgedOverlooked, buildV40Dossier, validateV40Proposal,
   v40SourceScopeMismatch,
   v401AcceptIndependentRepair, v402RecoveryCandidates, v402RepairRefusals,
   type V402Disposition, type V40Situation,
@@ -253,7 +252,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
       let answerEdits: string[] = [];
+      // `other` is a failed attempt that was not a 429, a 5xx, or a timeout.
       const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
+      const stageModels: Record<string, string> = {};
       let openAttemptIndex: number | null = null;
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
@@ -284,8 +285,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
         }
         lastAttemptedModel = attempt.model;
+        if (task === "query.plan" || task === "answer.generate" || task === "answer.validate") {
+          stageModels[task] = attempt.model;
+        }
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
       };
+      const mixedModels = () => new Set(providerAttempts.map((attempt) => attempt.model)).size > 1;
       // Last model whose attempt started. This does not mean the attempt succeeded;
       // read providerAttempts for each outcome.
       const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
@@ -317,6 +322,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             kind: record.kind ?? "unknown",
             reason,
             servedModel: servedModel(),
+            mixedModels: mixedModels(),
+            stageModels: { ...stageModels },
             providerAttempts,
             trace,
           };
@@ -349,6 +356,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             uncertainty: outcomeState.uncertainty,
             recoveredAuthorities: outcomeState.recoveredAuthorities,
             servedModel: servedModel(),
+            mixedModels: mixedModels(),
+            stageModels: { ...stageModels },
             providerAttempts,
             answerEdits,
             ...(exposeFirstDraft && firstDraftRecord ? { firstDraft: firstDraftRecord } : {}),
@@ -622,9 +631,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           outcomeState.allObligationsComplete = v517Selection.allObligationsComplete;
           outcomeState.obligationCoverage = v517Selection.obligationDetails.map((detail) => detail.coverage);
           outcomeState.partial.push(...obligationPartialFacets(v517Selection.obligationDetails));
-          const v40IncidentGate = mustAdjudicateFromPlanner(
-            plan.situation?.kind, v517Selection.finalAuthorities.length > 0,
+          const adjudicationRoute = adjudicationRouting(
+            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0,
           );
+          const v40IncidentGate = adjudicationRoute.adjudicate;
+          let actUnconfirmed = false;
           let v40AuthoritySet = [...v517Selection.finalAuthorities];
           let v40Diagnostic: {
             status: string; candidateCount: number; selected: string[];
@@ -632,9 +643,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             dossier: string[]; retrievedOutsideDossier: string[];
             dispositions: V402Disposition[]; unavailableNominations: number;
             recovery: { status: string; candidates: string[]; dispositions: V402Disposition[]; unavailableNominations: number; selected: string[]; rejected: string[] };
+            qualifications: string[];
+            rejectedGoverning: Array<{ id: string; inDossier: boolean }>;
           } = {
             status: "not_invoked", candidateCount: 0, selected: [], rejected: [], gaps: [], providerAttempts: 0,
             dossier: [], retrievedOutsideDossier: [], dispositions: [], unavailableNominations: 0,
+            qualifications: [],
+            rejectedGoverning: [],
             recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
           };
           if (v40IncidentGate) {
@@ -675,6 +690,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   setting: plan.situation?.setting, action: plan.situation?.action,
                 });
                 v40AuthoritySet = v40Review.authorities;
+                if (v40Review.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
                 v40Diagnostic = {
                   ...v40Diagnostic,
                   status: v40Review.reason,
@@ -685,6 +701,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   providerAttempts: v40Provider.attempts,
                   dispositions: v40Review.dispositions,
                   unavailableNominations: v40Review.unavailableNominations,
+                  qualifications: v40Review.qualifications,
+                  rejectedGoverning: v40Review.rejectedGoverning,
                 };
                 if (v40Review.reason === "v40_no_governing_witness") {
                   const candidates = v402RecoveryCandidates({ question, candidates: dossier, review: v40Review });
@@ -713,6 +731,10 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                       v40Diagnostic.recovery.selected = review.accepted;
                       v40Diagnostic.recovery.rejected = review.rejected;
                       v40Diagnostic.recovery.status = review.reason;
+                      if (review.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
+                      v40Diagnostic.qualifications = [...new Set([...v40Diagnostic.qualifications, ...review.qualifications])];
+                      v40Diagnostic.rejectedGoverning = [...v40Diagnostic.rejectedGoverning, ...review.rejectedGoverning]
+                        .filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index);
                       if (review.authorities.length > 0) {
                         const fullById = new Map(candidates.map((source) => [source.sectionId, source]));
                         const restored = review.authorities.flatMap((source) => {
@@ -826,6 +848,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...judged.authorities] };
               outcomeState.evidenceRecovery = true;
               outcomeState.recoveredAuthorities = judged.authorities.map((item) => item.citationLabel);
+              if (judged.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
             }
           }
           const finalAuthorities = selected.finalAuthorities;
@@ -872,6 +895,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
               scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
             },
+            routingReason: adjudicationRoute.reason,
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,
@@ -1773,6 +1797,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
+            if (actUnconfirmed) {
+              if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
+                outcomeState.uncertainty.push({ class: "interpretive_uncertainty", facet: "act_attestation_unconfirmed" });
+              }
+              finalAnswer = `${finalAnswer}\n\nQualification:\nThe admitted source does not confirm the asked act in its own words, so this answer stays partial.`;
+            }
             answerEdits = cited.dropped;
             if (answerEdits.length > 0) noteCheckedWithholding();
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");

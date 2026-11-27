@@ -32,9 +32,12 @@ type Scenario =
   | "failed_adjudication"
   | "no_bodies"
   | "reconstruction"
-  | "fallback";
+  | "fallback"
+  | "qualified_act";
 
-function authority(label: string, sectionId: string): ProceduralSearchResult {
+const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
+
+function authority(label: string, sectionId: string, sectionContent = QUOTE): ProceduralSearchResult {
   return {
     sectionId,
     sectionKey: sectionId,
@@ -53,7 +56,7 @@ function authority(label: string, sectionId: string): ProceduralSearchResult {
     bodyRank: 0,
     chunkRank: null,
     clusterSupportCount: 1,
-    sectionContent: QUOTE,
+    sectionContent,
     matchSignals: {
       exactSectionKeyMatch: false,
       exactCitationMatch: false,
@@ -124,12 +127,14 @@ function claimsIn(prompt: string): Array<{ id: string; text: string }> {
 }
 
 async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
-  const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies";
+  const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies" || scenario === "qualified_act";
   const pack = scenario === "no_bodies"
     ? []
     : scenario === "answer_edits"
       ? [authority("SO 1", "s1"), authority("SO 2", "s2")]
-      : [authority("SO 1", "s1")];
+      : scenario === "qualified_act"
+        ? [authority("SO 1", "s1", DEVICE)]
+        : [authority("SO 1", "s1")];
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
@@ -146,7 +151,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
         selected: [{
           citationLabel: "SO 1",
           role: "governing",
-          exactQuote: QUOTE,
+          exactQuote: scenario === "qualified_act" ? DEVICE : QUOTE,
           actorMatches: true,
           settingMatches: true,
           actionMatches: true,
@@ -206,7 +211,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
   const response = await (await loadAnswerRoute())(
     new NextRequest("http://localhost/api/ai/answer", {
       method: "POST",
-      body: JSON.stringify({ question: "May the House suspend the sitting?" }),
+      body: JSON.stringify({
+        question: incident
+          ? "While the sitting was underway, a member asked to suspend it."
+          : "May the House suspend the sitting?",
+      }),
     }),
     {
       generateJson,
@@ -266,6 +275,9 @@ test("a fully checked draft is supported", async () => {
   assert.equal(selector.legacySelectedLabels, undefined);
   assert.equal(JSON.stringify(events).includes(PRUNED_LABEL), false);
   assert.equal(JSON.stringify(events).includes(LEGACY_LABEL), false);
+  assert.equal(done.mixedModels, false);
+  assert.equal((done.stageModels as { "query.plan"?: string })["query.plan"], "gemini-3.5-flash-lite");
+  assert.equal(diagnostics?.data.routingReason, "planner_procedure");
 });
 
 test("pruning an uncited line caps the done answer at partial", async () => {
@@ -325,6 +337,15 @@ test("an accepted Bottom-line reconstruction caps the done answer at partial", a
   assert.equal(done.answerState, "partial");
   assert.equal(done.repairAccepted, true);
   assert.match(String(done.claimValidationNote), /bottom_line_recovery=accepted_after_recheck/);
+});
+
+test("a lexical act miss stays a qualified partial answer", async () => {
+  const done = doneOf(await ask("qualified_act"));
+  assert.equal(done.answerState, "partial");
+  assert.equal(done.abstained, false);
+  assert.match(String(done.answerText), /does not confirm the asked act/);
+  const facets = done.uncertainty as Array<{ facet?: string }>;
+  assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
 });
 
 test("an unretrieved citation falls back and the done answer is not answered", async () => {

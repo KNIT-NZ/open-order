@@ -1,6 +1,5 @@
 import {
   forumIdentityMismatch,
-  mustAdjudicateFromPlanner,
   procedureHomonymMismatch,
   quoteAttestsActAndObject,
 } from "@/lib/procedural-mechanisms";
@@ -83,6 +82,7 @@ export type V40Adjudication = {
   remainingUncertainties: string[];
   explanation: string;
 };
+export type RejectedGoverningNomination = { id: string; inDossier: boolean };
 export type V40Review<T extends V40Authority> = {
   authorities: T[];
   rejected: string[];
@@ -91,6 +91,10 @@ export type V40Review<T extends V40Authority> = {
   reason: string;
   dispositions: V402Disposition[];
   unavailableNominations: number;
+  /** Soft gates. act_attestation_unconfirmed admits the source and caps the answer. */
+  qualifications: string[];
+  /** Identifiers only. No adjudicator prose, quotes, or question text. */
+  rejectedGoverning: RejectedGoverningNomination[];
 };
 
 const COMMON = new Set([
@@ -213,9 +217,21 @@ export function validateV40Proposal<T extends V40Authority>(input: {
   const rejected: string[] = [];
   const accepted: string[] = [];
   const authorities: T[] = [];
+  const qualifications: string[] = [];
+  const rejectedGoverning: RejectedGoverningNomination[] = [];
   let primaryAdmitted = false;
   let unavailableNominations = 0;
   const seen = new Set<string>();
+  const noteRejectedGoverning = (item: V40ProposedWitness, source: T | undefined) => {
+    if (item.role !== "governing") return;
+    const sectionId = source?.sectionId ?? "";
+    const label = (source?.citationLabel || item.citationLabel || "").trim();
+    const id = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,64}$/.test(sectionId)
+      ? sectionId
+      : (/^(?:SO\s+\d+[A-Za-z]*|\d+\/\d+)$/i.test(label) ? label : "");
+    if (!id || rejectedGoverning.some((row) => row.id === id)) return;
+    rejectedGoverning.push({ id, inDossier: Boolean(source) });
+  };
   for (const item of input.proposal.selected.slice(0, 12)) {
     const source = byLabel.get(item.citationLabel);
     if (!source) { unavailableNominations += 1; rejected.push("unknown-source:unavailable-or-duplicate"); continue; }
@@ -227,7 +243,10 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     seen.add(item.citationLabel);
     const mark = (status: V402Disposition["status"], reason: string) => {
       for (const row of rows) { row.status = status; row.reason = reason; row.role = item.role; }
-      if (status === "rejected") rejected.push(`${source.citationLabel}:${reason}`);
+      if (status === "rejected") {
+        rejected.push(`${source.citationLabel}:${reason}`);
+        noteRejectedGoverning(item, source);
+      }
     };
     if (ambiguous.has(item.citationLabel)) { mark("rejected", "ambiguous-source-identity"); continue; }
     if (authorities.length >= limit) { mark("not_reviewed_limit", "admission_limit"); continue; }
@@ -239,19 +258,27 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     const mismatch = v40SourceScopeMismatch(input.question, source, input.setting);
     if (mismatch) { mark("rejected", mismatch); continue; }
     const quote = normalizeWhitespace(item.exactQuote);
-    if (item.role === "governing" && !v401MediaWitnessMatches(input.action, quote)) {
-      mark("rejected", "act-not-attested"); continue;
-    }
     if (quote.length < 24 || !normalizeWhitespace(source.sectionContent).includes(quote)) {
       mark("rejected", "unverified-verbatim-witness"); continue;
     }
     if (!["governing", "qualification", "implementation"].includes(item.role)) {
       mark("rejected", "invalid-source-role"); continue;
     }
+    // A lexical act miss is not a defective authority. Admit it and qualify.
+    const actUnconfirmed = item.role === "governing" && !v401MediaWitnessMatches(input.action, quote);
     authorities.push(source);
     accepted.push(source.citationLabel);
-    mark("admitted", "verified_source_witness");
+    if (actUnconfirmed) {
+      if (!qualifications.includes("act_attestation_unconfirmed")) qualifications.push("act_attestation_unconfirmed");
+      mark("admitted", "act_attestation_unconfirmed");
+    } else {
+      mark("admitted", "verified_source_witness");
+    }
     if (item.role === "governing") primaryAdmitted = true;
+  }
+  for (const item of input.proposal.selected) {
+    if (item.role !== "governing" || byLabel.has(item.citationLabel)) continue;
+    noteRejectedGoverning(item, undefined);
   }
   if (!primaryAdmitted) {
     for (const row of dispositions) if (row.status === "admitted") {
@@ -259,10 +286,14 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     }
     return { authorities: [], accepted: [], rejected: [...rejected, "missing-primary-governing-witness"],
       gaps: input.proposal.remainingUncertainties.slice(0, 5), reason: "v40_no_governing_witness",
-      dispositions, unavailableNominations };
+      dispositions, unavailableNominations, qualifications, rejectedGoverning };
   }
   return { authorities, accepted, rejected, gaps: input.proposal.remainingUncertainties.slice(0, 5),
-    reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations };
+    reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations, qualifications, rejectedGoverning };
+}
+
+function sourceNominated(_proposal: V40Adjudication, _unavailable: number): boolean {
+  return true;
 }
 
 /** A second review may reconsider omitted or previously non-governing sources,
@@ -309,8 +340,8 @@ export async function admitJudgedOverlooked<T extends V40Authority>(input: {
   action?: string;
   candidates: T[];
   judge: () => Promise<V40Adjudication>;
-}): Promise<{ authorities: T[]; unavailable: boolean }> {
-  if (input.candidates.length === 0) return { authorities: [], unavailable: false };
+}): Promise<{ authorities: T[]; unavailable: boolean; qualifications: string[] }> {
+  if (input.candidates.length === 0) return { authorities: [], unavailable: false, qualifications: [] };
   try {
     const proposal = await input.judge();
     const review = validateV40Proposal({
@@ -320,13 +351,51 @@ export async function admitJudgedOverlooked<T extends V40Authority>(input: {
       candidates: input.candidates,
       proposal,
     });
-    return { authorities: review.authorities, unavailable: false };
+    return { authorities: review.authorities, unavailable: false, qualifications: review.qualifications };
   } catch {
-    return { authorities: [], unavailable: true };
+    return { authorities: [], unavailable: true, qualifications: [] };
   }
 }
 
-export function v40MustAdjudicate(_question: string, kind: V40Situation["kind"] | undefined,
+export type AdjudicationRouteReason =
+  | "no_legacy_pack"
+  | "planner_procedure"
+  | "incident_corroborated"
+  | "incident_uncorroborated"
+  | "narrative_corroborated"
+  | "kind_absent";
+
+/** An expressed event in the question. General narrative markers only, not a topic list. */
+export function incidentCorroborated(question: string): boolean {
+  const text = String(question ?? "").toLowerCase();
+  const framed = /\b(?:during|while|when|after|before)\b/.test(text);
+  const enacted = /\b[a-z]{3,}(?:ed|ing)\b/.test(text);
+  return framed && enacted;
+}
+
+/**
+ * Quoted-source adjudication requires corroboration. Planner kind=incident is not enough.
+ * A procedure classification, or an uncorroborated incident, stays on the selector.
+ */
+export function adjudicationRouting(question: string, kind: string | undefined, hasLegacy: boolean): {
+  adjudicate: boolean;
+  reason: AdjudicationRouteReason;
+} {
+  if (!hasLegacy) return { adjudicate: true, reason: "no_legacy_pack" };
+  if (kind === "procedure") return { adjudicate: false, reason: "planner_procedure" };
+  const corroborated = incidentCorroborated(question);
+  if (kind === "incident") {
+    return corroborated
+      ? { adjudicate: true, reason: "incident_corroborated" }
+      : { adjudicate: false, reason: "incident_uncorroborated" };
+  }
+  if (corroborated && /^(?:an?\s|several\s|during\s|in the middle\s|as a\s)/i.test(String(question ?? "").trim())) {
+    return { adjudicate: true, reason: "narrative_corroborated" };
+  }
+  return { adjudicate: false, reason: "kind_absent" };
+}
+
+export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,
   hasLegacy: boolean): boolean {
-  return mustAdjudicateFromPlanner(kind, hasLegacy);
+  return adjudicationRouting(question, kind, hasLegacy).adjudicate;
 }

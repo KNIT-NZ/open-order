@@ -153,7 +153,10 @@ test("overlooked admission requires a judge and drops a source the judge did not
       explanation: "",
     }),
   });
-  assert.deepEqual(rubber.authorities, []);
+  // A verbatim quote that does not use the asked act is no longer dropped.
+  // It is admitted with an act qualification instead of a hard rejection.
+  assert.equal(rubber.authorities[0]?.citationLabel, "SO 9");
+  assert.deepEqual(rubber.qualifications, ["act_attestation_unconfirmed"]);
   const governing = {
     ...catering,
     sectionId: "suspend",

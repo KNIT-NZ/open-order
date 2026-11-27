@@ -2199,7 +2199,9 @@ export function buildFallbackAnswer(input: {
             return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
           })
           .join("\n")
-      : "- No strong authorities were retrieved.";
+      : foundButRejected
+        ? "- Retrieved candidates were withheld at selection."
+        : "- No authorities were retrieved.";
 
   return [
     "Bottom line:",

@@ -7,6 +7,11 @@ export type AiLane = "development" | "staging" | "production";
 
 export type AiProviderId = "gemini" | "openai-compatible";
 
+/**
+ * `other` is not a success and not a capacity signal. It means the attempt
+ * failed for a reason other than 429, 5xx, or timeout: a 400, a JSON or schema
+ * parse failure, or a non-retryable status such as 401, 403, or 404.
+ */
 export type ProviderAttempt = {
   model: string;
   outcome: "ok" | "429" | "5xx" | "timeout" | "other";

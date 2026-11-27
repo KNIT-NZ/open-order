@@ -30,6 +30,7 @@ export function geminiFreeTierChain(): string[] {
   return chain.length > 0 ? chain : ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
 }
 
+/** See ProviderAttempt in lib/ai/types.ts. `other` is every failure that is not 429, 5xx, or timeout. */
 export type ProviderAttemptOutcome = "ok" | "429" | "5xx" | "timeout" | "other";
 
 export function providerAttemptOutcome(error: unknown, signal?: AbortSignal): ProviderAttemptOutcome {

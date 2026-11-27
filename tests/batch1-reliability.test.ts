@@ -217,7 +217,8 @@ test("planner route ignores opening words and relations come from the situation"
   assert.equal(routeFromPlanner("incident"), "incident_adjudication");
   assert.equal(routeFromPlanner(undefined), "semantic_selector");
   assert.equal(mustAdjudicateFromPlanner(undefined, true), false);
-  assert.equal(mustAdjudicateFromPlanner("incident", true), true);
+  // kind=incident alone used to force adjudication. That regression is covered
+  // by adjudicationRouting in tests/round5-adjudication.test.ts.
   assert.deepEqual(relationsFromPlanner({
     intent: "admissibility",
     situation: { decisionQuestion: "May the actor do this after the stage closes?", action: "alter the record" },
