@@ -578,15 +578,26 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ].join("\n")
     : "Request trace: Not received";
 
+  const clientCheckNote = (parts: Array<string | null | undefined>) => {
+    const kept: string[] = [];
+    for (const part of parts) {
+      for (const piece of String(part ?? "").split(";")) {
+        const token = piece.trim();
+        if (!/^[a-z0-9_.=:+,-]{1,160}$/i.test(token) || kept.includes(token)) continue;
+        kept.push(token);
+      }
+    }
+    return kept.length > 0 ? kept.join(";") : null;
+  };
   const validation = input.terminalValidation;
   const validationSummary = validation
     ? [
         `Outcome: ${validation.degraded ? "Degraded/fallback" : "Completed without declared degradation"}`,
         `Fallback reason: ${validation.fallbackReason ?? "None"}`,
-        `Deterministic pruning: ${validation.pruneNote ?? "None reported"}`,
-        `Authority mention rewrite: ${validation.rewriteNote ?? "None reported"}`,
-        `Semantic claim validation: ${validation.claimValidationNote ?? "No unsupported claims reported"}`,
-        `Invalid citations: ${validation.invalidCitations.join(", ") || "None reported"}`,
+        `Deterministic pruning: ${clientCheckNote([validation.pruneNote]) ?? "None reported"}`,
+        `Authority mention rewrite: ${clientCheckNote([validation.rewriteNote]) ?? "None reported"}`,
+        `Semantic claim validation: ${clientCheckNote([validation.claimValidationNote]) ?? "No unsupported claims reported"}`,
+        `Invalid citations: ${validation.invalidCitations.length}`,
       ].join("\n")
     : "Terminal validation: Not received";
 
@@ -615,7 +626,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     "SCENARIO SOURCE ADJUDICATION",
     "----------------------------",
     adjudicationSummary,
-    `Incident repair: ${trace?.incidentRepair ?? "Not attempted or not reported"}`,
+    `Incident repair: ${clientCheckNote([trace?.incidentRepair]) ?? "Not attempted or not reported"}`,
     "",
     "VALIDATION OUTCOME",
     "------------------",

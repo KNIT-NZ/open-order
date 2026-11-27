@@ -1,6 +1,7 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { clientCheckNote } from "@/lib/open-order/client-check-note";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
@@ -1076,9 +1077,10 @@ export async function POST(request: NextRequest) {
             if (!citationValidation.ok) {
               outcomeState.fallbackCode = "invalid_citations";
               outcomeState.abstained = true;
-              const fallbackReason = `The AI draft cited authorities that were not retrieved: ${citationValidation.invalidCitations
-                .map((citation) => `[${citation}]`)
-                .join(", ")}`;
+              const fallbackReason = "The AI draft cited authorities that were not retrieved.";
+              claimValidationNote = clientCheckNote([
+                `invalid_citations=${citationValidation.invalidCitations.length}`,
+              ]);
 
               const fallbackAnswer = buildFallbackAnswer({
                 question,
@@ -1105,7 +1107,8 @@ export async function POST(request: NextRequest) {
                 answerText: fallbackAnswer,
                 authorities: authorityPayload,
                 fallbackReason,
-                invalidCitations: citationValidation.invalidCitations,
+                claimValidationNote,
+                invalidCitations: [],
               });
 
               return;
@@ -1131,13 +1134,12 @@ export async function POST(request: NextRequest) {
 
               finalAnswer = normalizeAnswerFormatting(secondPrune.prunedText);
 
-              rewriteNote = `Rewrote unsupported authority mentions: ${rewrite.removedMentions.join(
-                ", ",
-              )}${
+              rewriteNote = clientCheckNote([
+                `rewritten_mentions=${rewrite.removedMentions.length}`,
                 secondPrune.removedLines.length > 0
-                  ? `; pruned additional lines: ${secondPrune.removedLines.length}`
-                  : ""
-              }`;
+                  ? `pruned_lines=${secondPrune.removedLines.length}`
+                  : null,
+              ]);
 
               const recheckMentions = validateAnswerAuthorityMentions({
                 answerText: finalAnswer,
@@ -1152,13 +1154,11 @@ export async function POST(request: NextRequest) {
               if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
                 outcomeState.fallbackCode = "ungrounded_mentions";
                 outcomeState.abstained = true;
-                const fallbackReason = `The AI draft mentioned or cited authorities that could not be grounded: ${
-                  recheckMentions.ok
-                    ? recheckCitations.ok
-                      ? "unknown validation failure"
-                      : recheckCitations.invalidCitations.join(", ")
-                    : recheckMentions.invalidAuthorityMentions.join(", ")
-                }`;
+                const fallbackReason = "The AI draft mentioned or cited authorities that could not be grounded.";
+                claimValidationNote = clientCheckNote([
+                  recheckMentions.ok ? null : `ungrounded_mentions=${recheckMentions.invalidAuthorityMentions.length}`,
+                  recheckCitations.ok ? null : `invalid_citations=${recheckCitations.invalidCitations.length}`,
+                ]);
 
                 const fallbackAnswer = buildFallbackAnswer({
                   question,
@@ -1185,6 +1185,7 @@ export async function POST(request: NextRequest) {
                   answerText: fallbackAnswer,
                   authorities: authorityPayload,
                   fallbackReason,
+                  claimValidationNote,
                 });
 
                 return;
@@ -1258,7 +1259,10 @@ export async function POST(request: NextRequest) {
               claimValidationSchema.parse(validationResult.value);
             activeAiOperation = "post_validation";
             if (claimValidationAttempts > 1) {
-              claimValidationNote = `v38.1 validated after ${claimValidationAttempts} provider attempts`;
+              claimValidationNote = clientCheckNote([
+                claimValidationNote,
+                `claim_check_attempts=${claimValidationAttempts}`,
+              ]);
             }
             // V40.1: one bounded repair of an incident answer that omitted the
             // question's decision or its required Bottom line. Never accept a
@@ -1369,9 +1373,11 @@ export async function POST(request: NextRequest) {
                     answerClaims = repairedClaims;
                     claimValidation = reviewedRepair;
                     v401RepairDiagnostic = "accepted_independently_validated";
-                    claimValidationNote = [claimValidationNote,
-                      `v40.1 repair=accepted; attempts=${claimValidationAttempts}`]
-                      .filter(Boolean).join("; ");
+                    claimValidationNote = clientCheckNote([
+                      claimValidationNote,
+                      "repair=accepted",
+                      `repair_attempts=${claimValidationAttempts}`,
+                    ]);
                   }
                 }
               } catch (repairError) {
@@ -1409,11 +1415,10 @@ export async function POST(request: NextRequest) {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
                 authorities: authorityPayload, fallbackReason,
-                claimValidationNote: [
-                  claimValidation.responsiveness?.reason ??
-                    "Validator omitted the mandatory responsiveness verdict",
-                  `v40.1 incidentRepair=${v401RepairDiagnostic}`,
-                ].join("; "),
+                claimValidationNote: clientCheckNote([
+                  "responsiveness=withheld",
+                  `incident_repair=${v401RepairDiagnostic}`,
+                ]),
               });
               return;
             }
@@ -1481,11 +1486,11 @@ export async function POST(request: NextRequest) {
                   }
                   outcomeState.appealAttempted = true;
                   outcomeState.appealAccepted = acceptedAppeals.size > 0;
-                  appealDiagnostic = `v36 source-quotation review attempted=${disputed.length}, corroborated=${acceptedAppeals.size}`;
-                } catch (appealError) {
+                  appealDiagnostic = `appeal_attempted=${disputed.length};appeal_corroborated=${acceptedAppeals.size}`;
+                } catch {
                   // Reviewer errors, malformed JSON, missing or fake quotations
                   // are not a reason to waive the original rejection.
-                  appealDiagnostic = `v36 independent review unavailable; original rejection preserved (${appealError instanceof Error ? appealError.name : "error"})`;
+                  appealDiagnostic = "appeal_unavailable=1";
                 }
               }
             }
@@ -1510,23 +1515,17 @@ export async function POST(request: NextRequest) {
                 normalizeAnswerFormatting(semanticPrune.prunedText),
               );
 
-              const unsupportedReasons = semanticPrune.removedClaims
-                .map((claim) => {
-                  const reason =
-                    qualificationById.get(claim.id)?.reason ??
-                    validationById.get(claim.id)?.reason ??
-                    "no supporting validation result";
-                  return `${claim.id}: ${reason}`;
-                })
-                .join(" | ");
-
-              claimValidationNote = `Pruned semantically unsupported claims: ${semanticPrune.removedClaims.length}${
-                unsupportedReasons ? ` (${unsupportedReasons})` : ""
-              }`;
-              if (appealDiagnostic) claimValidationNote += `; ${appealDiagnostic}`;
+              const claimIds = semanticPrune.removedClaims
+                .map((claim) => claim.id)
+                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id));
+              claimValidationNote = clientCheckNote([
+                `pruned_unsupported_claims=${semanticPrune.removedClaims.length}`,
+                claimIds.length > 0 ? `claim_ids=${claimIds.join(",")}` : null,
+                appealDiagnostic,
+              ]);
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
-              if (appealDiagnostic) claimValidationNote = appealDiagnostic;
+              if (appealDiagnostic) claimValidationNote = clientCheckNote([appealDiagnostic]);
             }
 
             let remainingClaims = extractAnswerClaims(finalAnswer);
@@ -1626,8 +1625,10 @@ export async function POST(request: NextRequest) {
               } catch {
                 reconstructionDiagnostic = "unavailable_original_rejection_preserved";
               }
-              claimValidationNote = [claimValidationNote,
-                `v38 bottomLineRecovery=${reconstructionDiagnostic}`].filter(Boolean).join("; ");
+              claimValidationNote = clientCheckNote([
+                claimValidationNote,
+                `bottom_line_recovery=${reconstructionDiagnostic}`,
+              ]);
             }
 
             if (
@@ -1636,28 +1637,21 @@ export async function POST(request: NextRequest) {
               !finalCitationValidation.ok ||
               !finalMentionValidation.ok
             ) {
-              const ooV29RejectedClaimDetails = unsupportedClaimIds
-                .slice(0, 8)
-                .map((claimId) => {
-                  const rejectedClaim = answerClaims.find((claim) => claim.id === claimId);
-                  const reason = qualificationById.get(claimId)?.reason ??
-                    validationById.get(claimId)?.reason ?? "missing validation decision";
-                  const claimExcerpt = (rejectedClaim?.text ?? "").replace(/\s+/g, " ").slice(0, 130);
-                  return `${claimId}[${claimExcerpt}]: ${reason.replace(/\s+/g, " ").slice(0, 220)}`;
-                })
-                .join(" | ");
-              const ooV29FailureTrace = [
-                "v29-semantic-fallback-trace",
-                `bottomLineBeforePrune=${ooV29BottomLineBeforeSemanticPrune}`,
-                `bottomLineAfterPrune=${hasBottomLine}`,
-                `draftClaims=${answerClaims.length}`,
-                `rejectedClaims=${unsupportedClaimIds.length}`,
-                `remainingClaims=${remainingClaims.length}`,
-                `citationsValid=${finalCitationValidation.ok}`,
-                `mentionsValid=${finalMentionValidation.ok}`,
-                `rejected=${ooV29RejectedClaimDetails || "none"}`,
-                `appeal=${appealDiagnostic || "not attempted"}`,
-              ].join("; ");
+              const rejectedIds = unsupportedClaimIds
+                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id))
+                .slice(0, 8);
+              const ooV29FailureTrace = clientCheckNote([
+                "v29_semantic_fallback",
+                `bottom_line_before=${ooV29BottomLineBeforeSemanticPrune}`,
+                `bottom_line_after=${hasBottomLine}`,
+                `draft_claims=${answerClaims.length}`,
+                `rejected_claims=${unsupportedClaimIds.length}`,
+                `remaining_claims=${remainingClaims.length}`,
+                `citations_valid=${finalCitationValidation.ok}`,
+                `mentions_valid=${finalMentionValidation.ok}`,
+                rejectedIds.length > 0 ? `claim_ids=${rejectedIds.join(",")}` : "claim_ids=none",
+                appealDiagnostic ?? "appeal=not_attempted",
+              ]);
               outcomeState.fallbackCode = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
               outcomeState.abstained = true;
               const fallbackReason = !hasBottomLine
@@ -1704,10 +1698,11 @@ export async function POST(request: NextRequest) {
             }
 
             if (claimValidationAttempts > 1 &&
-                !(claimValidationNote ?? "").includes("v38.1 validated after")) {
-              claimValidationNote = [claimValidationNote,
-                `v38.1 validated after ${claimValidationAttempts} provider attempts`]
-                .filter(Boolean).join("; ");
+                !(claimValidationNote ?? "").includes("claim_check_attempts=")) {
+              claimValidationNote = clientCheckNote([
+                claimValidationNote,
+                `claim_check_attempts=${claimValidationAttempts}`,
+              ]);
             }
             const trailingSettlement = parseSettlement(finalAnswer, {
               sourcesNotHeld: evidenceGaps.length > 0,
@@ -1791,7 +1786,15 @@ export async function POST(request: NextRequest) {
               answerText: fallbackAnswer,
               authorities: authorityPayload,
               fallbackReason,
-              claimValidationNote: `v38.1 operation=${operationFailure.phase}; kind=${operationFailure.kind}; status=${operationFailure.httpStatus ?? "none"}; code=${operationFailure.code ?? "none"}; provider=${operationFailure.provider ?? "none"}; upstreamName=${operationFailure.upstreamErrorName ?? "none"}; retryable=${operationFailure.retryable}; attempts=${operationFailure.attempts}; elapsedMs=${operationFailure.elapsedMs}`,
+              claimValidationNote: clientCheckNote([
+                `operation=${operationFailure.phase}`,
+                `kind=${operationFailure.kind}`,
+                `status=${operationFailure.httpStatus ?? "none"}`,
+                `code=${operationFailure.code ?? "none"}`,
+                `provider=${operationFailure.provider ?? "none"}`,
+                `retryable=${operationFailure.retryable}`,
+                `attempts=${operationFailure.attempts}`,
+              ]),
               operationFailure,
             });
 
