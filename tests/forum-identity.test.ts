@@ -104,7 +104,8 @@ test("one shared word does not resolve to a listed body", () => {
     assert.equal(forumIdentityOutcome("the review committee", ["Standing Orders Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("Standing Committee", ["Standing Orders Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("a committee of the Assembly", ["Regulations Review Committee"]), "uncertain");
-    match("this committee", "Standing Orders Committee");
+    assert.equal(forumIdentityOutcome("this committee", ["Standing Orders Committee"]), "uncertain");
+    match("this committee", "Procedure in committees");
   });
 });
 
@@ -148,10 +149,11 @@ test("generic phrases match, and an ambiguous parse does not", () => {
       "This committee",
       "any committee",
       "ANY COMMITTEE",
-      "the relevant committee",
-      "select committee",
     ]) {
-      match(phrase, "Procedure Committee");
+      match(phrase, "Procedure in committees");
+    }
+    for (const phrase of ["the relevant committee", "select committee", "a select committee"]) {
+      assert.equal(forumIdentityOutcome(phrase, ["Procedure Committee"]), "uncertain", phrase);
     }
     for (const phrase of ["the specialist committee", "the parliamentary committee"]) {
       assert.equal(forumIdentityOutcome(phrase, ["Procedure Committee"]), "uncertain", phrase);

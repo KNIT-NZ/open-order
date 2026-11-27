@@ -32,7 +32,7 @@ type Cell = {
 const CELLS: Cell[] = [
   { id: "same-body", setting: "Bramble Oversight Committee", path: ["Chapter 2", "Sittings of the House", "Functions of the Bramble Oversight Committee"], outcome: "match" },
   { id: "different-body", setting: "Lumen Review Committee", path: ["Bramble Oversight Committee"], outcome: "reject" },
-  { id: "generic-committee", setting: "a select committee", path: ["Bramble Oversight Committee"], outcome: "match" },
+  { id: "generic-committee", setting: "a select committee", path: ["Bramble Oversight Committee"], outcome: "uncertain" },
   { id: "house-specific-leaf", setting: "the House", path: ["Chapter 2", "Sittings of the House", "BRAMBLE OVERSIGHT COMMITTEE", "Bramble Oversight Committee"], outcome: "uncertain" },
   { id: "house-ancestor-committee", setting: "the House", path: ["Select committees", "SO 9", "Chairperson"], outcome: "uncertain" },
   { id: "house-generic-leaf", setting: "the House", path: ["Select committees"], outcome: "uncertain" },

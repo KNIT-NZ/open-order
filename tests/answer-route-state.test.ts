@@ -533,7 +533,7 @@ test("the selector route applies all four forum outcomes", async () => {
   assert.equal(sameAuthorities.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
 
   const generic = doneOf(await withCorpusCommitteeNames(["Widget Oversight Committee"], () => ask("forum_generic")));
-  assert.equal(generic.answerState, "supported");
+  assert.equal(generic.answerState, "partial");
   assert.equal((generic.authorities as Array<{ unconfirmed?: boolean }>).every((item) => item.unconfirmed === false), true);
 
   const rejectedEvents = await withCorpusCommitteeNames(

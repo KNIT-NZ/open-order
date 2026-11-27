@@ -13,8 +13,12 @@ test("exact affairs order matches, and a plural or a short form does not", () =>
     assert.equal(forumIdentityOutcome("the Vellum Committee", ["Vellum Affairs Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("the Vellum Committee", ["Cinder Review Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("Vellum Committee", ["Mossglass Committee"]), "uncertain");
-    assert.equal(forumIdentityOutcome("a select committee", ["Cinder Review Committee"]), "match");
-    assert.equal(forumIdentityOutcome("the responsible committee", ["Mossglass Committee"]), "match");
+    assert.equal(forumIdentityOutcome("a select committee", ["Cinder Review Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("a select committee", ["Procedure in committees"]), "match");
+    assert.equal(forumIdentityOutcome("Committee on Vellum Affairs", ["Cinder Review Committee"]), "reject");
+    assert.equal(forumIdentityOutcome("Vellums Affairs Committee", ["Vellum Affairs Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("the responsible committee", ["Mossglass Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("the responsible committee", ["Procedure in committees"]), "match");
   });
 });
 

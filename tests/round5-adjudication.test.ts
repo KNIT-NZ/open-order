@@ -93,7 +93,7 @@ test("forum type matches a generic body and rejects two different names", () => 
     proposal: { selected: [governing("QX 3", suspension)], remainingUncertainties: [], explanation: "" },
   });
   assert.equal(admitted.authorities.length, 1);
-  assert.deepEqual(admitted.qualifications, []);
+  assert.deepEqual(admitted.qualifications, ["forum_identity_unconfirmed"]);
   const other = source({
     sectionId: "syn-4",
     citationLabel: "QX 4",

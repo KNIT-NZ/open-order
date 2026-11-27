@@ -11,7 +11,7 @@ import { publicCommitteeNameRecords, renderCommitteeNamesModule } from "../scrip
 import { deriveCommitteeClassWords, deriveCorpusProceedings, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
 import { committeeClassWords } from "../lib/committee-class-data.js";
 
-const matrix = JSON.parse(readFileSync(new URL("./fixtures/corpus-matrix-v1.1.json", import.meta.url), "utf8"));
+const matrix = JSON.parse(readFileSync(new URL("./fixtures/corpus-matrix-v1.2.json", import.meta.url), "utf8"));
 
 type MatrixCase = {
   id: string;
@@ -67,7 +67,7 @@ test("the public corpus matrix follows the forum rulings", () => {
     const rows = cases.filter((item) => item.matrix_part === 2 && item.setting === setting);
     const floor = rows.filter((item) => item.rationale_code === "S2_NEUTRAL_LEAF" || item.rationale_code === "S2_HOUSE_LEVEL_LEAF");
     const uncapped = rows.filter((item) => forumIdentityOutcome(item.setting, item.path) === "match").length;
-    assert.equal(floor.length, 204, setting);
+    assert.equal(floor.length, 205, setting);
     assert.ok(floor.every((item) => forumIdentityOutcome(item.setting, item.path) === "match"), setting);
     assert.ok(uncapped >= floor.length, `${setting} uncapped ${uncapped}`);
     const illegalReject = rows.filter((item) => {
