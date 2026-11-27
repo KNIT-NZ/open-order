@@ -234,6 +234,16 @@ function rowsFromPack(packPath: string): HeadingRow[] {
   return (pack.sections ?? []).filter((section) => section.section_type === "standing_order");
 }
 
+export const PINNED_WHOLE_HOUSE_PHRASE = "committee of the whole house";
+
+function assertPinnedWholeHouse(phrases: string[][]): void {
+  const got = phrases.map((phrase) => phrase.join(" "));
+  if (got.length !== 1 || got[0] !== PINNED_WHOLE_HOUSE_PHRASE) {
+    console.error("pinned pack must yield exactly one whole-house phrase");
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const packFlag = process.argv.indexOf("--pack");
   const { committeeNameRecords } = await import("../lib/committee-names-data.js");
@@ -251,6 +261,7 @@ async function main(): Promise<void> {
     rows = await readProceedingRows(connectionString);
   }
   const derived = deriveCorpusProceedings(rows);
+  if (packFlag >= 0) assertPinnedWholeHouse(derived.wholeHouse);
   const classes = deriveCommitteeClassWords(rows, listedBodyNames(committeeNameRecords));
   const proceedings = renderCorpusProceedingsModule(derived);
   const classModule = renderCommitteeClassModule(classes);

@@ -83,7 +83,6 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   let next: unknown = error;
   let httpStatus: number | null = null;
   let code: string | null = null;
-  let codeClosed = false;
   let provider: string | null = null;
   let upstreamErrorName: string | null = null;
   let formatFailure = false;
@@ -108,15 +107,12 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
           (statusNumber(record.error.code) ?? statusNumber(record.error.status)) : null) ??
         statusNumber(record.code);
     }
-    if (!codeClosed) {
-      // A provider kind is not a code. A code outside the closed sets becomes none.
+    if (code === null) {
+      // A provider kind is not a code. An unknown outer code must not hide a known inner one.
       const raw = safeCode(record.code) ??
         (isObject(record.error) ?
           (safeCode(record.error.code) ?? safeCode(record.error.status)) : null);
-      if (raw) {
-        codeClosed = true;
-        if (TRANSIENT_CODES.has(raw) || NONRETRYABLE_CODES.has(raw)) code = raw;
-      }
+      if (raw && (TRANSIENT_CODES.has(raw) || NONRETRYABLE_CODES.has(raw))) code = raw;
     }
     next = record.cause;
   }

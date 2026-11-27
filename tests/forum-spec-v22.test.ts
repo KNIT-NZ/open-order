@@ -19,7 +19,7 @@ type SpecRow = {
   action: string;
   body: string;
   path: Array<{ text: string }>;
-  committeeList: "fixture" | "empty";
+  committeeList: "fixture" | "empty" | "classLed";
   routes: string[];
   softActMiss: boolean;
   expected: Record<string, string>;
