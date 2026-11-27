@@ -1345,7 +1345,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               noteClaimRemovals(secondPrune.removalCodes);
 
               rewriteNote = clientCheckNote([
-                `rewritten_mentions=${boundedCount(removedCount, COUNT_DIGITS)}`,
+                `rewritten_mentions=${boundedCount(Math.min(removedCount, 99), COUNT_DIGITS)}`,
                 secondPrune.removedLines.length > 0
                   ? `pruned_lines=${boundedCount(secondPrune.removedLines.length, COUNT_DIGITS)}`
                   : null,

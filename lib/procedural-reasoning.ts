@@ -1836,8 +1836,40 @@ function citationParts(cited: string): string[] {
   return parts.length > 0 ? parts : [cited];
 }
 
+function citationCandidates(prefix: string, part: string): string[] {
+  const direct = `${prefix}${part}`.replace(/\s+/g, " ").trim();
+  const forms = [direct];
+  if (/^(?:standing orders?|s\.?\s*o\.?s?)\s+$/i.test(prefix)) forms.push(`SO ${part}`);
+  return forms;
+}
+
+/** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>): boolean {
-  return citationParts(cited).every((part) => isCitationAllowed(part, allowedLabels));
+  const parts = citationParts(cited);
+  let prefix = "";
+  let parent = "";
+  for (const part of parts) {
+    if (/^\([0-9a-z]+\)$/i.test(part)) {
+      const continued = parent ? citationCandidates("", `${parent}${part}`) : [];
+      const ok = continued.some((item) => isCitationAllowed(item, allowedLabels))
+        || (parent !== "" && isCitationAllowed(parent, allowedLabels));
+      if (!ok) return false;
+      continue;
+    }
+    if (/^\d+[a-z]*$/i.test(part)) {
+      const resolved = citationCandidates(prefix, part).find((item) => isCitationAllowed(item, allowedLabels));
+      if (!resolved) return false;
+      parent = resolved.replace(/\(.*/, "");
+      continue;
+    }
+    if (!isCitationAllowed(part, allowedLabels)) return false;
+    const head = part.match(/^(.*?\d+[a-z]*)/i);
+    parent = (head?.[1] ?? part).replace(/\(.*/, "");
+    const lead = part.match(/^(.*?)(?=\d)/);
+    prefix = lead?.[1] ?? prefix;
+  }
+  const allowed = allowedSet([...allowedLabels].map((citationLabel) => ({ citationLabel })));
+  return mentionSpans(cited, allowed).every((span) => span.admitted && !span.suffix);
 }
 
 function stripBracketedCitations(text: string): string {
@@ -1857,17 +1889,18 @@ function normalizeAuthorityMention(text: string): string {
 const WS_CLASS = String.raw`\s\u00a0\u1680\u2000-\u200d\u2028\u2029\u202f\u205f\u2060\u3000\ufeff`;
 const WS = `[${WS_CLASS}]*`;
 const WS1 = `[${WS_CLASS}]+`;
-// Bound the digits so a long run after "SO" cannot backtrack. A slash starts a ruling, not an SO number.
-const SO_NUM = String.raw`\d{1,6}[a-z]{0,4}(?!\/\d)(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
+// All or nothing: a short number cannot stop before another digit or a slash, and a longer number is taken whole.
+const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
-const LIST_SPAN = `${SO_NUM}(?:${SO_SEP}${SO_NUM})*`;
-const RANGE_SPAN = `${SO_NUM}${WS}[-–—]${WS}${SO_NUM}`;
+// A joined number is a provision, unless the next word is a quantity. Plural and singular both use this.
+const QUANTITY = String.raw`(?:sitting${WS1}days|members?|days?|minutes?|hours?|seconds?|weeks?|months?|years?|percent|votes?|times?)`;
+const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}${QUANTITY}\b|${WS}%)`;
+const LIST_SPAN = `${SO_NUM}(?:${JOINED})*`;
 const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
 const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;
-const RULING_NUM = String.raw`\d{1,6}\/\d{1,6}`;
-// Plural names may chain lists. A singular name chains only an unambiguous hyphen or en-dash range.
-// Bare N/M is a separate pass so a fraction after an SO number is still checked.
-const PROVISION_MENTION = String.raw`\b${PLURAL_INTRO}${WS}${LIST_SPAN}|\b${SINGULAR_INTRO}${WS}(?:${RANGE_SPAN}|${SO_NUM})|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d{1,6}[a-z]{0,4}|(?:table|part)${WS1}\d{1,6}${WS1}row${WS1}\d{1,6}|note)\b|\bspeakers?'?${WS1}rulings?${WS}${RULING_NUM}|\bs\.?${WS}r\.?${WS}${RULING_NUM}|\b${RULING_NUM}\b`;
+// N/M never starts in the middle of a longer number. A fraction after an SO name takes the name with it.
+const RULING_NUM = String.raw`(?<!\d)\d{1,6}\/\d{1,6}(?!\d)`;
+const PROVISION_MENTION = String.raw`\b(?:${PLURAL_INTRO}|${SINGULAR_INTRO})${WS}${RULING_NUM}|\b${PLURAL_INTRO}${WS}${LIST_SPAN}|\b${SINGULAR_INTRO}${WS}${SO_NUM}(?:${JOINED})*|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d{1,6}[a-z]{0,4}|(?:table|part)${WS1}\d{1,6}${WS1}row${WS1}\d{1,6}|note)\b|\bspeakers?'?${WS1}rulings?${WS}${RULING_NUM}|\bs\.?${WS}r\.?${WS}${RULING_NUM}|\b${RULING_NUM}\b`;
 
 function answerMentionPattern(): RegExp {
   return new RegExp(PROVISION_MENTION, "gi");
@@ -1919,8 +1952,16 @@ function tokenAdmitted(token: string, allowed: Set<string>): boolean {
 }
 
 function mentionIsAdmitted(mention: string, allowed: Set<string>): boolean {
-  const ruling = mention.match(/\d+\/\d+/);
-  if (ruling && /rulings?|s\.?\s*r\.?|^\d+\/\d+$/i.test(mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim())) {
+  const flat = mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim();
+  const ruling = flat.match(/(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/);
+  // A long standing-order spelling of a fraction is never that order. Only the short
+  // "SO N/M" and "S.O. N/M" spellings can be an admitted ruling.
+  if (ruling && /^(?:standing orders?|s\.?\s*o\.?s)\b/i.test(flat)) return false;
+  if (ruling && /^(?:s\.?\s*o\.?|so)\b/i.test(flat)) {
+    const whole = ruling[0];
+    return allowed.has(whole) || allowed.has(`sr ${whole}`) || allowed.has(`so ${whole}`);
+  }
+  if (ruling && /rulings?|s\.?\s*r\.?|^\d+\/\d+$/i.test(flat)) {
     const whole = ruling[0];
     return allowed.has(whole) || allowed.has(`sr ${whole}`);
   }
@@ -1946,6 +1987,7 @@ function mentionSpans(text: string, allowed: Set<string>): MentionSpan[] {
     const start = match.index ?? 0;
     if (start < coveredUntil) continue;
     const mention = match[0];
+    const admitted = mentionIsAdmitted(mention, allowed);
     let end = start + mention.length;
     const trailed = text.slice(end).match(suffix);
     if (trailed) end += trailed[0].length;
@@ -1953,7 +1995,7 @@ function mentionSpans(text: string, allowed: Set<string>): MentionSpan[] {
       start,
       end,
       mention,
-      admitted: mentionIsAdmitted(mention, allowed),
+      admitted,
       suffix: Boolean(trailed),
     });
     coveredUntil = end;
@@ -2083,7 +2125,7 @@ function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string
   for (const span of mentionSpans(visible, allowed)) {
     if (!span.admitted || !/^(?:Standing Orders?|SO|S\.O\.s?|Speakers?'? ruling|SR)\b/.test(span.mention)) continue;
     const tokens = standingTokens(span.mention) ?? [];
-    const ruling = span.mention.match(/\d+\/\d+/)?.[0] ?? "";
+    const ruling = span.mention.match(/(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/)?.[0] ?? "";
     for (const label of allowedLabels) {
       const forms = new Set(allowedProvisionForms(label));
       const hit = tokens.some((token) => tokenAdmitted(token, forms))
