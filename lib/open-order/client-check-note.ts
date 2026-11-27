@@ -36,7 +36,8 @@ const KIND = new Set([
   "configuration", "rate_limited", "unavailable", "upstream", "parse", "unknown",
   "provider_transient", "provider_nonretryable", "validation_format", "application_or_unknown",
 ]);
-const REPAIR_REASON = /^(?:missing_bottom_line|invalid_citations|invalid_authority_mentions|qualification_veto|not_responsive_or_missing_verdict|unaddressed_parts|no_claims|duplicate_claim_ids|verdict_count_mismatch|duplicate_verdict_ids|unexpected_verdict_id|missing_claim_verdict|unsupported_claim)$/;
+const REPAIR_REASON = /^(?:missing_bottom_line|invalid_citations|invalid_authority_mentions|qualification_veto|not_responsive_or_missing_verdict|unaddressed_parts|no_claims|duplicate_claim_ids|verdict_count_mismatch|duplicate_verdict_ids|unexpected_verdict_id|missing_claim_verdict|unsupported_claim|empty_repair)$/;
+const REPAIR_PHASE = /^(?:generation|deterministic_checks|independent_validation|independent_verdict_schema)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BLOCKED = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|sec[-_]\d+|section-\d+|so-?\d+[a-z]*|s\.o\.\d+|(?:\d{1,3}\.){3}\d{1,3}|(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?|[a-z][a-z0-9.-]*:\d{2,5}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]{0,}|[a-z0-9._-]{24,})$/i;
 
@@ -46,22 +47,24 @@ function blockedValue(value: string): boolean {
 }
 
 function allowedValue(key: string, value: string): boolean {
-  if (blockedValue(value) || value.includes(" ")) return false;
-  if (/^\d+$/.test(value) && !COUNT_KEY.has(key)) return false;
+  if (value.includes(" ")) return false;
   if (COUNT_KEY.has(key)) return /^\d{1,6}$/.test(value);
   if (BOOL_KEY.has(key)) return value === "true" || value === "false";
   if (key === "claim_ids") return /^(?:none|claim-\d+(?:,claim-\d+)*)$/.test(value);
-  if (key === "code") return PROVIDER_CODE.has(value);
+  if (key === "code") return value === "none" || PROVIDER_CODE.has(value);
   if (key === "kind") return KIND.has(value);
-  if (key === "status") return value === "none" || /^[45]\d\d$/.test(value);
+  if (key === "status") return value === "none" || value === "429" || value === "503" || /^[45]\d\d$/.test(value);
   if (key === "provider") return /^(?:gemini|openai-compatible|router|none|unknown)$/.test(value);
   if (key === "operation") return /^(?:drafting|claim_validation|post_validation)$/.test(value);
   if (key === "selector_forum" || key === "overlooked_forum") return /^forum-(?:identity|ambiguous):\d{1,4}$/.test(value);
   if (key === "selector_forum_withheld") return /^forum-identity:\d{1,4}$/.test(value);
   if (key === "incident_repair") {
-    if (/^(?:not_needed|not_admitted|independent_review_pending|independent_gate_refused|accepted_after_recheck)$/.test(value)) return true;
-    if (/^unavailable:(?:drafting|claim_validation|post_validation):[a-z_]+$/.test(value)) return KIND.has(value.split(":")[2] ?? "");
-    if (value.startsWith("refused:")) return value.slice(7).split(",").every((part) => REPAIR_REASON.test(part));
+    if (/^(?:not_needed|not_admitted|independent_review_pending|independent_gate_refused|accepted_after_recheck|empty_repair)$/.test(value)) return true;
+    if (value.startsWith("refused:")) return value.slice("refused:".length).split(",").every((part) => REPAIR_REASON.test(part));
+    if (value.startsWith("unavailable:")) {
+      const parts = value.split(":");
+      return REPAIR_PHASE.test(parts[1] ?? "") && KIND.has(parts[2] ?? "");
+    }
     return false;
   }
   if (key === "bottom_line_recovery") {
@@ -73,6 +76,7 @@ function allowedValue(key: string, value: string): boolean {
   if (key === "recovery_candidates") return /^\d{1,4}$/.test(value);
   if (key === "disposition") return /^(?:admitted|rejected|not_nominated|withheld_no_primary|not_reviewed_limit)$/.test(value);
   if (key === "primary_refusal" || key === "recovery_refusal") return false;
+  if (/^\d+$/.test(value) && key !== "status") return false;
   return false;
 }
 
@@ -83,9 +87,11 @@ function acceptCheckToken(token: string): boolean {
   if (split <= 0) return false;
   const key = token.slice(0, split);
   const value = token.slice(split + 1);
-  if (!ALLOWED_KEY.test(key) || blockedValue(value)) return false;
-  if (key === "code") return PROVIDER_CODE.has(value);
-  return allowedValue(key, value) && (key === "code" ? CODE_KEY_VALUE.test(value) : CODE_VALUE.test(value));
+  if (!ALLOWED_KEY.test(key)) return false;
+  const valuePattern = key === "code" ? CODE_KEY_VALUE : CODE_VALUE;
+  if (!valuePattern.test(value)) return false;
+  if (allowedValue(key, value)) return true;
+  return false;
 }
 
 /** Counts only. key=code:count, with no labels and no prose. */

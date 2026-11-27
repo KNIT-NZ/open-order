@@ -45,6 +45,17 @@ test("a combined heading is split before the name test, and a referent is not st
   assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran and Dunmarrow"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran & Dunmarrow"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran, Dunmarrow"]), "match");
+  assert.equal(forumIdentityOutcome("Conclusion of debate", ["Chapter 5", "Legislative procedures", "SECOND READING", "SO 306", "Conclusion of debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Wraxholt debate", ["Chapter 5", "SECOND READING", "Wraxholt debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("debate", ["Chapter 7", "URGENT DEBATE", "SO 400", "Announcement and debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("Motion to report progress", ["Chapter 3", "COMMITTEES OF THE WHOLE HOUSE", "SO 182", "Motion to report progress"]), "uncertain");
+  assert.equal(forumIdentityOutcome("Bills set down for first reading", ["Chapter 5", "FIRST READING", "SO 293", "Bills set down for first reading"]), "match");
+  assert.equal(forumIdentityOutcome("General debate each Wednesday", ["Chapter 7", "GENERAL DEBATE", "SO 402", "General debate each Wednesday"]), "match");
+  assert.equal(forumIdentityOutcome("the member", ["Member who has moved amendment may not move further amendment"]), "uncertain");
+  assert.equal(forumIdentityOutcome("committee meeting", ["Committee meetings"]), "uncertain");
+  assert.equal(forumIdentityOutcome("committee report", ["Reports of committees"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the committee stage", ["Committee stages"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the member", ["MOTIONS", "Time limits"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["VELLORANDS", "Velloran"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["VELLORAN AND HARROWBY", "Velloran"]), "match");
   assert.equal(forumIdentityOutcome("the ballot", ["Chapter 2", "SO 7", "Ballot budget"]), "uncertain");
