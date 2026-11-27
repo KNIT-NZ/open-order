@@ -611,13 +611,13 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
     { code: "drafting_unavailable", draft: cited, kind: "procedure" as const, throwDraft: true },
     { code: "prune_emptied_draft", draft: "What this means:\nAn uncited line only.", kind: "procedure" as const },
     {
-      code: "ungrounded_mentions",
-      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      code: "prune_emptied_draft",
+      draft: "Bottom line:\nThe House may sit [SO 1 and SO 99].\n\nWhat this means:\nThe House may sit [SO 1, SO 99].",
       kind: "procedure" as const,
     },
     {
-      code: "ungrounded_mentions",
-      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      code: "prune_emptied_draft",
+      draft: "Bottom line:\nThe House may sit [SO 1; SR 2/9].",
       kind: "incident" as const,
     },
   ];

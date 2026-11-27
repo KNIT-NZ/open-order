@@ -992,16 +992,17 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             answerText,
             authorities: mentionLabels,
           });
-          const rewriteMentions = (answerText: string) => {
-            if (checkMentions(answerText).ok) return answerText;
+          const rewriteDraft = (answerText: string) => {
             const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
-            if (rewrite.removedMentions.length > 0) {
-              mentionRewrites += rewrite.removedMentions.length;
-              outcomeState.rewritten = true;
-              const mentionEdit = mentionRewriteEdit(mentionRewrites);
-              if (mentionEdit) answerEdits = [mentionEdit];
-            }
-            return normalizeAnswerFormatting(rewrite.rewrittenText);
+            if (rewrite.removedMentions.length === 0) return { text: answerText, removed: 0 };
+            return { text: normalizeAnswerFormatting(rewrite.rewrittenText), removed: rewrite.removedMentions.length };
+          };
+          const commitRewrites = (removed: number) => {
+            if (removed <= 0) return;
+            mentionRewrites += removed;
+            outcomeState.rewritten = true;
+            const mentionEdit = mentionRewriteEdit(mentionRewrites);
+            if (mentionEdit) answerEdits = [mentionEdit];
           };
 
           const diagnosticConcepts = [
@@ -1330,9 +1331,10 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             if (!checkMentions(finalAnswer).ok) {
-              const beforeRewrite = mentionRewrites;
-              finalAnswer = rewriteMentions(finalAnswer);
-              const removedCount = mentionRewrites - beforeRewrite;
+              const rewrittenDraft = rewriteDraft(finalAnswer);
+              finalAnswer = rewrittenDraft.text;
+              const removedCount = rewrittenDraft.removed;
+              commitRewrites(removedCount);
 
               const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
@@ -1514,7 +1516,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 repairedAnswer = removeEmptyAnswerSections(
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
-                repairedAnswer = rewriteMentions(repairedAnswer);
+                const repairedRewrite = rewriteDraft(repairedAnswer);
+                repairedAnswer = repairedRewrite.text;
                 noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = validateAnswerCitations({
@@ -1577,6 +1580,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     outcomeState.repairAccepted = true;
                     outcomeState.settlement = null;
                     if (repairModel) answerModel = repairModel;
+                    commitRewrites(repairedRewrite.removed);
+                    if (repairedRewrite.removed > 0) {
+                      rewriteNote = clientCheckNote([
+                        rewriteNote,
+                        `rewritten_mentions=${boundedCount(Math.min(repairedRewrite.removed, 99), COUNT_DIGITS)}`,
+                      ]);
+                    }
                     noteCheckedWithholding();
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
@@ -1783,8 +1793,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   validate: (value) => { bottomLineRecoverySchema.parse(value); },
                 });
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
-                const line = rewriteMentions(recovery.bottomLine.trim()).replace(/\s*\n\s*/g, " ").trim();
-                if (line.length >= 20 && !line.includes("\n") &&
+                const rawLine = recovery.bottomLine.trim();
+                const singleLine = rawLine.length >= 20 && !rawLine.includes("\n") && /\[[^\]]+\]/.test(rawLine);
+                const recoveredRewrite = singleLine ? rewriteDraft(rawLine) : { text: rawLine, removed: 0 };
+                const line = recoveredRewrite.text.trim();
+                if (singleLine && line.length >= 20 && !line.includes("\n") &&
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
                   const candidateClaims = extractAnswerClaims(`Bottom line:\n${line}`);
@@ -1824,9 +1837,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
                       outcomeState.repairAccepted = true;
-                      if (repairModel) answerModel = repairModel;
                       outcomeState.settlement = null;
                       noteCheckedWithholding();
+                      if (repairModel) answerModel = repairModel;
+                      commitRewrites(recoveredRewrite.removed);
+                      if (recoveredRewrite.removed > 0) {
+                        rewriteNote = clientCheckNote([
+                          rewriteNote,
+                          `rewritten_mentions=${boundedCount(Math.min(recoveredRewrite.removed, 99), COUNT_DIGITS)}`,
+                        ]);
+                      }
                     }
                   }
                 }

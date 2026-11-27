@@ -1831,6 +1831,15 @@ function isCitationAllowed(cited: string, allowedLabels: Set<string>): boolean {
   return false;
 }
 
+function citationParts(cited: string): string[] {
+  const parts = cited.split(/\s*(?:,|;|\band\b)\s*/).map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : [cited];
+}
+
+function citationIsGrounded(cited: string, allowedLabels: Set<string>): boolean {
+  return citationParts(cited).every((part) => isCitationAllowed(part, allowedLabels));
+}
+
 function stripBracketedCitations(text: string): string {
   return text.replace(/\[[^\]]+\]/g, " ");
 }
@@ -1848,13 +1857,17 @@ function normalizeAuthorityMention(text: string): string {
 const WS_CLASS = String.raw`\s\u00a0\u1680\u2000-\u200d\u2028\u2029\u202f\u205f\u2060\u3000\ufeff`;
 const WS = `[${WS_CLASS}]*`;
 const WS1 = `[${WS_CLASS}]+`;
-const SO_NUM = String.raw`\d+[a-z]*(?:${WS}\(\d+[a-z]*\))?`;
+// Bound the digits so a long run after "SO" cannot backtrack. A slash starts a ruling, not an SO number.
+const SO_NUM = String.raw`\d{1,6}[a-z]{0,4}(?!\/\d)(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
-const SO_SPAN = `${SO_NUM}(?:${SO_SEP}${SO_NUM})*`;
-const SO_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})orders?|s\.?${WS}o\.?)(?:${WS}no\.?)?`;
-// A strict superset of the original detector: the same standing-order, appendix, and N/M forms,
-// plus whitespace variants, dotted or unspaced SO, lists, and ranges. Detection never admits.
-const PROVISION_MENTION = String.raw`\b${SO_INTRO}${WS}${SO_SPAN}|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d+[a-z]*|(?:table|part)${WS1}\d+${WS1}row${WS1}\d+|note)\b|\bspeakers?'?${WS1}rulings?${WS}(\d+\/\d+)|\bs\.?${WS}r\.?${WS}(\d+\/\d+)|\b(\d+\/\d+)\b`;
+const LIST_SPAN = `${SO_NUM}(?:${SO_SEP}${SO_NUM})*`;
+const RANGE_SPAN = `${SO_NUM}${WS}[-–—]${WS}${SO_NUM}`;
+const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
+const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;
+const RULING_NUM = String.raw`\d{1,6}\/\d{1,6}`;
+// Plural names may chain lists. A singular name chains only an unambiguous hyphen or en-dash range.
+// Bare N/M is a separate pass so a fraction after an SO number is still checked.
+const PROVISION_MENTION = String.raw`\b${PLURAL_INTRO}${WS}${LIST_SPAN}|\b${SINGULAR_INTRO}${WS}(?:${RANGE_SPAN}|${SO_NUM})|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d{1,6}[a-z]{0,4}|(?:table|part)${WS1}\d{1,6}${WS1}row${WS1}\d{1,6}|note)\b|\bspeakers?'?${WS1}rulings?${WS}${RULING_NUM}|\bs\.?${WS}r\.?${WS}${RULING_NUM}|\b${RULING_NUM}\b`;
 
 function answerMentionPattern(): RegExp {
   return new RegExp(PROVISION_MENTION, "gi");
@@ -1877,7 +1890,7 @@ function allowedProvisionForms(label: string): string[] {
 
 /** Whole tokens. A ruling N/M stays N/M and never collapses to N. A huge range fails closed. */
 function standingTokens(mention: string): string[] | null {
-  const body = mention.replace(new RegExp(`^(?:${SO_INTRO})${WS}`, "i"), "");
+  const body = mention.replace(new RegExp(`^(?:${PLURAL_INTRO}|${SINGULAR_INTRO})${WS}`, "i"), "");
   const number = new RegExp(SO_NUM, "gi");
   const found = [...body.matchAll(number)];
   if (found.length === 0) return null;
@@ -1917,19 +1930,50 @@ function mentionIsAdmitted(mention: string, allowed: Set<string>): boolean {
   return tokens.every((token) => tokenAdmitted(token, allowed));
 }
 
+function maskBrackets(text: string): string {
+  return text.replace(/\[[^\]]*\]/g, (span) => "\u0000".repeat(span.length));
+}
+
+type MentionSpan = { start: number; end: number; mention: string; admitted: boolean; suffix: boolean };
+
+/** The check and the rewrite read these spans, so they cannot disagree. */
+function mentionSpans(text: string, allowed: Set<string>): MentionSpan[] {
+  const masked = maskBrackets(text);
+  const suffix = new RegExp(`^${WS}\\(referred to in\\b[^)]*;${WS}not retrieved\\)`, "i");
+  const spans: MentionSpan[] = [];
+  let coveredUntil = 0;
+  for (const match of masked.matchAll(answerMentionPattern())) {
+    const start = match.index ?? 0;
+    if (start < coveredUntil) continue;
+    const mention = match[0];
+    let end = start + mention.length;
+    const trailed = text.slice(end).match(suffix);
+    if (trailed) end += trailed[0].length;
+    spans.push({
+      start,
+      end,
+      mention,
+      admitted: mentionIsAdmitted(mention, allowed),
+      suffix: Boolean(trailed),
+    });
+    coveredUntil = end;
+  }
+  return spans;
+}
+
+function allowedSet(authorities: Array<{ citationLabel: string }>): Set<string> {
+  return new Set(authorities.flatMap((authority) => allowedProvisionForms(authority.citationLabel)));
+}
+
 export function validateAnswerAuthorityMentions(input: {
   answerText: string;
   authorities: Array<{ citationLabel: string }>;
 }): { ok: true } | { ok: false; invalidAuthorityMentions: string[] } {
-  const allowed = new Set(input.authorities.flatMap((authority) => allowedProvisionForms(authority.citationLabel)));
-  const prose = stripBracketedCitations(input.answerText);
-  const matches = [...new Set(prose.match(answerMentionPattern()) ?? [])];
-  const invalid = matches.filter((mention) => !mentionIsAdmitted(mention, allowed));
-
-  if (invalid.length > 0) {
-    return { ok: false, invalidAuthorityMentions: invalid };
-  }
-
+  const allowed = allowedSet(input.authorities);
+  const invalid = mentionSpans(input.answerText, allowed)
+    .filter((span) => !span.admitted || span.suffix)
+    .map((span) => span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
+  if (invalid.length > 0) return { ok: false, invalidAuthorityMentions: [...new Set(invalid)] };
   return { ok: true };
 }
 
@@ -1940,23 +1984,20 @@ export function rewriteForbiddenAuthorityMentions(input: {
   rewrittenText: string;
   removedMentions: string[];
 } {
-  const allowed = new Set(input.authorities.flatMap((authority) => allowedProvisionForms(authority.citationLabel)));
+  const allowed = allowedSet(input.authorities);
+  const spans = mentionSpans(input.answerText, allowed).filter((span) => !span.admitted || span.suffix);
+  if (spans.length === 0) return { rewrittenText: input.answerText, removedMentions: [] };
   const removed: string[] = [];
-  const suffix = new RegExp(`${WS}\\(referred to in\\b[^)]*;${WS}not retrieved\\)$`, "i");
-  const rewritten = input.answerText.replace(
-    new RegExp(`(?:${answerMentionPattern().source})(?:${WS}\\(referred to in\\b[^)]*;${WS}not retrieved\\))?`, "gi"),
-    (full) => {
-      const trailed = full.match(suffix);
-      const mention = trailed ? full.slice(0, full.length - trailed[0].length) : full;
-      if (mentionIsAdmitted(mention, allowed)) return mention;
-      removed.push(mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
-      return "a provision that was not retrieved";
-    },
-  );
-  return {
-    rewrittenText: rewritten,
-    removedMentions: [...new Set(removed)],
-  };
+  let cursor = 0;
+  let rewritten = "";
+  for (const span of spans) {
+    rewritten += input.answerText.slice(cursor, span.start);
+    rewritten += span.admitted ? span.mention : "a provision that was not retrieved";
+    removed.push(span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
+    cursor = span.end;
+  }
+  rewritten += input.answerText.slice(cursor);
+  return { rewrittenText: rewritten, removedMentions: [...new Set(removed)] };
 }
 
 export function validateAnswerCitations(input: {
@@ -1976,7 +2017,7 @@ export function validateAnswerCitations(input: {
     ...new Set(
       cited.filter(
         (citation) =>
-          !isCitationAllowed(citation, allowedLabels) ||
+          !citationIsGrounded(citation, allowedLabels) ||
           looksLikeEmbeddedAuthorityReference(citation),
       ),
     ),
@@ -2017,7 +2058,7 @@ function lineHasAllowedCitation(
 ): boolean {
   const citations = extractInlineCitations(line);
   if (citations.length === 0) return false;
-  return citations.every((citation) => isCitationAllowed(citation, allowedLabels));
+  return citations.every((citation) => citationIsGrounded(citation, allowedLabels));
 }
 
 function isLikelyBestAuthorityLine(line: string): boolean {
@@ -2036,24 +2077,18 @@ function stripModelCrossReferenceSuffixes(line: string): string {
 
 /** Full "Standing Order N" or uppercase "SO N". Never the word "so", and never a bare fraction. */
 function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string[] {
+  const allowed = allowedSet([...allowedLabels].map((citationLabel) => ({ citationLabel })));
   const visible = stripModelCrossReferenceSuffixes(line);
-  const mentions = [
-    ...visible.matchAll(/\bStanding Orders?\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?/gi),
-    ...visible.matchAll(/\bSO\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?/g),
-    ...visible.matchAll(/\bSpeakers?'?\s+rulings?\s+\d+\/\d+(?:\s*\(\d+[a-z]*\))?/gi),
-    ...visible.matchAll(/\bSR\s+\d+\/\d+(?:\s*\(\d+[a-z]*\))?/g),
-  ].map((match) => match[0]);
   const found: string[] = [];
-  for (const mention of mentions) {
-    const ruling = mention.match(/\d+\/\d+/);
-    const normalized = normalizeAuthorityMention(mention).replace(/\(\d+[a-z]*\)$/i, "");
+  for (const span of mentionSpans(visible, allowed)) {
+    if (!span.admitted || !/^(?:Standing Orders?|SO|S\.O\.s?|Speakers?'? ruling|SR)\b/.test(span.mention)) continue;
+    const tokens = standingTokens(span.mention) ?? [];
+    const ruling = span.mention.match(/\d+\/\d+/)?.[0] ?? "";
     for (const label of allowedLabels) {
-      const labelNorm = normalizeAuthorityMention(label);
-      const wholeRuling = ruling?.[0] ?? "";
-      const same = ruling
-        ? labelNorm === wholeRuling || labelNorm === `sr ${wholeRuling}` || allowedProvisionForms(label).includes(wholeRuling)
-        : labelNorm === normalized || allowedProvisionForms(label).includes(normalized);
-      if (same && !found.includes(label)) found.push(label);
+      const forms = new Set(allowedProvisionForms(label));
+      const hit = tokens.some((token) => tokenAdmitted(token, forms))
+        || (ruling !== "" && (forms.has(ruling) || forms.has(`sr ${ruling}`)));
+      if (hit && !found.includes(label)) found.push(label);
     }
   }
   return found;
@@ -2152,10 +2187,10 @@ export function firstDraftDebugEnabled(env: {
   return true;
 }
 
-/** A count only. The removed mention text stays out of the response. */
+/** A count only. Above 99 the reported count saturates at 99 and is not dropped. */
 export function mentionRewriteEdit(count: number): string | null {
-  if (!Number.isInteger(count) || count < 1 || count > 99) return null;
-  return `removed_mentions=${count}`;
+  if (!Number.isInteger(count) || count < 1) return null;
+  return `removed_mentions=${Math.min(count, 99)}`;
 }
 
 const ACT_QUALIFICATION = "has not been confirmed to govern the specific act asked about.";
