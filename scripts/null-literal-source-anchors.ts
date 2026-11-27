@@ -7,8 +7,10 @@
  * - OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST is set to the one allowed test-branch hostname.
  * - those two values are exactly equal.
  * - pg's own connection-string parser resolves the database host to that exact host.
- * The guard refuses host and hostaddr query parameters, a service name, more than
- * one host, a unix-socket or path host, and a port that disagrees with itself.
+ * The guard refuses host and hostaddr parameters, a service name, more than
+ * one host, a unix-socket or path host, a port that disagrees with itself,
+ * TLS downgrade parameters, an options parameter, and a percent-encoded
+ * parameter name. pg-connection-string is loaded the same way pg loads it.
  * Does not print the connection string.
  */
 import { createRequire } from "node:module";
@@ -32,8 +34,27 @@ function allowedTestBranchHost(): string {
 
 function assertTestBranch(databaseUrl: string): string {
   const expected = allowedTestBranchHost();
-  if (/[?&](?:host|hostaddr)=/i.test(databaseUrl)) {
-    throw new Error("Refusing to write: connection string sets host or hostaddr.");
+  const query = (() => {
+    try {
+      return new URL(databaseUrl).search.slice(1);
+    } catch {
+      return "";
+    }
+  })();
+  for (const part of query.split("&").filter(Boolean)) {
+    const rawKey = part.split("=")[0] ?? "";
+    if (/%[0-9a-f]{2}/i.test(rawKey)) {
+      throw new Error("Refusing to write: connection string uses an encoded parameter name.");
+    }
+    let key = rawKey;
+    try {
+      key = decodeURIComponent(rawKey);
+    } catch {
+      throw new Error("Refusing to write: connection string has an undecodable parameter name.");
+    }
+    if (["host", "hostaddr", "ssl", "sslmode", "uselibpqcompat", "options"].includes(key.toLowerCase())) {
+      throw new Error("Refusing to write: connection string sets a refused parameter.");
+    }
   }
   let parsed: { host?: string | null; port?: string | null; service?: string | null };
   try {

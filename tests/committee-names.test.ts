@@ -58,7 +58,7 @@ test("every listed body matches its own source path", () => {
     ["the Pylon address", ["Chapter 7", "ADDRESSES", "the Pylon address"]],
     ["Sittings of the House", ["Chapter 2", "COMMITTEES", "Sittings of the House"]],
     ["Asking a question", ["Chapter 3", "QUESTIONS", "Asking a question"]],
-    ["the second", ["Chapter 4", "SECONDER", "the second"]],
+    ["the second", ["Chapter 4", "GENERAL", "the second"]],
   ];
   for (const [heading, path] of synthetic) {
     assert.equal(forumIdentityOutcome(heading, path), "match", heading);

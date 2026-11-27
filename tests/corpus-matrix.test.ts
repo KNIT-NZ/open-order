@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { committeeNameRecords } from "../lib/committee-names-data.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms";
+import { corpusProceedingHeads, corpusProceedingPhrases } from "../lib/corpus-proceedings-data.js";
 import { publicCommitteeNameRecords, renderCommitteeNamesModule } from "../scripts/gen-committee-names";
+import { deriveCorpusProceedings, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
 
 const matrix = JSON.parse(readFileSync(new URL("./fixtures/corpus-matrix-v1.1.json", import.meta.url), "utf8"));
 
@@ -102,6 +104,30 @@ test("committee names regenerate from the public sections without false bodies",
   assert.ok(produced.every((record) => !(record.tokens.length === 1 && forbidden.includes(record.tokens[0] ?? ""))));
 });
 
+test("proceeding phrases match the published derivation and rebuild offline", () => {
+  const expectedPhrases = Object.keys(matrix.derivation.proceedings).sort();
+  const gotPhrases = corpusProceedingPhrases.map((phrase: string[]) => phrase.join(" ")).sort();
+  assert.deepEqual(gotPhrases, expectedPhrases);
+  assert.deepEqual([...corpusProceedingHeads].sort(), [...matrix.derivation.proceeding_head_nouns].sort());
+  const publicSections = new Set(cases.map((item) => item.section));
+  const rows: Array<{ heading: string; path: string[] }> = [];
+  const seen = new Set<string>();
+  for (const item of cases) {
+    if (seen.has(item.section)) continue;
+    seen.add(item.section);
+    rows.push({ heading: item.path.at(-1) ?? "", path: item.path });
+  }
+  for (const info of Object.values(matrix.derivation.proceedings) as Array<{ setting: string; leaf_occurrences: string[] }>) {
+    for (const section of info.leaf_occurrences) {
+      if (publicSections.has(section)) continue;
+      rows.push({ heading: info.setting, path: [info.setting] });
+    }
+  }
+  const rendered = renderCorpusProceedingsModule(deriveCorpusProceedings(rows));
+  const committed = readFileSync(new URL("../lib/corpus-proceedings-data.js", import.meta.url), "utf8");
+  assert.equal(rendered, committed);
+});
+
 test("the anchor script refuses a host query, a socket, and a port mismatch", () => {
   const run = (databaseUrl: string) => spawnSync(
     process.execPath,
@@ -119,10 +145,18 @@ test("the anchor script refuses a host query, a socket, and a port mismatch", ()
   );
   const hostQuery = run("postgresql://u:p@corpus.example/db?host=other.example");
   assert.notEqual(hostQuery.status, 0);
-  assert.match(hostQuery.stderr, /host or hostaddr/);
+  assert.match(hostQuery.stderr, /refused parameter|host or hostaddr/);
   const socket = run("postgresql://u:p@corpus.example/db?host=/var/run/postgresql");
   assert.notEqual(socket.status, 0);
   const ports = run("postgresql://u:p@corpus.example:5432/db?port=5433");
   assert.notEqual(ports.status, 0);
   assert.match(ports.stderr, /port/i);
+  const tls = run("postgresql://u:p@corpus.example/db?sslmode=disable&uselibpqcompat=true");
+  assert.notEqual(tls.status, 0);
+  const sslOff = run("postgresql://u:p@corpus.example/db?ssl=0");
+  assert.notEqual(sslOff.status, 0);
+  const options = run("postgresql://u:p@corpus.example/db?options=-csearch_path%3Dpublic");
+  assert.notEqual(options.status, 0);
+  const encoded = run("postgresql://u:p@corpus.example/db?%68ostaddr=127.0.0.1");
+  assert.notEqual(encoded.status, 0);
 });
