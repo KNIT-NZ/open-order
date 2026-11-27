@@ -5,23 +5,30 @@
  */
 import pg from "pg";
 
-function assertTestBranch(databaseUrl: string): void {
+function corpusHost(): string {
+  const host = process.env.OPEN_ORDER_CORPUS_DB_HOST ?? "";
+  if (!host) throw new Error("Refusing to write: OPEN_ORDER_CORPUS_DB_HOST is unset.");
+  return host;
+}
+
+function assertTestBranch(databaseUrl: string): string {
   let host = "";
   try {
     host = new URL(databaseUrl).hostname;
   } catch {
     throw new Error("Refusing to write: DATABASE_URL is not a URL.");
   }
-  // The pooler hostname starts with the reviewed test-branch endpoint id.
-  if (!host.startsWith("ep-weathered-hall")) {
-    throw new Error("Refusing to write: database host is not the reviewed Neon test branch.");
+  const expected = corpusHost();
+  if (host !== expected && !host.startsWith(expected)) {
+    throw new Error("Refusing to write: database host does not match OPEN_ORDER_CORPUS_DB_HOST.");
   }
+  return expected;
 }
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("Refusing to write: DATABASE_URL is unset.");
-  assertTestBranch(databaseUrl);
+  const hostChecked = assertTestBranch(databaseUrl);
   const client = new pg.Client({ connectionString: databaseUrl, ssl: { rejectUnauthorized: true } });
   await client.connect();
   try {
@@ -39,7 +46,7 @@ async function main(): Promise<void> {
     const candidates = Number(before.rows[0]?.literal_none ?? 0) + Number(before.rows[0]?.blank ?? 0);
     if (candidates === 0) {
       console.log(JSON.stringify({
-        hostChecked: "ep-weathered-hall",
+        hostChecked,
         dryRunCount: 0,
         updated: 0,
         before: before.rows[0],
@@ -61,7 +68,7 @@ async function main(): Promise<void> {
       from sections
     `);
     console.log(JSON.stringify({
-      hostChecked: "ep-weathered-hall",
+      hostChecked,
       before: before.rows[0],
       updated: updated.rowCount,
       after: after.rows[0],

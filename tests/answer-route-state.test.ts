@@ -45,15 +45,38 @@ type Scenario =
   | "forum_generic"
   | "forum_ambiguous"
   | "forum_longer"
-  | "forum_subclass";
+  | "forum_subclass"
+  | "forum_own"
+  | "forum_own_incident"
+  | "forum_debate"
+  | "forum_debate_incident"
+  | "forum_stage"
+  | "forum_stage_incident"
+  | "forum_motion"
+  | "forum_motion_incident";
 
-const forumCase: Partial<Record<Scenario, { setting: string; path: string }>> = {
+const forumCase: Partial<Record<Scenario, { setting: string; path: string | string[]; kind?: "incident" | "procedure" }>> = {
   forum_same: { setting: "Widget Committee", path: "Widget Committee" },
   forum_reject: { setting: "Gadget Review Committee", path: "Widget Committee" },
   forum_generic: { setting: "select committee", path: "Widget Oversight Committee" },
   forum_longer: { setting: "Tarn Widget Committee", path: "Widget Committee" },
   forum_subclass: { setting: "the Tarn Subcommittee", path: "Widget Oversight Committee" },
   forum_ambiguous: { setting: "Widget Committee", path: "Widget Trade Committee" },
+  forum_own: {
+    setting: "Widget Oversight Committee",
+    path: ["Chapter 2", "Sittings of the House", "Financial procedures", "Functions of the Widget Oversight Committee"],
+  },
+  forum_own_incident: {
+    setting: "Widget Oversight Committee",
+    path: ["Chapter 2", "Sittings of the House", "Financial procedures", "Functions of the Widget Oversight Committee"],
+    kind: "incident",
+  },
+  forum_debate: { setting: "the Tarn debate", path: ["Chapter 2", "Sittings of the House", "Marrow debate"] },
+  forum_debate_incident: { setting: "the Tarn debate", path: ["Chapter 2", "Sittings of the House", "Marrow debate"], kind: "incident" },
+  forum_stage: { setting: "the Tarn stage", path: ["Part 4", "Marrow stage"] },
+  forum_stage_incident: { setting: "the Tarn stage", path: ["Part 4", "Marrow stage"], kind: "incident" },
+  forum_motion: { setting: "urgency motion", path: ["Chapter 3", "Motion for adjournment"] },
+  forum_motion_incident: { setting: "urgency motion", path: ["Chapter 3", "Motion for adjournment"], kind: "incident" },
 };
 
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
@@ -150,7 +173,8 @@ function claimsIn(prompt: string): Array<{ id: string; text: string }> {
 
 async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
   const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies"
-    || scenario === "qualified_act" || scenario === "wrong_object" || scenario === "qualified_fallback";
+    || scenario === "qualified_act" || scenario === "wrong_object" || scenario === "qualified_fallback"
+    || forumCase[scenario]?.kind === "incident";
   const overlookedBody = `${QUOTE} The House may suspend business of a committee when its chair so decides.`;
   const primaryForOverlooked = authority("SO 1", "s1", `${QUOTE} subject to SO 2.`);
   const overlookedSource = authority("SO 2", "s2", overlookedBody);
@@ -171,7 +195,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
             : scenario === "forum_codes"
               ? [forumPrimary, forumMismatch, forumShort]
               : forumPath
-                ? [authority("SO 1", "s1", QUOTE, [forumPath.path])]
+                ? [authority("SO 1", "s1", QUOTE, Array.isArray(forumPath.path) ? forumPath.path : [forumPath.path])]
                 : [authority("SO 1", "s1")];
   const selectedPack = scenario === "overlooked_soft" ? [primaryForOverlooked]
     : scenario === "forum_codes" ? [forumPrimary]
@@ -220,7 +244,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       const value = scenario === "forum_codes"
         ? plan("procedure", "Widget Oversight Committee", "a delegate")
         : forumPath
-          ? plan("procedure", forumPath.setting)
+          ? plan(forumPath.kind ?? "procedure", forumPath.setting)
           : plan(incident ? "incident" : "procedure");
       request.validate?.(value);
       request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
@@ -450,7 +474,7 @@ test("a qualified source is not listed as an authority when the answer is withhe
   assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
 });
 
-const FORUM_CODE = /^(?:selector_forum|overlooked_forum)=forum-(?:identity|ambiguous):\d+$/;
+const FORUM_CODE = /^(?:selector_forum|overlooked_forum)=forum-(?:identity|ambiguous):\d+$|^selector_forum_withheld=forum-identity:\d+$/;
 
 test("forum codes are counts and planner diagnostics are booleans", async () => {
   const events = await withCorpusCommitteeNames([
@@ -512,13 +536,16 @@ test("the selector route applies all four forum outcomes", async () => {
   assert.equal(generic.answerState, "supported");
   assert.equal((generic.authorities as Array<{ unconfirmed?: boolean }>).every((item) => item.unconfirmed === false), true);
 
-  const rejected = doneOf(await withCorpusCommitteeNames(
+  const rejectedEvents = await withCorpusCommitteeNames(
     ["Widget Committee", "Gadget Review Committee"],
     () => ask("forum_reject"),
-  ));
+  );
+  const rejected = doneOf(rejectedEvents);
   assert.equal(rejected.answerState, "not_answered");
   assert.notEqual(rejected.answerState, "supported");
   assert.deepEqual(rejected.authorities, []);
+  const rejectedCodes = ((rejectedEvents.find((item) => item.event === "diagnostics")?.data.selectorSummary as { forumCodes?: string[] }).forumCodes) ?? [];
+  assert.ok(rejectedCodes.includes("selector_forum_withheld=forum-identity:1"));
 
   const longer = doneOf(await withCorpusCommitteeNames(["Widget Committee"], () => ask("forum_longer")));
   assert.equal(longer.answerState, "partial");
@@ -532,20 +559,45 @@ test("the selector route applies all four forum outcomes", async () => {
   assert.deepEqual(subclass.authorities, []);
 });
 
+test("a body's own multi-segment path is admitted, and other proceedings still reject", async () => {
+  const names = ["Widget Oversight Committee", "Gadget Review Committee"];
+  for (const scenario of ["forum_own", "forum_own_incident"] as const) {
+    const done = doneOf(await withCorpusCommitteeNames(names, () => ask(scenario)));
+    assert.equal(done.answerState, "supported", scenario);
+    assert.equal(done.route, scenario.endsWith("incident") ? "incident_adjudication" : "semantic_selector", scenario);
+    const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+    assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false, scenario);
+  }
+  for (const scenario of [
+    "forum_debate", "forum_debate_incident",
+    "forum_stage", "forum_stage_incident",
+    "forum_motion", "forum_motion_incident",
+  ] as const) {
+    const done = doneOf(await ask(scenario));
+    assert.equal(done.answerState, "not_answered", scenario);
+    assert.notEqual(done.answerState, "supported", scenario);
+    assert.deepEqual(done.authorities, [], scenario);
+  }
+});
+
 test("withholding paths leave unconfirmed sources out of the authority list", async () => {
   const cited = `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\n${QUOTE} [SO 1]\n\nSettlement: supported`;
   const sites = [
-    { code: "no_authority_selected", draft: cited, kind: "procedure" as const, selected: false },
+    { code: "no_authority_selected", draft: cited, kind: "procedure" as const, removed: true },
     { code: "empty_draft", draft: " ", kind: "procedure" as const },
     { code: "invalid_citations", draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\n${QUOTE} [SO 1]\n\nBest authorities to inspect or cite:\n- [SO 99] Not retrieved`, kind: "procedure" as const },
-    { code: "no_grounded_claims", draft: "Bottom line:\n\nWhat this means:\n", kind: "procedure" as const },
+    { code: "no_grounded_claims", draft: "A note outside the answer sections. [SO 1]", kind: "procedure" as const },
     { code: "not_responsive", draft: cited, kind: "incident" as const, responsive: false },
     { code: "bottom_line_lost", draft: cited, kind: "procedure" as const, support: false },
     { code: "drafting_unavailable", draft: cited, kind: "procedure" as const, throwDraft: true },
+    { code: "prune_emptied_draft", draft: "What this means:\nAn uncited line only.", kind: "procedure" as const },
   ];
   for (const site of sites) {
-    const events = await withCorpusCommitteeNames(["Widget Trade Committee", "Widget Review Committee"], async () => {
-      const source = authority("SO 1", "s1", QUOTE, ["Widget Trade Committee"]);
+    const removed = "removed" in site && site.removed === true;
+    const events = await withCorpusCommitteeNames(removed
+      ? ["Widget Oversight Committee", "Gadget Review Committee"]
+      : ["Widget Trade Committee", "Widget Review Committee"], async () => {
+      const source = authority("SO 1", "s1", QUOTE, [removed ? "Widget Oversight Committee" : "Widget Trade Committee"]);
       const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
         request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
         if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
@@ -561,7 +613,7 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
           return value as T;
         }
         if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
-          const value = plan(site.kind, "Widget Committee");
+          const value = plan(site.kind, removed ? "Gadget Review Committee" : "Widget Committee");
           request.validate?.(value);
           request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
           return value as T;
@@ -597,15 +649,15 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
           generateJson, streamText,
           searchProceduralAuthorities: async (): Promise<ProceduralSearchResponse> => ({
             query: "suspension", corpus: null, limit: 10, offset: 0, total: 1, hasMore: false,
-            results: site.selected === false ? [] : [source],
+            results: [source],
           }),
           loadHeadings: async () => [],
           selectV517ProductionAuthorities: async () => ({
-            finalAuthorities: site.selected === false ? [] : [source],
+            finalAuthorities: [source],
             prePruneLabels: [], selectedLabels: [], prunedRedundant: [],
             minObligationCoverage: 1, allObligationsComplete: true,
             obligationDetails: [{ coverage: 1, complete: true }],
-            candidateCount: site.selected === false ? 0 : 1,
+            candidateCount: 1,
             evidenceAdmission: "synthetic", rejectedAuthorities: [],
           }),
         },

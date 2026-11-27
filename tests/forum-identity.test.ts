@@ -107,11 +107,35 @@ test("one shared word does not resolve to a listed body", () => {
   });
 });
 
+test("a committee's own multi-segment path matches, and a different body does not", () => {
+  const own = ["Chapter 2", "Sittings of the House", "Functions of the Widget Oversight Committee"];
+  const financial = ["Chapter 6", "Financial procedures", "SELECT COMMITTEE SCRUTINY", "Functions of the Widget Oversight Committee"];
+  withCorpusCommitteeNames(["Widget Oversight Committee", "Gadget Review Committee"], () => {
+    assert.equal(forumIdentityOutcome("Widget Oversight Committee", own), "match");
+    assert.equal(forumIdentityOutcome("Widget Oversight Committee", financial), "match");
+    assert.equal(forumIdentityOutcome("Functions of the Widget Oversight Committee", own), "match");
+    assert.equal(forumIdentityOutcome("Gadget Review Committee", own), "reject");
+    assert.equal(forumIdentityOutcome("Tarn Widget Committee", own), "uncertain");
+    assert.equal(forumIdentityOutcome("Widget Committee", ["Chapter 2", "Sittings of the House", "Widget Trade Committee"]), "uncertain");
+  });
+});
+
+test("debate, stage and motion mismatches still reject", () => {
+  assert.equal(forumIdentityOutcome("the Tarn debate", ["Marrow debate"]), "reject");
+  assert.equal(forumIdentityOutcome("the Tarn debate", ["Chapter 2", "Sittings of the House", "Marrow debate"]), "reject");
+  assert.equal(forumIdentityOutcome("Tarn reading debate", ["Marrow reading debate"]), "reject");
+  assert.equal(forumIdentityOutcome("general debate", ["Tarn debate"]), "reject");
+  assert.equal(forumIdentityOutcome("the Tarn stage", ["Marrow stage"]), "reject");
+  assert.equal(forumIdentityOutcome("urgency motion", ["Motion for adjournment"]), "reject");
+  assert.equal(forumIdentityOutcome("the chamber", ["rules of debate"]), "match");
+});
+
 test("a setting with no forum class is ambiguous against a named body", () => {
   withCorpusCommitteeNames(["Widget Oversight Committee"], () => {
     assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["Widget Oversight Committee"]), "uncertain");
     assert.equal(forumIdentityMismatch("the Tarn Subcommittee", ["Widget Oversight Committee"]), null);
     match("the Tarn Subcommittee", "select committees");
+    assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["Marrow Oversight Committee"]), "uncertain");
   });
 });
 

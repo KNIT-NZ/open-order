@@ -908,9 +908,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           }
           const forumSetting = plan.situation?.setting ?? "";
           const forumKept = [];
+          let selectorForumWithheld = 0;
           for (const authority of selected.finalAuthorities) {
             const outcome = forumIdentityOutcome(forumSetting, authority.path ?? []);
-            if (outcome === "reject") continue;
+            if (outcome === "reject") {
+              if (!v40IncidentGate) selectorForumWithheld += 1;
+              continue;
+            }
             if (outcome === "uncertain") noteForumQualification([authority.citationLabel]);
             forumKept.push(authority);
           }
@@ -919,6 +923,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const forumCodes = [
             ...forumCountCodes("selector_forum", tallyForumOutcomes(searches.flatMap((search) => search.results), forumSetting)),
             ...forumCountCodes("overlooked_forum", tallyForumOutcomes(overlookedRecords, forumSetting)),
+            ...clientCheckNote([`selector_forum_withheld=forum-identity:${selectorForumWithheld}`])?.split(";") ?? [],
           ];
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
@@ -931,8 +936,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               ? finalAuthorityCorpora[0]
               : null;
 
+          const shownAuthorities = listedAuthorities(authorityPayload);
+          const shownLabels = new Set(shownAuthorities.map((authority) => authority.citationLabel.toLowerCase()));
+          const shownResults = finalAuthorities.filter((authority) => shownLabels.has(authority.citationLabel.toLowerCase()));
           send("authorities", {
-            authorities: listedAuthorities(authorityPayload),
+            authorities: shownAuthorities,
           });
 
           const diagnosticConcepts = [
@@ -954,7 +962,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               allObligationsComplete: v517Selection.allObligationsComplete,
               obligationDetails: v517Selection.obligationDetails,
               prePruneCount: v517Selection.prePruneLabels.length,
-              selectedLabels: finalAuthorities.map((authority) => authority.citationLabel),
+              selectedLabels: shownResults.map((authority) => authority.citationLabel),
               legacySelectedCount: v517Selection.selectedLabels.length,
               // These coverage scores belong to the lexical v5.18 selector,
               // not the incident adjudicator. Do not misstate them as v40 scores.
@@ -1013,7 +1021,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }),
             // The final selection diagnostic must describe the semantic pack
             // actually supplied to drafting, not the earlier legacy ranking.
-            finalAuthoritySelection: finalAuthorities.map((result) => ({
+            finalAuthoritySelection: shownResults.map((result) => ({
               query: v40IncidentGate
                 ? "scenario_source_adjudication" : "semantic_authority_pack",
               citationLabel: result.citationLabel,
@@ -1168,7 +1176,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               authorities: authorityPayload,
             });
 
-            finalAnswer = normalizeAnswerFormatting(initialPrune.prunedText);
+            finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(initialPrune.prunedText));
             if (initialPrune.removedLines.length > 0) {
               pruneNote = clientCheckNote([`pruned_lines=${initialPrune.removedLines.length}`]);
               outcomeState.pruned = true;
@@ -1275,7 +1283,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 authorities: authorityPayload,
               });
 
-              finalAnswer = normalizeAnswerFormatting(secondPrune.prunedText);
+              finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
 
               rewriteNote = clientCheckNote([
                 `rewritten_mentions=${rewrite.removedMentions.length}`,

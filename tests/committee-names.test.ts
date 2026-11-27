@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { committeeNameRecords } from "../lib/committee-names-data.js";
-import { committeeRecordsFromSections } from "../lib/committee-names.js";
+import { committeeNameTokens, committeeRecordsFromSections } from "../lib/committee-names.js";
+import { forumIdentityOutcome } from "../lib/procedural-mechanisms";
 import { publicCommitteeNameRecords, readCommitteeNameRows } from "../scripts/gen-committee-names";
 
 test("a generated committee record keeps its corpus location", () => {
@@ -38,6 +39,17 @@ test("committed committee names carry a citation and path, not a section row id"
     assert.match(record.citationLabel, /^SO\s+\S+$/);
     assert.ok(record.path.length > 0);
     assert.equal("sectionId" in record, false);
+  }
+});
+
+test("every listed body matches its own source path", () => {
+  for (const record of committeeNameRecords) {
+    const naming = record.path.filter((segment) => {
+      const tokens = committeeNameTokens(segment);
+      return tokens.length === record.tokens.length && tokens.every((token, index) => token === record.tokens[index]);
+    });
+    assert.ok(naming.length > 0, record.citationLabel);
+    assert.equal(forumIdentityOutcome(naming[0], record.path), "match", record.citationLabel);
   }
 });
 
