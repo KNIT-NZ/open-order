@@ -17,7 +17,6 @@ import {
 } from "@/lib/open-order/answer-stream";
 import {
   actorClassQualificationQuery,
-  authoritiesReferencedByAnswer,
   authorisingRuleQueries,
   citationLabelsIn,
   collectRejectionKeys,
@@ -1895,7 +1894,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
             }
-            const citedAuthorities = listedAuthorities(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {
@@ -1905,7 +1903,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
               answerText: finalAnswer,
-              authorities: citedAuthorities,
+              authorities: shownAuthorities,
               rewriteNote,
               pruneNote,
               claimValidationNote,
