@@ -82,7 +82,7 @@ const forumCase: Partial<Record<Scenario, { setting: string; path: string | stri
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
 const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
 
-function authority(label: string, sectionId: string, sectionContent = QUOTE, path = ["Debate"]): ProceduralSearchResult {
+function authority(label: string, sectionId: string, sectionContent = QUOTE, path = ["Sittings of the House"]): ProceduralSearchResult {
   return {
     sectionId,
     sectionKey: sectionId,
@@ -591,6 +591,16 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
     { code: "bottom_line_lost", draft: cited, kind: "procedure" as const, support: false },
     { code: "drafting_unavailable", draft: cited, kind: "procedure" as const, throwDraft: true },
     { code: "prune_emptied_draft", draft: "What this means:\nAn uncited line only.", kind: "procedure" as const },
+    {
+      code: "ungrounded_mentions",
+      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      kind: "procedure" as const,
+    },
+    {
+      code: "ungrounded_mentions",
+      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      kind: "incident" as const,
+    },
   ];
   for (const site of sites) {
     const removed = "removed" in site && site.removed === true;
@@ -676,7 +686,8 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
       return parsed;
     });
     const done = doneOf(events);
-    assert.equal(done.fallbackCode, site.code, site.code);
+    assert.equal(done.fallbackCode, site.code, `${site.kind} ${site.code}`);
+    if (site.code === "ungrounded_mentions") assert.deepEqual(done.authorities, [], site.kind);
     const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
     const panel = (events.find((item) => item.event === "authorities")?.data.authorities ?? []) as Array<{
       citationLabel?: string;

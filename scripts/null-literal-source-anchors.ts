@@ -1,14 +1,25 @@
 /**
  * Idempotent data fix: literal "None" or blank source_anchor values become NULL.
- * Refuses any database host that is not the reviewed Neon test branch.
+ *
+ * Fail closed. There is no default host and no prefix match.
+ * A write runs only when all of these hold:
+ * - OPEN_ORDER_CORPUS_DB_HOST is set to the hostname the operator intends.
+ * - OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST is set to the one allowed test-branch hostname.
+ * - those two values are exactly equal.
+ * - the DATABASE_URL hostname is exactly that same host.
  * Does not print the connection string.
  */
 import pg from "pg";
 
-function corpusHost(): string {
-  const host = process.env.OPEN_ORDER_CORPUS_DB_HOST ?? "";
-  if (!host) throw new Error("Refusing to write: OPEN_ORDER_CORPUS_DB_HOST is unset.");
-  return host;
+function allowedTestBranchHost(): string {
+  const intended = process.env.OPEN_ORDER_CORPUS_DB_HOST ?? "";
+  const allowed = process.env.OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST ?? "";
+  if (!intended) throw new Error("Refusing to write: OPEN_ORDER_CORPUS_DB_HOST is unset.");
+  if (!allowed) throw new Error("Refusing to write: OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST is unset.");
+  if (intended !== allowed) {
+    throw new Error("Refusing to write: OPEN_ORDER_CORPUS_DB_HOST is not the allowed test-branch host.");
+  }
+  return intended;
 }
 
 function assertTestBranch(databaseUrl: string): string {
@@ -18,9 +29,9 @@ function assertTestBranch(databaseUrl: string): string {
   } catch {
     throw new Error("Refusing to write: DATABASE_URL is not a URL.");
   }
-  const expected = corpusHost();
-  if (host !== expected && !host.startsWith(expected)) {
-    throw new Error("Refusing to write: database host does not match OPEN_ORDER_CORPUS_DB_HOST.");
+  const expected = allowedTestBranchHost();
+  if (host !== expected) {
+    throw new Error("Refusing to write: database host is not exactly the allowed test-branch host.");
   }
   return expected;
 }

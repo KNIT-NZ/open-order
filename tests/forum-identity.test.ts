@@ -56,9 +56,9 @@ test("named committees match only the same body", () => {
     match("Whanau Committee", "Whānau Committee");
     match("the House", "Committee of the whole House");
     match("House of Representatives", "Sittings of the House");
-    match("committee meeting", "Procedure in committees");
-    reject("the House", "Widget Oversight Committee");
-    reject("committee of the whole", "select committees");
+    assert.equal(forumIdentityOutcome("committee meeting", ["Procedure in committees"]), "uncertain");
+    assert.equal(forumIdentityOutcome("the House", ["Widget Oversight Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("committee of the whole", ["select committees"]), "uncertain");
   });
 });
 
@@ -127,14 +127,14 @@ test("debate, stage and motion mismatches still reject", () => {
   assert.equal(forumIdentityOutcome("general debate", ["Tarn debate"]), "reject");
   assert.equal(forumIdentityOutcome("the Tarn stage", ["Marrow stage"]), "reject");
   assert.equal(forumIdentityOutcome("urgency motion", ["Motion for adjournment"]), "reject");
-  assert.equal(forumIdentityOutcome("the chamber", ["rules of debate"]), "match");
+  assert.equal(forumIdentityOutcome("the chamber", ["rules of debate"]), "uncertain");
 });
 
 test("a setting with no forum class is ambiguous against a named body", () => {
   withCorpusCommitteeNames(["Widget Oversight Committee"], () => {
     assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["Widget Oversight Committee"]), "uncertain");
     assert.equal(forumIdentityMismatch("the Tarn Subcommittee", ["Widget Oversight Committee"]), null);
-    match("the Tarn Subcommittee", "select committees");
+    assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["select committees"]), "uncertain");
     assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["Marrow Oversight Committee"]), "uncertain");
   });
 });

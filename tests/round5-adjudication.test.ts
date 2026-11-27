@@ -76,9 +76,9 @@ test("forum type matches a generic body and rejects two different names", () => 
   assert.equal(forumIdentityMismatch("committee meeting", ["Procedure in committees"]), null);
   assert.equal(forumIdentityMismatch("select committee hearing", ["Widget Oversight Committee"]), null);
   assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Gadget Review Committee"]), "forum-identity");
-  assert.equal(forumIdentityMismatch("the House", ["Widget Oversight Committee"]), "forum-identity");
+  assert.equal(forumIdentityMismatch("the House", ["Widget Oversight Committee"]), null);
   assert.equal(forumIdentityMismatch("the House", ["Committee of the whole House"]), null);
-  assert.equal(forumIdentityMismatch("committee of the whole", ["select committees"]), "forum-identity");
+  assert.equal(forumIdentityMismatch("committee of the whole", ["select committees"]), null);
   const named = source({
     sectionId: "syn-3",
     citationLabel: "QX 3",

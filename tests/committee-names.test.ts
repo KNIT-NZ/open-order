@@ -50,6 +50,19 @@ test("every listed body matches its own source path", () => {
     });
     assert.ok(naming.length > 0, record.citationLabel);
     assert.equal(forumIdentityOutcome(naming[0], record.path), "match", record.citationLabel);
+    const heading = record.path[record.path.length - 1] ?? "";
+    assert.equal(forumIdentityOutcome(heading, record.path), "match", record.citationLabel);
+    assert.notEqual(forumIdentityOutcome(heading, record.path), "reject", record.citationLabel);
+  }
+  const synthetic: Array<[string, string[]]> = [
+    ["the Pylon address", ["Chapter 7", "QUILL ADDRESS", "the Pylon address"]],
+    ["Sittings of the House", ["Chapter 2", "COMMITTEES", "Sittings of the House"]],
+    ["Asking a question", ["Chapter 3", "QUESTIONS", "Asking a question"]],
+    ["the second", ["Chapter 4", "SECONDER", "the second"]],
+  ];
+  for (const [heading, path] of synthetic) {
+    assert.equal(forumIdentityOutcome(heading, path), "match", heading);
+    assert.notEqual(forumIdentityOutcome(heading, path), "reject", heading);
   }
 });
 

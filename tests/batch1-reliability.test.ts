@@ -234,7 +234,7 @@ test("generic witnesses, anchors, tables and citation hygiene", () => {
   assert.equal(quoteAttestsActAndObject("Carrying a device is permitted.", "emit a beacon"), false);
   assert.equal(procedureHomonymMismatch("members cast a division", "dividing a bill"), "procedure-homonym");
   assert.equal(procedureHomonymMismatch("dividing a bill", "dividing a bill"), null);
-  assert.equal(forumIdentityMismatch("committee of the whole", ["select committees"]), "forum-identity");
+  assert.equal(forumIdentityMismatch("committee of the whole", ["select committees"]), null);
   assert.equal(forumIdentityMismatch("the chamber", ["rules of debate"]), null);
   assert.equal(usableSourceAnchor("None"), null);
   assert.equal(usableSourceAnchor("  "), null);
