@@ -1,4 +1,4 @@
-import { AI_ERROR_KINDS } from "../ai/errors";
+import { EMPTY_REPAIR_REASON, V402_REPAIR_REASONS } from "../ai/scenario-adjudication";
 import { DIAGNOSTIC_KINDS, NONRETRYABLE_CODES, TRANSIENT_CODES } from "../ai/provider-resilience";
 
 const ALLOWED_KEY = /^(?:rewritten_mentions|pruned_lines|invalid_citations|ungrounded_mentions|responsiveness|incident_repair|pruned_unsupported_claims|claim_ids|appeal_attempted|appeal_corroborated|appeal_unavailable|bottom_line_before|bottom_line_after|draft_claims|rejected_claims|remaining_claims|citations_valid|mentions_valid|appeal|bottom_line_recovery|claim_check_attempts|repair|repair_attempts|operation|kind|status|code|provider|retryable|attempts|unresolved_facets|primary_refusal|recovery_refusal|disposition|recovery_candidates|rejected|selector_forum|overlooked_forum|selector_forum_withheld)$/;
@@ -27,32 +27,44 @@ const COUNT_KEY = new Set([
   "appeal_attempted", "appeal_corroborated", "appeal_unavailable", "rejected",
 ]);
 const BOOL_KEY = new Set(["bottom_line_before", "bottom_line_after", "citations_valid", "mentions_valid", "retryable"]);
-const PROVIDER_CODE = new Set<string>([
-  ...TRANSIENT_CODES,
-  ...NONRETRYABLE_CODES,
-  ...AI_ERROR_KINDS.map((kind) => kind.toUpperCase()),
-]);
+const PROVIDER_CODE = new Set<string>([...TRANSIENT_CODES, ...NONRETRYABLE_CODES]);
 const KIND = new Set<string>(DIAGNOSTIC_KINDS);
-const REPAIR_REASON = /^(?:missing_bottom_line|invalid_citations|invalid_authority_mentions|qualification_veto|not_responsive_or_missing_verdict|unaddressed_parts|no_claims|duplicate_claim_ids|verdict_count_mismatch|duplicate_verdict_ids|unexpected_verdict_id|missing_claim_verdict|unsupported_claim|empty_repair)$/;
+const REPAIR_REASON = new Set<string>([...V402_REPAIR_REASONS, EMPTY_REPAIR_REASON]);
 const REPAIR_PHASE = /^(?:generation|deterministic_checks|independent_validation|independent_verdict_schema)$/;
+export const CLAIM_ID_MAX_LENGTH = 40;
+const FORUM_COUNT_WIDTH = 4;
 function allowedValue(key: string, value: string): boolean {
   if (value.includes(" ")) return false;
   if (COUNT_KEY.has(key)) return /^\d{1,6}$/.test(value);
   if (BOOL_KEY.has(key)) return value === "true" || value === "false";
-  if (key === "claim_ids") return /^(?:none|claim-\d+(?:,claim-\d+)*)$/.test(value);
+  if (key === "claim_ids") {
+    if (value === "none") return true;
+    const ids = value.split(",");
+    if (new Set(ids).size !== ids.length) return false;
+    return ids.every((id) => /^claim-\d+$/.test(id) && id.length <= CLAIM_ID_MAX_LENGTH);
+  }
   if (key === "code") return value === "none" || PROVIDER_CODE.has(value);
   if (key === "kind") return KIND.has(value);
   if (key === "status") return value === "none" || value === "429" || value === "503" || /^[45]\d\d$/.test(value);
   if (key === "provider") return /^(?:gemini|openai-compatible|router|none|unknown)$/.test(value);
   if (key === "operation") return /^(?:drafting|claim_validation|post_validation)$/.test(value);
-  if (key === "selector_forum" || key === "overlooked_forum") return /^forum-(?:identity|ambiguous):\d{1,4}$/.test(value);
-  if (key === "selector_forum_withheld") return /^forum-identity:\d{1,4}$/.test(value);
+  if (key === "selector_forum" || key === "overlooked_forum") {
+    return new RegExp(`^forum-(?:identity|ambiguous):\\d{1,${FORUM_COUNT_WIDTH}}$`).test(value);
+  }
+  if (key === "selector_forum_withheld") {
+    return new RegExp(`^forum-identity:\\d{1,${FORUM_COUNT_WIDTH}}$`).test(value);
+  }
   if (key === "incident_repair") {
     if (/^(?:not_needed|not_admitted|independent_review_pending|independent_gate_refused|accepted_after_recheck|empty_repair)$/.test(value)) return true;
-    if (value.startsWith("refused:")) return value.slice("refused:".length).split(",").every((part) => REPAIR_REASON.test(part));
+    if (value.startsWith("refused:")) {
+      const parts = value.slice("refused:".length).split(",").filter((part) => part.length > 0);
+      if (parts.length === 0 || parts.length > REPAIR_REASON.size) return false;
+      if (new Set(parts).size !== parts.length) return false;
+      return parts.every((part) => REPAIR_REASON.has(part));
+    }
     if (value.startsWith("unavailable:")) {
       const parts = value.split(":");
-      return REPAIR_PHASE.test(parts[1] ?? "") && KIND.has(parts[2] ?? "");
+      return parts.length === 3 && REPAIR_PHASE.test(parts[1] ?? "") && KIND.has(parts[2] ?? "");
     }
     return false;
   }
@@ -88,8 +100,10 @@ export function forumCountCodes(
   prefix: "selector_forum" | "overlooked_forum",
   counts: { identity?: number; ambiguous?: number },
 ): string[] {
-  const identity = Math.max(0, Math.trunc(Number(counts?.identity) || 0));
-  const ambiguous = Math.max(0, Math.trunc(Number(counts?.ambiguous) || 0));
+  const limit = 10 ** FORUM_COUNT_WIDTH - 1;
+  const clamp = (value: number) => Math.min(limit, Math.max(0, Math.trunc(Number(value) || 0)));
+  const identity = clamp(counts?.identity ?? 0);
+  const ambiguous = clamp(counts?.ambiguous ?? 0);
   const tokens = [
     `${prefix}=forum-identity:${identity}`,
     `${prefix}=forum-ambiguous:${ambiguous}`,

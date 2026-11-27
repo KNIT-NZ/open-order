@@ -1,7 +1,7 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
+import { CLAIM_ID_MAX_LENGTH, clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
 import { publicScenarioAdjudication } from "@/lib/open-order/public-diagnostics";
 import { publicRetrievals } from "@/lib/open-order/public-search";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
@@ -1669,7 +1669,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
               const claimIds = semanticPrune.removedClaims
                 .map((claim) => claim.id)
-                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id));
+                .filter((id) => id.length >= 1 && id.length <= CLAIM_ID_MAX_LENGTH && /^[a-z0-9_.:-]+$/i.test(id));
               claimValidationNote = clientCheckNote([
                 `pruned_unsupported_claims=${semanticPrune.removedClaims.length}`,
                 claimIds.length > 0 ? `claim_ids=${claimIds.join(",")}` : null,

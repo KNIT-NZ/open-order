@@ -83,27 +83,34 @@ function candidatesFrom(text: string, into: Map<string, Candidate>, leafId: stri
   }
 }
 
-/** Shortest contiguous part-or-leaf slice that names the whole-house committee. */
+function isCommitteeForum(token: string): boolean {
+  return FORUM_WORDS.has(token) && token.includes("committee");
+}
+
+function isHouseForum(token: string): boolean {
+  return FORUM_WORDS.has(token) && !isCommitteeForum(token);
+}
+
+/**
+ * The whole-house forum is the shortest ancestor slice that contains both
+ * forum-word families already used by phrase extraction. The words come
+ * from the pack, not from a separate selector list.
+ */
 export function deriveWholeHousePhrases(rows: HeadingRow[]): string[][] {
   const found = new Map<string, string[]>();
-  const visit = (text: string) => {
-    const tokens = tokensOf(text);
+  for (const part of headingPlaces(rows).parts) {
+    const tokens = tokensOf(part);
+    if (!tokens.some(isCommitteeForum) || !tokens.some(isHouseForum)) continue;
     let best: string[] | null = null;
     for (let start = 0; start < tokens.length; start += 1) {
-      for (let end = start + 3; end <= tokens.length; end += 1) {
+      for (let end = start + 2; end <= tokens.length; end += 1) {
         const slice = tokens.slice(start, end);
-        if (!slice.includes("committee") || !slice.includes("whole") || !slice.includes("house")) continue;
+        if (!slice.some(isCommitteeForum) || !slice.some(isHouseForum)) continue;
         if (!best || slice.length < best.length) best = slice;
       }
     }
-    if (!best) return;
-    const key = best.join(" ");
-    if (!found.has(key)) found.set(key, best);
-  };
-  for (const row of rows ?? []) {
-    const path = Array.isArray(row.path) ? row.path.map((segment) => String(segment)) : [];
-    for (const segment of path) visit(segment);
-    if (row.heading) visit(String(row.heading));
+    if (!best) continue;
+    found.set(best.join(" "), best);
   }
   const phrases = [...found.values()];
   const shortest = phrases.reduce((min, phrase) => Math.min(min, phrase.length), Number.POSITIVE_INFINITY);

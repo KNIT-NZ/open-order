@@ -314,24 +314,44 @@ export function v402RecoveryCandidates<T extends V40Authority>(input: {
   });
 }
 
+export const V402_REPAIR_REASONS = [
+  "missing_bottom_line",
+  "invalid_citations",
+  "invalid_authority_mentions",
+  "qualification_veto",
+  "not_responsive_or_missing_verdict",
+  "unaddressed_parts",
+  "no_claims",
+  "duplicate_claim_ids",
+  "verdict_count_mismatch",
+  "duplicate_verdict_ids",
+  "unexpected_verdict_id",
+  "missing_claim_verdict",
+  "unsupported_claim",
+] as const;
+
+/** Route preliminary refusals include this reason as well as the gate set. */
+export const EMPTY_REPAIR_REASON = "empty_repair";
+
 /** Diagnostic projection of the existing repair gate, without relaxing it. */
 export function v402RepairRefusals(input: Parameters<typeof v401AcceptIndependentRepair>[0]): string[] {
   const reasons: string[] = [];
-  if (!input.hasBottomLine) reasons.push("missing_bottom_line");
-  if (!input.citationValid) reasons.push("invalid_citations");
-  if (!input.mentionValid) reasons.push("invalid_authority_mentions");
-  if (input.sourceQualificationVetoes !== 0) reasons.push("qualification_veto");
-  if (!input.responsive) reasons.push("not_responsive_or_missing_verdict");
-  if (input.unaddressedParts.length) reasons.push("unaddressed_parts");
+  const push = (reason: typeof V402_REPAIR_REASONS[number]) => { reasons.push(reason); };
+  if (!input.hasBottomLine) push("missing_bottom_line");
+  if (!input.citationValid) push("invalid_citations");
+  if (!input.mentionValid) push("invalid_authority_mentions");
+  if (input.sourceQualificationVetoes !== 0) push("qualification_veto");
+  if (!input.responsive) push("not_responsive_or_missing_verdict");
+  if (input.unaddressedParts.length) push("unaddressed_parts");
   const ids = new Set(input.claimIds);
   const verdictIds = new Set(input.validatedClaims.map((claim) => claim.id));
-  if (!ids.size) reasons.push("no_claims");
-  if (ids.size !== input.claimIds.length) reasons.push("duplicate_claim_ids");
-  if (input.validatedClaims.length !== input.claimIds.length) reasons.push("verdict_count_mismatch");
-  if (verdictIds.size !== input.validatedClaims.length) reasons.push("duplicate_verdict_ids");
-  if (input.validatedClaims.some((claim) => !ids.has(claim.id))) reasons.push("unexpected_verdict_id");
-  if ([...ids].some((id) => !verdictIds.has(id))) reasons.push("missing_claim_verdict");
-  if (input.validatedClaims.some((claim) => !claim.supported)) reasons.push("unsupported_claim");
+  if (!ids.size) push("no_claims");
+  if (ids.size !== input.claimIds.length) push("duplicate_claim_ids");
+  if (input.validatedClaims.length !== input.claimIds.length) push("verdict_count_mismatch");
+  if (verdictIds.size !== input.validatedClaims.length) push("duplicate_verdict_ids");
+  if (input.validatedClaims.some((claim) => !ids.has(claim.id))) push("unexpected_verdict_id");
+  if ([...ids].some((id) => !verdictIds.has(id))) push("missing_claim_verdict");
+  if (input.validatedClaims.some((claim) => !claim.supported)) push("unsupported_claim");
   return reasons;
 }
 
