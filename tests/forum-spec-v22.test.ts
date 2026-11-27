@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.2.json", import.meta.url), "utf8"));
+const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.5.json", import.meta.url), "utf8"));
 
 type SpecRow = {
   id: string;
@@ -177,7 +177,7 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.2 has no false supported outcome on either route", async () => {
+test("forum spec v2.5 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;
@@ -187,17 +187,10 @@ test("forum spec v2.2 has no false supported outcome on either route", async () 
     await withCorpusCommitteeNames(names, async () => {
       for (const route of row.routes) {
         if (route !== "selector" && route !== "adjudication") continue;
-        let expected = row.expected[route];
+        const expected = row.expected[route];
         if (!expected) continue;
         const result = await ask(row, route);
         const got = observed(result.done, result.codes);
-        const leaf = row.path.at(-1)?.text ?? "";
-        // A House-level leaf passes uncapped for a House or Chamber setting.
-        if (expected === "qualified_partial" && got === "supported"
-          && (row.setting === "the House" || row.setting === "the Chamber")
-          && /\b(?:house|chamber)\b/i.test(leaf)) {
-          expected = "supported";
-        }
         const bucket = counts[expected] ??= { pass: 0, fail: 0 };
         if (got === expected) bucket.pass += 1;
         else {

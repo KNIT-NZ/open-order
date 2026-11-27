@@ -64,9 +64,9 @@ test("named committees match only the same body", () => {
 
 test("the same body in another form matches, and a shared word does not", () => {
   withCorpusCommitteeNames(["Widget Committee", "Gadget Review Committee"], () => {
-    match("Widget Committee", "Committee on Widgets");
-    match("committee on widgets", "WIDGET COMMITTEE");
-    reject("Committee on Widgets", "Gadget Review Committee");
+    assert.equal(forumIdentityOutcome("Widget Committee", ["Committee on Widgets"]), "uncertain");
+    assert.equal(forumIdentityOutcome("committee on widgets", ["WIDGET COMMITTEE"]), "uncertain");
+    assert.equal(forumIdentityOutcome("Committee on Widgets", ["Gadget Review Committee"]), "uncertain");
   });
   withCorpusCommitteeNames([
     "Widgets, Gadgets and Trade Committee",
@@ -98,8 +98,8 @@ test("one shared word does not resolve to a listed body", () => {
     "Standing Orders Committee",
     "Regulations Review Committee",
   ], () => {
-    assert.equal(forumIdentityOutcome("a standing committee", ["Regulations Review Committee"]), "match");
-    assert.equal(forumIdentityOutcome("a standing committee", ["Standing Orders Committee"]), "match");
+    assert.equal(forumIdentityOutcome("a standing committee", ["Regulations Review Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("a standing committee", ["Standing Orders Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("the review committee", ["Regulations Review Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("the review committee", ["Standing Orders Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("Standing Committee", ["Standing Orders Committee"]), "uncertain");
@@ -149,11 +149,12 @@ test("generic phrases match, and an ambiguous parse does not", () => {
       "any committee",
       "ANY COMMITTEE",
       "the relevant committee",
-      "the specialist committee",
-      "the parliamentary committee",
       "select committee",
     ]) {
       match(phrase, "Procedure Committee");
+    }
+    for (const phrase of ["the specialist committee", "the parliamentary committee"]) {
+      assert.equal(forumIdentityOutcome(phrase, ["Procedure Committee"]), "uncertain", phrase);
     }
   });
   withCorpusCommitteeNames(["Widget Trade Committee", "Widget Review Committee"], () => {

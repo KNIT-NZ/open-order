@@ -9,8 +9,9 @@
  * - pg's own connection-string parser resolves the database host to that exact host.
  * The guard refuses host and hostaddr parameters, a service name, more than
  * one host, a unix-socket or path host, a port that disagrees with itself,
- * TLS downgrade parameters, an options parameter, and a percent-encoded
- * parameter name. pg-connection-string is loaded the same way pg loads it.
+ * TLS downgrade parameters, certificate and replication parameters, an options
+ * parameter, a percent-encoded parameter name, and a set PGOPTIONS variable.
+ * pg-connection-string is loaded the same way pg loads it.
  * Does not print the connection string.
  */
 import { createRequire } from "node:module";
@@ -52,7 +53,7 @@ function assertTestBranch(databaseUrl: string): string {
     } catch {
       throw new Error("Refusing to write: connection string has an undecodable parameter name.");
     }
-    if (["host", "hostaddr", "ssl", "sslmode", "uselibpqcompat", "options"].includes(key.toLowerCase())) {
+    if (["host", "hostaddr", "ssl", "sslmode", "uselibpqcompat", "options", "sslrootcert", "sslcert", "sslkey", "replication"].includes(key.toLowerCase())) {
       throw new Error("Refusing to write: connection string sets a refused parameter.");
     }
   }
@@ -87,6 +88,7 @@ function assertTestBranch(databaseUrl: string): string {
 }
 
 async function main(): Promise<void> {
+  if (process.env.PGOPTIONS) throw new Error("Refusing to write: PGOPTIONS is set.");
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("Refusing to write: DATABASE_URL is unset.");
   const hostChecked = assertTestBranch(databaseUrl);

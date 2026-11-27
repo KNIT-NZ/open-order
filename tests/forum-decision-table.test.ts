@@ -44,7 +44,7 @@ const CELLS: Cell[] = [
   { id: "longer-unlisted", setting: "Harbor Bramble Committee", path: ["Bramble Oversight Committee"], outcome: "uncertain" },
   { id: "prefix-only-is-unlisted", setting: "Purpose Committee", path: ["Bramble Oversight Committee"], outcome: "uncertain" },
   { id: "proceeding-self", setting: "the Pylon address", path: ["Chapter 7", "ADDRESSES", "the Pylon address"], outcome: "match" },
-  { id: "proceeding-ancestor-name", setting: "the Pylon address", path: ["Chapter 7", "QUILL ADDRESS", "the Pylon address"], outcome: "uncertain" },
+  { id: "proceeding-ancestor-name", setting: "the Pylon address", path: ["Chapter 7", "QUILL ADDRESS", "the Pylon address"], outcome: "match" },
   { id: "proceeding-different-name", setting: "the Pylon address", path: ["Chapter 7", "PYLON ADDRESS", "the Quill address"], outcome: "uncertain" },
   { id: "proceeding-other-head", setting: "the Pylon address", path: ["Chapter 7", "PYLON ADDRESS", "Debate takes precedence"], outcome: "uncertain" },
   { id: "proceeding-specific-body", setting: "the Pylon address", path: ["Bramble Oversight Committee"], outcome: "uncertain" },
@@ -57,7 +57,7 @@ const CELLS: Cell[] = [
   { id: "bare-debate", setting: "the House", path: ["Chapter 2", "SITTINGS", "Debate"], outcome: "match" },
   { id: "classless-self", setting: "Asking a question", path: ["Chapter 3", "QUESTIONS", "Asking a question"], outcome: "match" },
   { id: "whole-word-not-prefix", setting: "the second", path: ["Chapter 4", "SECONDER", "a note"], outcome: "uncertain" },
-  { id: "whole-word-self", setting: "the second", path: ["Chapter 4", "GENERAL", "the second"], outcome: "match" },
+  { id: "whole-word-self", setting: "the second", path: ["Chapter 4", "SECONDER", "the second"], outcome: "match" },
 ];
 
 test("the forum decision table covers every ruling", () => {

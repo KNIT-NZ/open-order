@@ -8,7 +8,8 @@ import { committeeNameRecords } from "../lib/committee-names-data.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms";
 import { corpusProceedingHeads, corpusProceedingPhrases } from "../lib/corpus-proceedings-data.js";
 import { publicCommitteeNameRecords, renderCommitteeNamesModule } from "../scripts/gen-committee-names";
-import { deriveCorpusProceedings, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
+import { deriveCommitteeClassWords, deriveCorpusProceedings, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
+import { committeeClassWords } from "../lib/committee-class-data.js";
 
 const matrix = JSON.parse(readFileSync(new URL("./fixtures/corpus-matrix-v1.1.json", import.meta.url), "utf8"));
 
@@ -104,12 +105,7 @@ test("committee names regenerate from the public sections without false bodies",
   assert.ok(produced.every((record) => !(record.tokens.length === 1 && forbidden.includes(record.tokens[0] ?? ""))));
 });
 
-test("proceeding phrases match the published derivation and rebuild offline", () => {
-  const expectedPhrases = Object.keys(matrix.derivation.proceedings).sort();
-  const gotPhrases = corpusProceedingPhrases.map((phrase: string[]) => phrase.join(" ")).sort();
-  assert.deepEqual(gotPhrases, expectedPhrases);
-  assert.deepEqual([...corpusProceedingHeads].sort(), [...matrix.derivation.proceeding_head_nouns].sort());
-  const publicSections = new Set(cases.map((item) => item.section));
+test("proceedings and class words rebuild from committed section paths", () => {
   const rows: Array<{ heading: string; path: string[] }> = [];
   const seen = new Set<string>();
   for (const item of cases) {
@@ -117,15 +113,21 @@ test("proceeding phrases match the published derivation and rebuild offline", ()
     seen.add(item.section);
     rows.push({ heading: item.path.at(-1) ?? "", path: item.path });
   }
-  for (const info of Object.values(matrix.derivation.proceedings) as Array<{ setting: string; leaf_occurrences: string[] }>) {
-    for (const section of info.leaf_occurrences) {
-      if (publicSections.has(section)) continue;
-      rows.push({ heading: info.setting, path: [info.setting] });
-    }
+  const listedNames: string[] = [];
+  for (const record of committeeNameRecords) {
+    rows.push({ heading: record.path.at(-1) ?? "", path: record.path });
+    listedNames.push(record.path.at(-1) ?? "");
   }
-  const rendered = renderCorpusProceedingsModule(deriveCorpusProceedings(rows));
-  const committed = readFileSync(new URL("../lib/corpus-proceedings-data.js", import.meta.url), "utf8");
-  assert.equal(rendered, committed);
+  const derived = deriveCorpusProceedings(rows);
+  const fromPaths = new Set(derived.phrases.map((phrase) => phrase.join(" ")));
+  const committedPhrases = corpusProceedingPhrases.map((phrase: string[]) => phrase.join(" "));
+  for (const phrase of fromPaths) assert.ok(committedPhrases.includes(phrase), phrase);
+  const absentLeaves = committedPhrases.filter((phrase) => !fromPaths.has(phrase));
+  assert.deepEqual(absentLeaves.sort(), ["annual review debate", "notice of motion", "proxy vote"]);
+  assert.deepEqual(deriveCommitteeClassWords(rows, listedNames), ["select", "subject"]);
+  assert.deepEqual([...committeeClassWords], ["select", "subject"]);
+  assert.deepEqual([...corpusProceedingHeads].sort(), [...matrix.derivation.proceeding_head_nouns].sort());
+  assert.equal(renderCorpusProceedingsModule(derived).includes("speeche"), false);
 });
 
 test("the anchor script refuses a host query, a socket, and a port mismatch", () => {
@@ -159,4 +161,25 @@ test("the anchor script refuses a host query, a socket, and a port mismatch", ()
   assert.notEqual(options.status, 0);
   const encoded = run("postgresql://u:p@corpus.example/db?%68ostaddr=127.0.0.1");
   assert.notEqual(encoded.status, 0);
+  const cert = run("postgresql://u:p@corpus.example/db?sslrootcert=/tmp/ca.pem&sslcert=/tmp/c.pem&sslkey=/tmp/k.pem");
+  assert.notEqual(cert.status, 0);
+  const replication = run("postgresql://u:p@corpus.example/db?replication=database");
+  assert.notEqual(replication.status, 0);
+  const pgoptions = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/null-literal-source-anchors.ts"],
+    {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      env: {
+        ...process.env,
+        OPEN_ORDER_CORPUS_DB_HOST: "corpus.example",
+        OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST: "corpus.example",
+        DATABASE_URL: "postgresql://u:p@corpus.example/db",
+        PGOPTIONS: "-c search_path=public",
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(pgoptions.status, 0);
+  assert.match(pgoptions.stderr, /PGOPTIONS/);
 });

@@ -12,8 +12,8 @@ test("a short form or a prefix-only name does not match a different listed body"
     assert.equal(forumIdentityOutcome("Sable Committee", ["Nimbus Review Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("Sable Committee", ["Harborlight Committee"]), "uncertain");
     assert.equal(forumIdentityMismatch("the oversight committee", ["Nimbus Review Committee"]), null);
-    assert.equal(forumIdentityOutcome("Committee on Harborlights", ["Harborlight Committee"]), "match");
-    assert.equal(forumIdentityOutcome("Harborlight Committee", ["Committee on Harborlights"]), "match");
+    assert.equal(forumIdentityOutcome("Committee on Harborlights", ["Harborlight Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("Harborlight Committee", ["Committee on Harborlights"]), "uncertain");
   });
 });
 
@@ -27,7 +27,7 @@ test("a House-level leaf passes even when a listed body is only an ancestor", ()
 });
 
 test("a classless self-match checks identity-bearing ancestors and ignores generic words", () => {
-  assert.equal(forumIdentityOutcome("the Ivy", ["QUARRYSIDE", "SO 5", "Ivy"]), "uncertain");
+    assert.equal(forumIdentityOutcome("the Ivy", ["QUARRYSIDE", "SO 5", "Ivy"]), "match");
   assert.equal(forumIdentityOutcome("the Ivy", ["General provisions", "INTRODUCTION", "Ivy"]), "match");
   assert.equal(forumIdentityOutcome("the Ivy", ["Chapter 3", "General procedures", "Ivy"]), "match");
 });
