@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms.js";
+import { corpusProceedingHeads } from "../lib/corpus-proceedings-data.js";
+import { headingPrefixes } from "../lib/domain-vocabulary-data.js";
 
 test("a generic setting under a named class committee is qualified", () => {
   assert.equal(
@@ -36,6 +38,31 @@ test("an unlisted committee matches its own heading", () => {
   assert.equal(forumIdentityOutcome("Quill Committee", ["QUILL COMMITTEE"]), "match");
   assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "QUILL COMMITTEE", "SO 5", "Meetings"]), "match");
   assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "MERRON COMMITTEE"]), "uncertain");
+});
+
+test("every emitted name seed before a class word names the committee", () => {
+  const seeds = [...new Set([...corpusProceedingHeads, ...headingPrefixes])];
+  assert.ok(seeds.length > 8);
+  for (const seed of seeds) {
+    const heading = `${seed.toUpperCase()} SELECT COMMITTEE`;
+    const label = `${seed[0].toUpperCase()}${seed.slice(1)} Select Committee`;
+    assert.equal(
+      forumIdentityOutcome("a committee", ["Chapter 4", heading, "SO 5", "Meetings"]),
+      "uncertain",
+      heading,
+    );
+    assert.equal(
+      forumIdentityOutcome(label, ["Chapter 4", heading, "SO 5", "Meetings"]),
+      "match",
+      label,
+    );
+  }
+  assert.equal(
+    forumIdentityOutcome("a committee", ["Chapter 4", "REPORT OF SELECT COMMITTEE", "SO 5", "Meetings"]),
+    "match",
+  );
+  assert.equal(forumIdentityOutcome("a committee", ["HER COMMITTEE", "SO 5", "Meetings"]), "match");
+  assert.equal(forumIdentityOutcome("a committee", ["HER SELECT COMMITTEE"]), "match");
 });
 
 test("a lone prefix word before a class word is the committee name", () => {

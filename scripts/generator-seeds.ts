@@ -32,6 +32,20 @@ export const COMMITTEE_REFERENCE_SEED = ["relevant", "appropriate", "responsible
  * Domain words dropped before dossier overlap. Grammatical stops come from
  * the closed-class module. These are the forms left after the ranker's suffix trim.
  */
+/**
+ * Domain words the selector drops before a proceeding-identity check.
+ * Grammatical stops come from the closed-class module.
+ */
+export const IDENTITY_DOMAIN_STOP_SEED = [
+  "also", "always", "automatically", "committee", "decision", "entirely", "even",
+  "first", "full", "house", "immediately", "indeed", "later", "made", "make",
+  "matter", "matters", "member", "members", "motion", "mp", "mps", "never",
+  "normal", "only", "ordinary", "parliament", "person", "personally", "procedural",
+  "procedure", "question", "rather", "regardless", "rule", "rules", "select",
+  "simply", "speaker", "speech", "standing", "still", "take", "taken", "then",
+  "there", "theyre", "thing", "things",
+] as const;
+
 export const DOSSIER_DOMAIN_STOP_SEED = [
   "house", "member", "members", "order", "parliament", "parliamentary",
   "procedure", "proceeding", "proceedings", "rule", "rules", "ruling", "speaker",
