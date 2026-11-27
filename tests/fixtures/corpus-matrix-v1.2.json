@@ -14367,9 +14367,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Agencies and Officers of Parliament Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -14966,9 +14967,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Business Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -15563,9 +15565,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Finance and Expenditure Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -16162,9 +16165,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Foreign Affairs, Defence and Trade Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -16761,9 +16765,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Legislative Scrutiny Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -17960,9 +17965,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Privileges Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -18559,9 +18565,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Regulations Review Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },
@@ -19158,9 +19165,10 @@
     "Interruption when House in committee"
    ],
    "setting": "Standing Orders Committee",
-   "expected": "match",
+   "expected": "not_match",
    "accepted": [
-    "match"
+    "reject",
+    "uncertain"
    ],
    "rationale_code": "S4_HOUSE_IN_COMMITTEE"
   },

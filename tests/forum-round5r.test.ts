@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms.js";
-import { deriveWholeHousePhrases, PINNED_WHOLE_HOUSE_PHRASE } from "../scripts/gen-corpus-proceedings";
+import { deriveWholeHouseAliases, deriveWholeHousePhrases, PINNED_WHOLE_HOUSE_ALIASES, PINNED_WHOLE_HOUSE_PHRASE } from "../scripts/gen-corpus-proceedings";
 
 test("a singular committee with a content word is a named body", () => {
   assert.equal(
@@ -143,10 +144,16 @@ test("a word after committee is not a name unless of or on introduces it", () =>
 });
 
 test("the pinned pack yields exactly one whole-house phrase", () => {
-  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+  const packBytes = readFileSync(new URL("./fixtures/so-pack.json", import.meta.url));
+  assert.equal(createHash("sha256").update(packBytes).digest("hex"), "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100");
+  const pack = JSON.parse(packBytes.toString("utf8")) as {
     sections: Array<{ section_type?: string; heading?: string; path?: string[] }>;
   };
   const rows = pack.sections.filter((section) => section.section_type === "standing_order");
-  const phrases = deriveWholeHousePhrases(rows).map((phrase) => phrase.join(" "));
-  assert.deepEqual(phrases, [PINNED_WHOLE_HOUSE_PHRASE]);
+  const phrases = deriveWholeHousePhrases(rows);
+  assert.deepEqual(phrases.map((phrase) => phrase.join(" ")), [PINNED_WHOLE_HOUSE_PHRASE]);
+  assert.deepEqual(
+    deriveWholeHouseAliases(rows, phrases).map((phrase) => phrase.join(" ")),
+    [...PINNED_WHOLE_HOUSE_ALIASES],
+  );
 });

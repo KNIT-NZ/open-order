@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { NextRequest } from "next/server";
@@ -10,7 +11,9 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.25.json", import.meta.url), "utf8"));
+const specBytes = readFileSync(new URL("./fixtures/forum-spec-v2.27.json", import.meta.url));
+assert.equal(createHash("sha256").update(specBytes).digest("hex"), "83baf89ab236b77a9b532fa69b3f4d08bd3f80a8527075e8acb570e85f91c5df");
+const spec = JSON.parse(specBytes.toString("utf8"));
 
 type SpecRow = {
   id: string;
@@ -178,7 +181,7 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.25 matches the fixture on either route", async () => {
+test("forum spec v2.27 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;

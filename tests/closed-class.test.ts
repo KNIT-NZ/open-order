@@ -14,6 +14,7 @@ import {
   PRONOUNS,
   QUANTIFIERS,
   WH_ADVERBS,
+  isNamedNonContent,
 } from "../lib/closed-class.js";
 
 test("closed classes are complete and pinned", () => {
@@ -24,9 +25,12 @@ test("closed classes are complete and pinned", () => {
   const union = new Set(classes.flat());
   assert.equal(CLOSED_CLASS.size, union.size);
   for (const word of union) assert.equal(CLOSED_CLASS.has(word), true, word);
-  for (const word of ["such", "another", "other", "what", "which", "whose", "whilst", "lest"]) {
+  for (const word of ["such", "another", "other", "what", "which", "whose", "whilst", "lest", "whereas", "whatever", "whichever"]) {
     assert.equal(CLOSED_CLASS.has(word), true, word);
   }
+  assert.equal(isNamedNonContent("million"), true);
+  assert.equal(isNamedNonContent("its"), true);
+  assert.equal(isNamedNonContent("may"), false);
   assert.equal(CLOSED_CLASS.has("day"), false);
   assert.equal(CLOSED_CLASS.has("committee"), false);
 });
@@ -54,7 +58,7 @@ test("the forum path has no separate closed-class lists", () => {
   assert.equal(scan.includes("GENERATED_FUNCTION"), false);
   const generator = readFileSync(new URL("../scripts/gen-corpus-proceedings.ts", import.meta.url), "utf8");
   const main = generator.slice(generator.indexOf("async function main"));
-  assert.match(main, /assertPinnedWholeHouse\(derived\.wholeHouse\)/);
+  assert.match(main, /assertPinnedWholeHouse\(derived\.wholeHouse, derived\.wholeHouseAliases\)/);
   assert.equal(main.includes("if (packFlag >= 0) assertPinnedWholeHouse"), false);
   assert.equal(generator.includes("generator-seeds"), true);
   assert.equal(mechanisms.includes("generator-seeds"), false);

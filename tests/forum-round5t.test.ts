@@ -32,6 +32,33 @@ test("a house word does not turn a named committee into the House", () => {
   );
 });
 
+test("an unlisted committee matches its own heading", () => {
+  assert.equal(forumIdentityOutcome("Quill Committee", ["QUILL COMMITTEE"]), "match");
+  assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "QUILL COMMITTEE", "SO 5", "Quill Committee"]), "match");
+  assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "MERRON COMMITTEE"]), "uncertain");
+});
+
+test("house in committee is the whole-house forum", () => {
+  const leaf = ["Chapter 2", "Sittings", "SO 9", "Pause while House in committee"];
+  assert.equal(forumIdentityOutcome("Committee of the whole House", leaf), "match");
+  assert.equal(forumIdentityOutcome("Business Committee", leaf), "reject");
+  assert.equal(forumIdentityOutcome("Quill Committee", leaf), "uncertain");
+});
+
+test("a possessive determiner does not name a committee", () => {
+  for (const heading of ["ITS COMMITTEE", "THEIR COMMITTEE"]) {
+    assert.equal(
+      forumIdentityOutcome("the Merrow debate", ["Chapter 4", heading, "SO 5", "Merrow debate"]),
+      "match",
+      heading,
+    );
+  }
+  assert.equal(
+    forumIdentityOutcome("the Merrow debate", ["Chapter 4", "WE COMMITTEE", "SO 5", "Merrow debate"]),
+    "uncertain",
+  );
+});
+
 test("a modal names a committee and a numeral does not", () => {
   for (const heading of ["MAY COMMITTEE", "WILL COMMITTEE"]) {
     assert.equal(
