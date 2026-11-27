@@ -304,6 +304,17 @@ test("rejected governing nominations are public only as counts", () => {
   assert.equal(JSON.stringify(once).includes("syn-9"), false);
   assert.equal(JSON.stringify(once).includes("SO 999"), false);
   assert.equal(JSON.stringify(once).includes("private"), false);
+  assert.equal((once?.rejectedInDossier ?? 0) + (once?.rejectedOutsideDossier ?? 0), once?.rejectedGoverning);
+  const skewed = publicScenarioAdjudication({
+    ...leaked,
+    rejectedGoverning: -2,
+    rejectedInDossier: 1.8,
+    rejectedOutsideDossier: -4,
+  });
+  assert.equal(skewed.rejectedGoverning, 1);
+  assert.equal(skewed.rejectedInDossier, 1);
+  assert.equal(skewed.rejectedOutsideDossier, 0);
+  assert.equal(skewed.rejectedInDossier + skewed.rejectedOutsideDossier, skewed.rejectedGoverning);
 });
 
 test("provider outcome other is the residual failure class", () => {

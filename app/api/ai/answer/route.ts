@@ -970,7 +970,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               evidenceAdmission: v40IncidentGate
                 ? v40Diagnostic.status : v517Selection.evidenceAdmission,
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
-              // Rejected labels, their reasons and adjudicator free text stay server-side.
+              // Counts and reason codes only. Labels stay off the streamed object.
               scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
               forumCodes,
             },

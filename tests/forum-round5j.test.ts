@@ -33,6 +33,17 @@ test("a leaf-equal classless setting is capped only by an identity signal", () =
   });
 });
 
+test("a plural committee head is unlisted, and a generic name passes a generic leaf", () => {
+  withCorpusCommitteeNames(["Vellum Review Committee", "Mossglass Committee"], () => {
+    assert.equal(forumIdentityOutcome("Vellum Review Committees", ["Vellum Review Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("Vellum Review Committees", ["Mossglass Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("the committee", ["Chapter 9", "Select committees", "Reports of select committees"]), "match");
+    assert.equal(forumIdentityOutcome("a committee", ["HARBOUR COMMITTEE", "Meetings"]), "uncertain");
+    assert.equal(forumIdentityOutcome("a committee", ["Select committees", "Meetings"]), "match");
+    assert.equal(forumIdentityOutcome("the Brindlemoors", ["BRINDLEMOOR AND QUARRYSIDE", "Brindlemoors"]), "match");
+  });
+});
+
 test("a class word used in a listed name is no longer generic", () => {
   const rows = [{ heading: "Rule", path: ["Chapter 4", "Select committees", "SO 1", "Rule"] }];
   assert.deepEqual(deriveCommitteeClassWords(rows, []), ["select"]);

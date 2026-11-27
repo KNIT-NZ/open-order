@@ -8,7 +8,8 @@ import { committeeNameRecords } from "../lib/committee-names-data.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms";
 import { corpusProceedingHeads, corpusProceedingPhrases } from "../lib/corpus-proceedings-data.js";
 import { publicCommitteeNameRecords, renderCommitteeNamesModule } from "../scripts/gen-committee-names";
-import { deriveCommitteeClassWords, deriveCorpusProceedings, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
+import { deriveCommitteeClassWords, deriveCorpusProceedings, foldToken, renderCommitteeClassModule, renderCorpusProceedingsModule } from "../scripts/gen-corpus-proceedings";
+import { foldPlural } from "../lib/plural-fold.js";
 import { committeeClassWords } from "../lib/committee-class-data.js";
 
 const matrix = JSON.parse(readFileSync(new URL("./fixtures/corpus-matrix-v1.2.json", import.meta.url), "utf8"));
@@ -121,13 +122,24 @@ test("proceedings and class words rebuild from committed section paths", () => {
   const derived = deriveCorpusProceedings(rows);
   const fromPaths = new Set(derived.phrases.map((phrase) => phrase.join(" ")));
   const committedPhrases = corpusProceedingPhrases.map((phrase: string[]) => phrase.join(" "));
+  assert.deepEqual(committedPhrases.slice().sort(), Object.keys(matrix.derivation.proceedings).sort());
   for (const phrase of fromPaths) assert.ok(committedPhrases.includes(phrase), phrase);
+  // The pinned 445-section pack is not in the repo. These three leaves are absent
+  // from the committed public paths, so the offline rebuild cannot derive them.
+  // Their text is the published derivation, not a stand-in heading fed back in.
   const absentLeaves = committedPhrases.filter((phrase) => !fromPaths.has(phrase));
   assert.deepEqual(absentLeaves.sort(), ["annual review debate", "notice of motion", "proxy vote"]);
-  assert.deepEqual(deriveCommitteeClassWords(rows, listedNames), ["select", "subject"]);
-  assert.deepEqual([...committeeClassWords], ["select", "subject"]);
+  const classWords = deriveCommitteeClassWords(rows, listedNames);
+  assert.deepEqual(classWords, ["select", "subject"]);
+  const classFile = readFileSync(new URL("../lib/committee-class-data.js", import.meta.url), "utf8");
+  assert.equal(renderCommitteeClassModule(classWords), classFile);
+  assert.deepEqual([...committeeClassWords], classWords);
   assert.deepEqual([...corpusProceedingHeads].sort(), [...matrix.derivation.proceeding_head_nouns].sort());
-  assert.equal(renderCorpusProceedingsModule(derived).includes("speeche"), false);
+  for (const word of ["houses", "speeches", "addresses", "boxes", "clauses", "processes"]) {
+    assert.equal(foldToken(word), foldPlural(word), word);
+  }
+  assert.equal(foldPlural("houses"), "house");
+  assert.equal(foldPlural("speeches"), "speech");
 });
 
 test("the anchor script refuses a host query, a socket, and a port mismatch", () => {

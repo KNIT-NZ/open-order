@@ -2,7 +2,6 @@ import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import type {
   AiDiagnosticTopResult,
   AiDiagnostics,
-  AiSourceDisposition,
   SearchResult,
 } from "./types";
 import { clientCheckNote } from "./client-check-note";
@@ -554,28 +553,24 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ].join("\n")
     : "Semantic selection summary: Not received";
 
-  // Print only the public form: counts and reason codes for refusals, no adjudicator free text.
+  // Counts and reason codes only. Authority labels stay out of this snapshot.
   const adjudication = selector?.scenarioAdjudication
     ? publicScenarioAdjudication(selector.scenarioAdjudication) : undefined;
-  const admittedRows = (rows: AiSourceDisposition[]) =>
-    rows.map((row) => `  ${row.corpus}:${row.citationLabel} — admitted; ${row.role ?? "no role"}; ${row.reason}`);
   const adjudicationSummary = adjudication ? [
     `Status: ${/^[a-z0-9_:-]+$/i.test(adjudication.status) ? adjudication.status : "other"}`,
     `Dossier count: ${adjudication.candidateCount}; primary review attempts: ${adjudication.providerAttempts}`,
-    `Dossier: ${adjudication.dossier?.join(", ") || "None reported"}`,
-    `Retrieved outside dossier (bounded): ${adjudication.retrievedOutsideDossier?.join(", ") || "None reported"}`,
-    `Final accepted: ${adjudication.selected.join(", ") || "None"}`,
+    `Dossier entries: ${adjudication.dossierCount ?? 0}`,
+    `Outside dossier: ${adjudication.outsideDossierCount ?? 0}`,
+    `Accepted sources: ${adjudication.selectedCount ?? 0}`,
     `Primary refusals: ${adjudication.rejected.join("; ") || "None"}`,
     `Unknown nominations: ${adjudication.unavailableNominations ?? "Not reported"}`,
     `Primary dispositions: ${adjudication.dispositionCounts?.join("; ") || "None reported"}`,
-    ...admittedRows(adjudication.dispositions),
     `Recovery: ${adjudication.recovery.status}`,
-    `Recovery candidates: ${adjudication.recovery.candidates.join(", ") || "None"}`,
-    `Recovery accepted: ${adjudication.recovery.selected.join(", ") || "None"}`,
+    `Recovery candidates: ${adjudication.recovery.candidates.join("; ") || "None"}`,
+    `Recovery accepted: ${adjudication.recovery.selectedCount ?? 0}`,
     `Recovery refusals: ${adjudication.recovery.rejected.join("; ") || "None"}`,
     `Recovery unknown nominations: ${adjudication.recovery.unavailableNominations ?? "Not reported"}`,
     `Recovery dispositions: ${adjudication.recovery.dispositionCounts?.join("; ") || "None reported"}`,
-    ...admittedRows(adjudication.recovery.dispositions),
     `Unresolved facets: ${adjudication.gaps.join("; ") || "None reported"}`,
   ].join("\n") : "Scenario adjudication: Not received";
 

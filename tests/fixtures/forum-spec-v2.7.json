@@ -1,6 +1,6 @@
 {
- "version": "forum-spec-v2.5",
- "schema": "see PR15-forum-spec-v2.5-ENGINEER-SAFE.md (which refers to the v2.4, v2.3, v2.2, v2.1, v2 and v1 mds)",
+ "version": "forum-spec-v2.7",
+ "schema": "see PR15-forum-spec-v2.7-ENGINEER-SAFE.md (which refers to the v2.6, v2.5, v2.4, v2.3, v2.2, v2.1, v2 and v1 mds)",
  "fixtures": {
   "committeeList": {
    "fixture": [
@@ -453,13 +453,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[FR21] FR21: generic committee phrase (determiners, head word, class or reference words only). (v2.4: FR21/FR18: the name has content tokens beyond determiners and the head word, and equals no single record, so it is unlisted. (v2.3: P-generic: generic committee phrase. (A generic committee phrase passes.)))",
+   "reason": "[FR22] FR22: a generic committee name against a leaf naming a specific committee. (v2.5: FR21: generic committee phrase (determiners, head word, class or reference words only). (v2.4: FR21/FR18: the name has content tokens beyond determiners and the head word, and equals no single record, so it is unlisted. (v2.3: P-generic: generic committee phrase. (A generic committee phrase passes.))))",
    "policyCall": null,
-   "rule": "FR21",
+   "rule": "FR22",
    "stratum": "committee|committee|generic",
    "deferred": null
   },
@@ -613,13 +613,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[FR21] FR21: generic committee phrase (determiners, head word, class or reference words only). (v2.4: FR21/FR18: the name has content tokens beyond determiners and the head word, and equals no single record, so it is unlisted. (v2.3: P-generic: generic committee phrase. (A generic committee phrase passes.)))",
+   "reason": "[FR22] FR22: a generic committee name against a leaf naming a specific committee. (v2.5: FR21: generic committee phrase (determiners, head word, class or reference words only). (v2.4: FR21/FR18: the name has content tokens beyond determiners and the head word, and equals no single record, so it is unlisted. (v2.3: P-generic: generic committee phrase. (A generic committee phrase passes.))))",
    "policyCall": null,
-   "rule": "FR21",
+   "rule": "FR22",
    "stratum": "committee|committee|generic",
    "deferred": null
   },
@@ -7417,13 +7417,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "qualified_partial",
-    "selector": "qualified_partial"
+    "adjudication": "supported",
+    "selector": "supported"
    },
    "principle": "different_proceeding_withholds",
-   "reason": "[R7] R7: an ancestor names a different proceeding. (Classless setting: compare only with the leaf.)",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (v2.6: R7: an ancestor names a different proceeding. (Classless setting: compare only with the leaf.))",
    "policyCall": null,
-   "rule": "R7",
+   "rule": "R5/R12",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
   },
@@ -7562,6 +7562,112 @@
    "rule": "R5/P-act",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
+  },
+  {
+   "settingKind": "committee",
+   "pathClaimKind": "committee",
+   "specificity": "generic",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "generic_specific_part",
+   "policyCall": null,
+   "stratum": "committee|committee|generic",
+   "novelProceeding": false,
+   "deferred": null,
+   "id": "S-172",
+   "setting": "a committee",
+   "question": "During a committee meeting, may the chairperson adjourn the meeting?",
+   "action": "adjourn the meeting",
+   "body": "The chairperson may adjourn the meeting.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "GADGET REVIEW COMMITTEE",
+     "kind": "committee_listed",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Meetings",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR23",
+   "reason": "[FR23] FR23: a generic committee name against a neutral leaf under a part heading that names a specific body. (Generic committee name, neutral leaf, specific part heading.)"
+  },
+  {
+   "settingKind": "committee",
+   "pathClaimKind": "committee",
+   "specificity": "generic",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "generic_specific_part",
+   "policyCall": null,
+   "stratum": "committee|committee|generic",
+   "novelProceeding": false,
+   "deferred": null,
+   "id": "S-173",
+   "setting": "the relevant committee",
+   "question": "May the relevant committee appoint a deputy chairperson?",
+   "action": "appoint a deputy chairperson",
+   "body": "The committee may appoint a deputy chairperson.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "LARKSPUR COMMITTEE",
+     "kind": "committee_unlisted",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Chairperson",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR23",
+   "reason": "[FR23] FR23: a generic committee name against a neutral leaf under a part heading that names a specific body. (Generic committee name, neutral leaf, specific part heading.)"
   }
  ],
  "changelog": [
@@ -7593,6 +7699,12 @@
   "Identity rule (clarified): before the word-multiset comparison, function words (on, of, for, and, the, and determiners) are removed. So 'Committee on Lantern Affairs' matches 'Lantern Affairs Committee'. Plural differences still do not match: 'Lanterns Committee' does not match 'Lantern Committee'.",
   "FR20 (confirmed): an ancestor that names the setting, including inside a combined heading ('FERNGULLY AND QUARRYSIDE' for 'the Ferngully'), does not differ from it.",
   "No plural folding applies to names only. Recognising a proceeding kind may fold number: a 'Hearings' heading is the generic heading for 'hearing'.",
-  "FR20 applies to classless settings only. Settings with a proceeding class follow R7. A classless setting under a different listed body is qualified, not withheld."
+  "FR20 applies to classless settings only. Settings with a proceeding class follow R7. A classless setting under a different listed body is qualified, not withheld.",
+  "FR22: a generic committee name (for example 'a committee' or 'the relevant committee') against a leaf that names a specific committee, whether listed or committee-shaped, is qualified. A generic name still passes against a generic or neutral committee leaf (for example a 'Select committees' heading or a general 'Committees' heading).",
+  "Confirmed: a singular or plural variant of a listed name ('Lanterns Committee' for 'Lantern Committee') is unlisted, which gives qualified. A reordered exact name ('Committee on Lantern Affairs' for 'Lantern Affairs Committee', after function words are removed) is listed: it matches its own body and is withheld against a different listed body.",
+  "Class words (confirmed source): committee-class words come only from structural headings that end in 'committees', never from body text, minus listed-name words. The pinned corpus yields no others.",
+  "FR20 (list closed): the identity signals that cap a classless self-match are exactly a listed body, a corpus proceeding, the Committee of the whole, a committee-shaped name, and a committee chapter or part. A bare proper-noun heading, or any other heading, is not a signal. Settings with a proceeding class still follow R7.",
+  "Correction notice (supersedes the FR20 example in the v2.4 md): a bare proper-noun heading (for example 'QUARRYSIDE') is NOT an identity signal. A classless setting that equals its own leaf is supported under such an ancestor. The v2.4 md listed 'QUARRYSIDE' among ancestors that give qualified; that example was wrong.",
+  "FR23: a generic committee name against a neutral leaf (for example 'Meetings' or 'Chairperson') whose part heading names a specific body, listed or committee-shaped, is qualified. This follows from the FR20 ancestor signal together with FR22. Example: 'a committee' under 'HARBOUR COMMITTEE > Meetings' gives qualified_partial; 'a committee' under 'Select committees > Meetings' still gives supported."
  ]
 }

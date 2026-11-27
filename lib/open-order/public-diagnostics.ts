@@ -1,9 +1,8 @@
 import type { AiScenarioAdjudication, AiSourceDisposition } from "./types";
 
-// Source-adjudication diagnostics that may reach the client (diagnostics event and
-// debug snapshot). Rejected authority labels, their reasons and adjudicator free
-// text (gaps) are reduced to counts and reason codes. Admitted labels stay: they are
-// already shown as the selected authorities.
+// Public diagnostics are counts and reason codes. Authority labels do not leave
+// this function: selected, dossier, the out-of-dossier list, disposition rows,
+// and recovery candidates and selected are emptied. Counts replace them.
 const CODE = /^[a-z0-9_.:,-]{1,64}$/i;
 const COUNTED = /^[a-z0-9_.:,-]{1,64}=\d{1,4}$/i;
 
@@ -43,11 +42,9 @@ function statusCounts(rows: readonly AiSourceDisposition[] | undefined, prior?: 
   return [...counts].map(([code, count]) => `${code}=${count}`);
 }
 
-function admittedOnly(rows: readonly AiSourceDisposition[] | undefined): AiSourceDisposition[] {
-  return (rows ?? [])
-    .filter((row) => row.status === "admitted")
-    .map((row) => ({ citationLabel: row.citationLabel, corpus: row.corpus, status: "admitted",
-      reason: reasonCode(row.reason), role: row.role && CODE.test(row.role) ? row.role : null }));
+function nonNegativeInt(value: unknown): number {
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 function gapCodes(gaps: readonly string[] | undefined): string[] {
@@ -67,11 +64,18 @@ function nominationCounts(input: NominationInput): {
 } | null {
   if (input.rejectedGoverning === undefined && input.rejectedInDossier === undefined
     && input.rejectedOutsideDossier === undefined) return null;
-  if (typeof input.rejectedGoverning === "number" || typeof input.rejectedInDossier === "number") {
+  if (typeof input.rejectedGoverning === "number" || typeof input.rejectedInDossier === "number"
+    || typeof input.rejectedOutsideDossier === "number") {
+    const inside = nonNegativeInt(input.rejectedInDossier);
+    const outside = nonNegativeInt(input.rejectedOutsideDossier);
+    const supplied = nonNegativeInt(input.rejectedGoverning);
+    const total = input.rejectedInDossier !== undefined || input.rejectedOutsideDossier !== undefined
+      ? inside + outside
+      : supplied;
     return {
-      rejectedGoverning: Number(input.rejectedGoverning) || 0,
-      rejectedInDossier: Number(input.rejectedInDossier) || 0,
-      rejectedOutsideDossier: Number(input.rejectedOutsideDossier) || 0,
+      rejectedGoverning: total,
+      rejectedInDossier: input.rejectedInDossier !== undefined || input.rejectedOutsideDossier !== undefined ? inside : 0,
+      rejectedOutsideDossier: input.rejectedInDossier !== undefined || input.rejectedOutsideDossier !== undefined ? outside : total,
     };
   }
   const rows = Array.isArray(input.rejectedGoverning) ? input.rejectedGoverning : [];
@@ -84,31 +88,46 @@ function nominationCounts(input: NominationInput): {
   return { rejectedGoverning: inside + outside, rejectedInDossier: inside, rejectedOutsideDossier: outside };
 }
 
-export function publicScenarioAdjudication(
-  input: AiScenarioAdjudication & NominationInput,
-): AiScenarioAdjudication & NominationInput {
+type PublicInput = AiScenarioAdjudication & NominationInput & {
+  selectedCount?: number;
+  dossierCount?: number;
+  outsideDossierCount?: number;
+  recovery?: AiScenarioAdjudication["recovery"] & { selectedCount?: number };
+};
+
+export function publicScenarioAdjudication(input: PublicInput): PublicInput {
   const recovery = input.recovery;
   const nominations = nominationCounts(input);
+  const recoveryCandidates = recovery?.candidates ?? [];
+  const recoveryCandidateCode = recoveryCandidates.length === 1 && /^recovery_candidates=\d+$/.test(recoveryCandidates[0] ?? "")
+    ? [...recoveryCandidates]
+    : [`recovery_candidates=${recoveryCandidates.length}`];
   return {
     status: reasonCode(input.status),
     candidateCount: Number(input.candidateCount) || 0,
-    selected: [...(input.selected ?? [])],
+    selected: [],
+    selectedCount: input.selected?.length ? input.selected.length : nonNegativeInt(input.selectedCount),
     rejected: rejectionCodes(input.rejected),
     gaps: gapCodes(input.gaps),
     providerAttempts: Number(input.providerAttempts) || 0,
-    dossier: [...(input.dossier ?? [])],
-    retrievedOutsideDossier: [...(input.retrievedOutsideDossier ?? [])],
-    dispositions: admittedOnly(input.dispositions),
+    dossier: [],
+    dossierCount: input.dossier?.length ? input.dossier.length : nonNegativeInt(input.dossierCount),
+    retrievedOutsideDossier: [],
+    outsideDossierCount: input.retrievedOutsideDossier?.length
+      ? input.retrievedOutsideDossier.length
+      : nonNegativeInt(input.outsideDossierCount),
+    dispositions: [],
     dispositionCounts: statusCounts(input.dispositions, input.dispositionCounts),
     unavailableNominations: Number(input.unavailableNominations) || 0,
     ...(nominations ?? {}),
     recovery: {
       status: reasonCode(recovery?.status ?? "not_reported"),
-      candidates: [...(recovery?.candidates ?? [])],
-      dispositions: admittedOnly(recovery?.dispositions),
+      candidates: recoveryCandidateCode,
+      dispositions: [],
       dispositionCounts: statusCounts(recovery?.dispositions, recovery?.dispositionCounts),
       unavailableNominations: Number(recovery?.unavailableNominations) || 0,
-      selected: [...(recovery?.selected ?? [])],
+      selected: [],
+      selectedCount: recovery?.selected?.length ? recovery.selected.length : nonNegativeInt(recovery?.selectedCount),
       rejected: rejectionCodes(recovery?.rejected),
     },
   };

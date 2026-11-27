@@ -124,7 +124,11 @@ test("diagnostics event and debug snapshot omit rejected labels, reasons and adj
   }
   assert.deepEqual(sent.rejected, ["rejected=3", "scope-not-established:actor=1", "other_reason=1", "unavailable-or-duplicate=1"]);
   assert.deepEqual(sent.gaps, ["unresolved_facets=2"]);
-  assert.deepEqual(sent.dispositions.map((row) => row.citationLabel), ["SO 1"]);
+  assert.deepEqual(sent.dispositions, []);
+  assert.deepEqual(sent.selected, []);
+  assert.deepEqual(sent.dossier, []);
+  assert.equal(sent.dossierCount, 1);
+  assert.equal(sent.selectedCount, 1);
   assert.deepEqual(sent.dispositionCounts, [
     "admitted:verified_source_witness=1", "rejected:scope-not-established:actor=1",
     "rejected:other_reason=1", "not_nominated:model_did_not_nominate=1",
@@ -134,7 +138,8 @@ test("diagnostics event and debug snapshot omit rejected labels, reasons and adj
   for (const snapshot of snapshots) {
     assert.match(snapshot, /Primary refusals: rejected=3; scope-not-established:actor=1/);
     assert.match(snapshot, /Unresolved facets: unresolved_facets=2/);
-    assert.match(snapshot, /standing_orders:SO 1 — admitted; governing; verified_source_witness/);
+    assert.equal(snapshot.includes("standing_orders:SO 1 — admitted"), false);
+    assert.match(snapshot, /Dossier entries: 1/);
   }
 });
 
@@ -165,9 +170,52 @@ test("debug snapshot keeps the route's fixed prune count and drops any other pru
   }
 });
 
+test("a refused dossier label and an unshown selected label stay out of public diagnostics", () => {
+  const refused = "QX REFUSED GOVERNING";
+  const unshown = "QX NEVER SHOWN";
+  const raw = {
+    status: "v40_no_governing_witness",
+    candidateCount: 1,
+    selected: [unshown],
+    rejected: [`${refused}:scope-not-established:actor`],
+    gaps: ["a private gap"],
+    providerAttempts: 1,
+    dossier: [`standing_orders:${refused}`],
+    retrievedOutsideDossier: [],
+    dispositions: [{ citationLabel: refused, corpus: "standing_orders", status: "rejected", reason: "scope-not-established:actor", role: "governing" }],
+    unavailableNominations: 0,
+    recovery: {
+      status: "not_needed",
+      candidates: [`standing_orders:${refused}`],
+      dispositions: [],
+      unavailableNominations: 0,
+      selected: [unshown],
+      rejected: [],
+    },
+  };
+  const sent = publicScenarioAdjudication(raw);
+  const event = JSON.stringify({ selectorSummary: { scenarioAdjudication: sent } });
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    selectorSummary: {
+      candidateCount: 0, minObligationCoverage: 0, allObligationsComplete: false,
+      obligationDetails: [], prePruneLabels: [], selectedLabels: [], scenarioAdjudication: raw,
+    },
+  });
+  for (const blob of [event, snapshot]) {
+    assert.equal(blob.includes(refused), false, blob.slice(0, 200));
+    assert.equal(blob.includes(unshown), false);
+  }
+  assert.deepEqual(sent.selected, []);
+  assert.deepEqual(sent.dossier, []);
+  assert.deepEqual(sent.recovery.selected, []);
+  assert.deepEqual(sent.recovery.candidates, ["recovery_candidates=1"]);
+  assert.deepEqual(sent.gaps, ["unresolved_facets=1"]);
+});
+
 test("provider failure codes stay, and a token with a space does not", () => {
   assert.equal(
     clientCheckNote(["code=UNAVAILABLE", "code=RESOURCE_EXHAUSTED", "kind=LEAKMARKER", "code=SO 404"]),
-    "code=UNAVAILABLE;code=RESOURCE_EXHAUSTED;kind=LEAKMARKER",
+    "code=UNAVAILABLE;code=RESOURCE_EXHAUSTED",
   );
 });

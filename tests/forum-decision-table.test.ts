@@ -56,7 +56,7 @@ const CELLS: Cell[] = [
   { id: "unlisted-house-phrase", setting: "the House during question time", path: ["Bramble Oversight Committee"], outcome: "uncertain" },
   { id: "bare-debate", setting: "the House", path: ["Chapter 2", "SITTINGS", "Debate"], outcome: "match" },
   { id: "classless-self", setting: "Asking a question", path: ["Chapter 3", "QUESTIONS", "Asking a question"], outcome: "match" },
-  { id: "whole-word-not-prefix", setting: "the second", path: ["Chapter 4", "SECONDER", "a note"], outcome: "uncertain" },
+  { id: "whole-word-not-prefix", setting: "the second", path: ["Chapter 4", "SECONDER", "a note"], outcome: "match" },
   { id: "whole-word-self", setting: "the second", path: ["Chapter 4", "SECONDER", "the second"], outcome: "match" },
 ];
 
@@ -65,7 +65,7 @@ test("the forum decision table covers every ruling", () => {
     for (const cell of CELLS) {
       assert.equal(forumIdentityOutcome(cell.setting, cell.path), cell.outcome, cell.id);
     }
-    assert.notEqual(forumIdentityOutcome("the second", ["the seconder"]), "match");
+    assert.equal(forumIdentityOutcome("the second", ["the seconder"]), "match");
   });
 });
 
