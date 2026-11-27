@@ -35,7 +35,8 @@ type Scenario =
   | "fallback"
   | "qualified_act"
   | "wrong_object"
-  | "qualified_fallback";
+  | "qualified_fallback"
+  | "overlooked_soft";
 
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
 const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
@@ -132,6 +133,9 @@ function claimsIn(prompt: string): Array<{ id: string; text: string }> {
 async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
   const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies"
     || scenario === "qualified_act" || scenario === "wrong_object" || scenario === "qualified_fallback";
+  const overlookedBody = `${QUOTE} The House may suspend business of a committee when its chair so decides.`;
+  const primaryForOverlooked = authority("SO 1", "s1", `${QUOTE} subject to SO 2.`);
+  const overlookedSource = authority("SO 2", "s2", overlookedBody);
   const pack = scenario === "no_bodies"
     ? []
     : scenario === "answer_edits"
@@ -140,7 +144,10 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
         ? [authority("SO 1", "s1", DEVICE)]
         : scenario === "wrong_object"
           ? [authority("SO 1", "s1", WRONG_OBJECT)]
-          : [authority("SO 1", "s1")];
+          : scenario === "overlooked_soft"
+            ? [primaryForOverlooked, overlookedSource]
+            : [authority("SO 1", "s1")];
+  const selectedPack = scenario === "overlooked_soft" ? [primaryForOverlooked] : pack;
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
@@ -155,11 +162,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       }
       const value = {
         selected: [{
-          citationLabel: "SO 1",
+          citationLabel: scenario === "overlooked_soft" ? "SO 2" : "SO 1",
           role: "governing",
           exactQuote: scenario === "qualified_act" || scenario === "qualified_fallback"
             ? DEVICE
-            : scenario === "wrong_object"
+            : scenario === "wrong_object" || scenario === "overlooked_soft"
               ? WRONG_OBJECT
               : QUOTE,
           actorMatches: true,
@@ -229,7 +236,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       searchProceduralAuthorities: search,
       loadHeadings: async () => [],
       selectV517ProductionAuthorities: async () => ({
-        finalAuthorities: pack,
+        finalAuthorities: selectedPack,
         prePruneLabels: [PRUNED_LABEL],
         selectedLabels: [LEGACY_LABEL],
         prunedRedundant: [],
@@ -354,7 +361,7 @@ test("a lexical act miss stays a qualified partial answer", async () => {
   assert.equal(done.abstained, false);
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
   const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
-  assert.ok(facets.some((item) => item.class === "applicability_uncertainty" && item.facet === "act_attestation_unconfirmed"));
+  assert.ok(facets.some((item) => item.class === "retrieval_uncertainty" && item.facet === "act_attestation_unconfirmed"));
 });
 
 test("the same verb with a different object stays partial and names the authority", async () => {
@@ -362,6 +369,24 @@ test("the same verb with a different object stays partial and names the authorit
   assert.equal(done.answerState, "partial");
   assert.notEqual(done.answerState, "supported");
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+});
+
+test("an overlooked soft act miss is qualified and is not the sole authority", async () => {
+  const events = await ask("overlooked_soft");
+  const done = doneOf(events);
+  assert.equal(done.answerState, "partial");
+  assert.notEqual(done.answerState, "supported");
+  assert.match(String(done.answerText), /\[SO 2\] has not been confirmed to govern the specific act asked about/);
+  assert.deepEqual(done.recoveredAuthorities, ["SO 2"]);
+  const listed = events.find((item) => item.event === "authorities")?.data.authorities as Array<{
+    citationLabel?: string;
+    unconfirmed?: boolean;
+  }>;
+  const labels = listed.map((item) => item.citationLabel);
+  assert.ok(labels.includes("SO 1"));
+  assert.ok(labels.includes("SO 2"));
+  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
+  assert.equal(listed.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
 });
 
 test("a qualified source is not listed as an authority when the answer is withheld", async () => {

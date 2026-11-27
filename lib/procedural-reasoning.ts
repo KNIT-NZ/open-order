@@ -2148,6 +2148,7 @@ export function buildFallbackAnswer(input: {
   failureClass?: "selection" | "provider" | "validation" | "drafting_unavailable" | "validation_unavailable";
   retrievedEvidenceCount?: number;
   unconfirmedAuthorities?: ProceduralSearchResult[];
+  withheldStage?: "selection" | "adjudication" | "recovery";
 }): string {
   const best = input.authorities.slice(0, 4);
   const citations = best.map((authority) => `[${authority.citationLabel}]`);
@@ -2157,7 +2158,12 @@ export function buildFallbackAnswer(input: {
   const draftingUnavailable = input.failureClass === "drafting_unavailable";
   const validationUnavailable = input.failureClass === "validation_unavailable";
 
-  const bottomLine = draftingUnavailable
+  const unconfirmed = input.unconfirmedAuthorities ?? [];
+  const unconfirmedOnly = unconfirmed.length > 0 && best.length === 0;
+  const withheldStage = input.withheldStage ?? "selection";
+  const bottomLine = unconfirmedOnly
+    ? "Sources were retrieved, but none was confirmed to govern the act asked about."
+    : draftingUnavailable
     ? (best.length > 0
       ? `Answer generation did not complete; the selected authorities are available for inspection ${citations.join(" ")}.`
       : "Answer generation did not complete.")
@@ -2183,9 +2189,11 @@ export function buildFallbackAnswer(input: {
 
   const options = best.length > 0
     ? best.map(classifyOption)
-    : [foundButRejected
-      ? "No source-grounded authority passed final selection."
-      : "No clearly relevant authority was retrieved."];
+    : [unconfirmedOnly
+      ? "No retrieved source was confirmed to govern the act asked about."
+      : foundButRejected
+        ? "No source-grounded authority passed final selection."
+        : "No clearly relevant authority was retrieved."];
 
   const inspect =
     best.length > 0
@@ -2200,15 +2208,17 @@ export function buildFallbackAnswer(input: {
             return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
           })
           .join("\n")
-      : foundButRejected
-        ? "- Retrieved candidates were withheld at selection."
-        : "- No authorities were retrieved.";
+      : unconfirmedOnly
+        ? "- Sources were retrieved, but none was confirmed to govern the act asked about."
+        : foundButRejected
+          ? `- Retrieved candidates were withheld at ${withheldStage}.`
+          : "- No authorities were retrieved.";
 
-  const unconfirmed = input.unconfirmedAuthorities ?? [];
-  const unconfirmedText = unconfirmed.length > 0
+  const unconfirmedList = unconfirmed;
+  const unconfirmedText = unconfirmedList.length > 0
     ? [
       "Possibly relevant, not confirmed to apply:",
-      ...unconfirmed.map((authority) =>
+      ...unconfirmedList.map((authority) =>
         `- [${authority.citationLabel}] has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`),
     ].join("\n")
     : "";

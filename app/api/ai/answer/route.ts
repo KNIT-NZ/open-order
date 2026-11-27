@@ -645,12 +645,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (unconfirmedLabels.size === 0) return;
             actUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
-              outcomeState.uncertainty.push({ class: "applicability_uncertainty", facet: "act_attestation_unconfirmed" });
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "act_attestation_unconfirmed" });
             }
           };
           const hiddenLabel = (label: string) => unconfirmedLabels.has(label) || [...unconfirmedLabels].some((item) => item.toLowerCase() === label.toLowerCase());
           const clientAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
             list.filter((item) => !hiddenLabel(String(item.citationLabel ?? "")));
+          const withUnconfirmed = <T extends { citationLabel?: string }>(list: T[]) =>
+            list.map((item) => ({ ...item, unconfirmed: hiddenLabel(String(item.citationLabel ?? "")) }));
           const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
             const authorities = input.authorities ?? [];
             const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
@@ -891,7 +893,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               : null;
 
           send("authorities", {
-            authorities: authorityPayload,
+            authorities: withUnconfirmed(authorityPayload),
           });
 
           const diagnosticConcepts = [
@@ -993,6 +995,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
+            const recoveryStatus = v40Diagnostic.recovery.status;
+            const withheldStage = !v40IncidentGate
+              ? "selection"
+              : recoveryStatus !== "not_needed" && recoveryStatus !== "no_eligible_sources"
+                ? "recovery"
+                : "adjudication";
             const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
@@ -1000,6 +1008,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               effectiveCorpus,
               fallbackReason: noAuthorityReason,
               failureClass: "selection",
+              withheldStage,
               retrievedEvidenceCount: searches.reduce((count, search) => count + search.results.length, 0),
             });
 
@@ -1834,7 +1843,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
             }
-            const citedAuthorities = authoritiesReferencedByAnswer(finalAnswer, authorityPayload);
+            const citedAuthorities = withUnconfirmed(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {

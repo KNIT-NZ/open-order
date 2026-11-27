@@ -70,6 +70,9 @@ test("different act words are admitted with a qualification instead of withheld"
 test("forum type matches a generic body and rejects two different names", () => {
   assert.equal(forumIdentityMismatch("select committee", ["Widget Oversight Committee"]), null);
   assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Select committees"]), null);
+  assert.equal(forumIdentityMismatch("House of Representatives", ["Sittings of the House"]), null);
+  assert.equal(forumIdentityMismatch("committee meeting", ["Procedure in committees"]), null);
+  assert.equal(forumIdentityMismatch("select committee hearing", ["Widget Oversight Committee"]), null);
   assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Gadget Review Committee"]), "forum-identity");
   assert.equal(forumIdentityMismatch("the House", ["Widget Oversight Committee"]), "forum-identity");
   assert.equal(forumIdentityMismatch("the House", ["Committee of the whole House"]), null);
@@ -188,6 +191,41 @@ test("withholding text matches the stage that withheld", () => {
   assert.match(selected, /withheld at selection/);
   assert.equal(selected.includes("No authorities were retrieved"), false);
   assert.equal(selected.includes("not retrieved"), false);
+  for (const stage of ["adjudication", "recovery"] as const) {
+    const text = buildFallbackAnswer({
+      question: "synthetic",
+      planIntent: "explain_rule",
+      authorities: [],
+      effectiveCorpus: null,
+      fallbackReason: "Retrieved evidence did not satisfy the semantic authority-selection requirements.",
+      failureClass: "selection",
+      retrievedEvidenceCount: 2,
+      withheldStage: stage,
+    });
+    assert.match(text, new RegExp(`withheld at ${stage}`));
+    assert.equal(text.includes("withheld at selection"), false);
+  }
+  const unconfirmed = buildFallbackAnswer({
+    question: "synthetic",
+    planIntent: "explain_rule",
+    authorities: [],
+    effectiveCorpus: null,
+    fallbackReason: "The AI draft cited authorities that were not retrieved.",
+    unconfirmedAuthorities: [{
+      sectionId: "s1", sectionKey: "s1", citationLabel: "SO 1", heading: "Synthetic",
+      path: ["House"], pathText: "House", documentSlug: "standing-orders",
+      documentTitle: "Standing Orders", documentCorpus: "standing_orders",
+      sourceUrl: null, sourceAnchor: null, rank: 1, sectionRank: 1, pathRank: 0,
+      bodyRank: 0, chunkRank: null, clusterSupportCount: 1, sectionContent: "synthetic",
+      matchSignals: {
+        exactSectionKeyMatch: false, exactCitationMatch: false, exactHeadingMatch: false,
+        headingPhraseMatch: false, bodyPhraseMatch: false, pathPhraseMatch: false,
+      },
+    }],
+  });
+  assert.match(unconfirmed, /none was confirmed to govern the act asked about/);
+  assert.equal(unconfirmed.includes("No authorities were retrieved"), false);
+  assert.equal(unconfirmed.includes("No sufficiently relevant authority was retrieved"), false);
   const empty = buildFallbackAnswer({
     question: "synthetic",
     planIntent: "explain_rule",
