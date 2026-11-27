@@ -669,8 +669,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const has = (set: Set<string>) => set.has(text) || [...set].some((item) => item.toLowerCase() === text.toLowerCase());
             return has(actLabels) || has(forumLabels);
           };
-          const withUnconfirmed = <T extends { citationLabel?: string }>(list: T[]) =>
-            list.map((item) => ({ ...item, unconfirmed: hiddenLabel(String(item.citationLabel ?? "")) }));
+          // Filter first. Survivors are confirmed, so the flag is false. The client lists this array as authorities.
+          const listedAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
+            list
+              .filter((item) => !hiddenLabel(String(item.citationLabel ?? "")))
+              .map((item) => ({ ...item, unconfirmed: false }));
           const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
             const authorities = input.authorities ?? [];
             const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
@@ -903,13 +906,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               }
             }
           }
-          const finalAuthorities = selected.finalAuthorities;
           const forumSetting = plan.situation?.setting ?? "";
-          for (const authority of finalAuthorities) {
-            if (forumIdentityOutcome(forumSetting, authority.path ?? []) === "uncertain") {
-              noteForumQualification([authority.citationLabel]);
-            }
+          const forumKept = [];
+          for (const authority of selected.finalAuthorities) {
+            const outcome = forumIdentityOutcome(forumSetting, authority.path ?? []);
+            if (outcome === "reject") continue;
+            if (outcome === "uncertain") noteForumQualification([authority.citationLabel]);
+            forumKept.push(authority);
           }
+          selected = { ...selected, finalAuthorities: forumKept };
+          const finalAuthorities = forumKept;
           const forumCodes = [
             ...forumCountCodes("selector_forum", tallyForumOutcomes(searches.flatMap((search) => search.results), forumSetting)),
             ...forumCountCodes("overlooked_forum", tallyForumOutcomes(overlookedRecords, forumSetting)),
@@ -926,7 +932,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               : null;
 
           send("authorities", {
-            authorities: withUnconfirmed(authorityPayload),
+            authorities: listedAuthorities(authorityPayload),
           });
 
           const diagnosticConcepts = [
@@ -1060,7 +1066,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: withUnconfirmed(authorityPayload),
+              authorities: listedAuthorities(authorityPayload),
               fallbackReason: noAuthorityReason,
             });
 
@@ -1144,7 +1150,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload),
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1198,7 +1204,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload),
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1242,7 +1248,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload),
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
                 claimValidationNote,
                 invalidCitations: [],
@@ -1323,7 +1329,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   latencyMs: Date.now() - started,
                   plan,
                   answerText: fallbackAnswer,
-                  authorities: withUnconfirmed(authorityPayload),
+                  authorities: listedAuthorities(authorityPayload),
                   fallbackReason,
                   claimValidationNote,
                 });
@@ -1363,7 +1369,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload),
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1556,7 +1562,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload), fallbackReason,
+                authorities: listedAuthorities(authorityPayload), fallbackReason,
                 claimValidationNote: clientCheckNote([
                   "responsiveness=withheld",
                   `incident_repair=${v401RepairDiagnostic}`,
@@ -1828,7 +1834,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: withUnconfirmed(authorityPayload),
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
                 // v29: existing debug-snapshot field, only for this failure path.
                 claimValidationNote: ooV29FailureTrace,
@@ -1884,7 +1890,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
             }
-            const citedAuthorities = withUnconfirmed(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
+            const citedAuthorities = listedAuthorities(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {
@@ -1942,7 +1948,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: withUnconfirmed(authorityPayload),
+              authorities: listedAuthorities(authorityPayload),
               fallbackReason,
               claimValidationNote: clientCheckNote([
                 `operation=${operationFailure.phase}`,

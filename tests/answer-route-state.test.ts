@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { AiProviderError } from "../lib/ai/errors";
@@ -39,7 +40,21 @@ type Scenario =
   | "qualified_fallback"
   | "overlooked_soft"
   | "forum_codes"
-  | "forum_ambiguous";
+  | "forum_same"
+  | "forum_reject"
+  | "forum_generic"
+  | "forum_ambiguous"
+  | "forum_longer"
+  | "forum_subclass";
+
+const forumCase: Partial<Record<Scenario, { setting: string; path: string }>> = {
+  forum_same: { setting: "Widget Committee", path: "Widget Committee" },
+  forum_reject: { setting: "Gadget Review Committee", path: "Widget Committee" },
+  forum_generic: { setting: "select committee", path: "Widget Oversight Committee" },
+  forum_longer: { setting: "Tarn Widget Committee", path: "Widget Committee" },
+  forum_subclass: { setting: "the Tarn Subcommittee", path: "Widget Oversight Committee" },
+  forum_ambiguous: { setting: "Widget Committee", path: "Widget Trade Committee" },
+};
 
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
 const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
@@ -142,7 +157,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
   const forumPrimary = authority("SO 1", "s1", `${QUOTE} subject to SO 2. subject to SO 3.`, ["Widget Oversight Committee"]);
   const forumMismatch = authority("SO 2", "s2", QUOTE, ["Gadget Review Committee"]);
   const forumShort = authority("SO 3", "s3", QUOTE, ["Widget Committee"]);
-  const ambiguousSource = authority("SO 1", "s1", QUOTE, ["Widget Trade Committee"]);
+  const forumPath = forumCase[scenario];
   const pack = scenario === "no_bodies"
     ? []
     : scenario === "answer_edits"
@@ -155,8 +170,8 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
             ? [primaryForOverlooked, overlookedSource]
             : scenario === "forum_codes"
               ? [forumPrimary, forumMismatch, forumShort]
-              : scenario === "forum_ambiguous"
-                ? [ambiguousSource]
+              : forumPath
+                ? [authority("SO 1", "s1", QUOTE, [forumPath.path])]
                 : [authority("SO 1", "s1")];
   const selectedPack = scenario === "overlooked_soft" ? [primaryForOverlooked]
     : scenario === "forum_codes" ? [forumPrimary]
@@ -204,8 +219,8 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
       const value = scenario === "forum_codes"
         ? plan("procedure", "Widget Oversight Committee", "a delegate")
-        : scenario === "forum_ambiguous"
-          ? plan("procedure", "Widget Committee")
+        : forumPath
+          ? plan("procedure", forumPath.setting)
           : plan(incident ? "incident" : "procedure");
       request.validate?.(value);
       request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
@@ -417,12 +432,11 @@ test("an overlooked soft act miss is qualified and is not the sole authority", a
   }>;
   const labels = listed.map((item) => item.citationLabel);
   assert.ok(labels.includes("SO 1"));
-  assert.ok(labels.includes("SO 2"));
+  assert.equal(labels.includes("SO 2"), false);
   assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
-  assert.equal(listed.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
   const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
-  assert.ok(doneAuthorities.every((item) => typeof item.unconfirmed === "boolean"));
-  assert.equal(doneAuthorities.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
+  assert.equal(doneAuthorities.some((item) => item.citationLabel === "SO 2"), false);
+  assert.ok(doneAuthorities.every((item) => item.unconfirmed === false));
 });
 
 test("a qualified source is not listed as an authority when the answer is withheld", async () => {
@@ -431,9 +445,7 @@ test("a qualified source is not listed as an authority when the answer is withhe
   assert.match(String(done.answerText), /Possibly relevant, not confirmed to apply/);
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
   assert.equal(String(done.answerText).includes("Best authorities to inspect or cite:\n- [SO 1]"), false);
-  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
-  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
-  assert.ok(listed.every((item) => typeof item.unconfirmed === "boolean"));
+  assert.deepEqual(done.authorities, []);
   const facets = done.uncertainty as Array<{ facet?: string }>;
   assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
 });
@@ -478,14 +490,157 @@ test("an ambiguous committee parse is never a supported answer", async () => {
   assert.equal(done.answerState, "partial");
   assert.notEqual(done.answerState, "supported");
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to be the body the question is about/);
-  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
-  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
+  assert.deepEqual(done.authorities, []);
+  const panel = events.find((item) => item.event === "authorities")?.data.authorities as Array<{ citationLabel?: string }>;
+  assert.equal(panel.some((item) => item.citationLabel === "SO 1"), false);
   const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
   assert.ok(facets.some((item) => item.class === "retrieval_uncertainty" && item.facet === "forum_identity_unconfirmed"));
   const codes = ((events.find((item) => item.event === "diagnostics")?.data.selectorSummary as { forumCodes?: string[] }).forumCodes) ?? [];
   assert.ok(codes.some((code) => code === "selector_forum=forum-ambiguous:1"));
   assert.ok(codes.every((code) => FORUM_CODE.test(code)));
   assert.equal(codes.join(";").includes("Widget"), false);
+});
+
+test("the selector route applies all four forum outcomes", async () => {
+  const same = doneOf(await withCorpusCommitteeNames(["Widget Committee"], () => ask("forum_same")));
+  assert.equal(same.answerState, "supported");
+  assert.equal(same.route, "semantic_selector");
+  const sameAuthorities = same.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.equal(sameAuthorities.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
+
+  const generic = doneOf(await withCorpusCommitteeNames(["Widget Oversight Committee"], () => ask("forum_generic")));
+  assert.equal(generic.answerState, "supported");
+  assert.equal((generic.authorities as Array<{ unconfirmed?: boolean }>).every((item) => item.unconfirmed === false), true);
+
+  const rejected = doneOf(await withCorpusCommitteeNames(
+    ["Widget Committee", "Gadget Review Committee"],
+    () => ask("forum_reject"),
+  ));
+  assert.equal(rejected.answerState, "not_answered");
+  assert.notEqual(rejected.answerState, "supported");
+  assert.deepEqual(rejected.authorities, []);
+
+  const longer = doneOf(await withCorpusCommitteeNames(["Widget Committee"], () => ask("forum_longer")));
+  assert.equal(longer.answerState, "partial");
+  assert.notEqual(longer.answerState, "supported");
+  assert.match(String(longer.answerText), /has not been confirmed to be the body the question is about/);
+  assert.deepEqual(longer.authorities, []);
+
+  const subclass = doneOf(await withCorpusCommitteeNames(["Widget Oversight Committee"], () => ask("forum_subclass")));
+  assert.equal(subclass.answerState, "partial");
+  assert.notEqual(subclass.answerState, "supported");
+  assert.deepEqual(subclass.authorities, []);
+});
+
+test("withholding paths leave unconfirmed sources out of the authority list", async () => {
+  const cited = `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\n${QUOTE} [SO 1]\n\nSettlement: supported`;
+  const sites = [
+    { code: "no_authority_selected", draft: cited, kind: "procedure" as const, selected: false },
+    { code: "empty_draft", draft: " ", kind: "procedure" as const },
+    { code: "invalid_citations", draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\n${QUOTE} [SO 1]\n\nBest authorities to inspect or cite:\n- [SO 99] Not retrieved`, kind: "procedure" as const },
+    { code: "no_grounded_claims", draft: "Bottom line:\n\nWhat this means:\n", kind: "procedure" as const },
+    { code: "not_responsive", draft: cited, kind: "incident" as const, responsive: false },
+    { code: "bottom_line_lost", draft: cited, kind: "procedure" as const, support: false },
+    { code: "drafting_unavailable", draft: cited, kind: "procedure" as const, throwDraft: true },
+  ];
+  for (const site of sites) {
+    const events = await withCorpusCommitteeNames(["Widget Trade Committee", "Widget Review Committee"], async () => {
+      const source = authority("SO 1", "s1", QUOTE, ["Widget Trade Committee"]);
+      const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
+        request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
+        if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
+          const value = {
+            selected: [{
+              citationLabel: "SO 1", role: "governing", exactQuote: QUOTE,
+              actorMatches: true, settingMatches: true, actionMatches: true, stageMatches: true, rationale: "synthetic",
+            }],
+            remainingUncertainties: [], explanation: "quoted",
+          };
+          request.validate?.(value);
+          request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+          return value as T;
+        }
+        if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
+          const value = plan(site.kind, "Widget Committee");
+          request.validate?.(value);
+          request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+          return value as T;
+        }
+        const found = claimsIn(request.prompt);
+        const value = {
+          claims: found.map((claim) => ({ id: claim.id, supported: site.support !== false, reason: "checked" })),
+          responsiveness: site.responsive === false
+            ? { answersUserQuestion: false, reason: "withheld", unaddressedParts: ["decision"] }
+            : { answersUserQuestion: true, reason: "fits", unaddressedParts: [] as string[] },
+        };
+        request.validate?.(value);
+        request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+        return value as T;
+      };
+      const streamText = async (request: AiStreamTextRequest): Promise<string> => {
+        request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
+        if (site.throwDraft && !request.systemInstruction.includes("repair")) {
+          throw new AiProviderError({
+            message: "synthetic draft failure", kind: "unknown", statusCode: 500, retryable: false, provider: "gemini",
+          });
+        }
+        request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+        if (request.systemInstruction.includes("repair")) return " ";
+        return site.draft;
+      };
+      const response = await (await loadAnswerRoute())(
+        new NextRequest("http://localhost/api/ai/answer", {
+          method: "POST",
+          body: JSON.stringify({ question: "May the House suspend the sitting?" }),
+        }),
+        {
+          generateJson, streamText,
+          searchProceduralAuthorities: async (): Promise<ProceduralSearchResponse> => ({
+            query: "suspension", corpus: null, limit: 10, offset: 0, total: 1, hasMore: false,
+            results: site.selected === false ? [] : [source],
+          }),
+          loadHeadings: async () => [],
+          selectV517ProductionAuthorities: async () => ({
+            finalAuthorities: site.selected === false ? [] : [source],
+            prePruneLabels: [], selectedLabels: [], prunedRedundant: [],
+            minObligationCoverage: 1, allObligationsComplete: true,
+            obligationDetails: [{ coverage: 1, complete: true }],
+            candidateCount: site.selected === false ? 0 : 1,
+            evidenceAdmission: "synthetic", rejectedAuthorities: [],
+          }),
+        },
+      );
+      const text = await response.text();
+      const parsed: Array<{ event: string; data: Record<string, unknown> }> = [];
+      for (const block of text.split("\n\n")) {
+        let event = "";
+        const data: string[] = [];
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice(7).trim();
+          else if (line.startsWith("data: ")) data.push(line.slice(6));
+        }
+        if (event && data.length > 0) parsed.push({ event, data: JSON.parse(data.join("\n")) as Record<string, unknown> });
+      }
+      return parsed;
+    });
+    const done = doneOf(events);
+    assert.equal(done.fallbackCode, site.code, site.code);
+    const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+    const panel = (events.find((item) => item.event === "authorities")?.data.authorities ?? []) as Array<{
+      citationLabel?: string;
+      unconfirmed?: boolean;
+    }>;
+    for (const list of [doneAuthorities, panel]) {
+      assert.equal(list.some((item) => item.citationLabel === "SO 1"), false, site.code);
+      assert.ok(list.every((item) => item.unconfirmed === false), site.code);
+    }
+  }
+});
+
+test("every client authority list is filtered before the flag is set", () => {
+  const source = readFileSync(new URL("../app/api/ai/answer/route.ts", import.meta.url), "utf8");
+  assert.equal(source.includes("withUnconfirmed("), false);
+  assert.ok((source.match(/listedAuthorities\(/g) ?? []).length >= 10);
 });
 
 test("an unretrieved citation falls back and the done answer is not answered", async () => {

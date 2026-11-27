@@ -2,10 +2,10 @@ export function foldCommitteeText(text: string): string;
 export function extractCommitteeTokens(text: string): string[];
 export function isGenericCommitteePhrase(tokens: string[]): boolean;
 export function nameShapedCommitteeText(text: string): boolean;
-export function sameCommitteeTokens(left: string[], right: string[]): boolean;
+export function identifiesCorpusRecord(parsed: string[], record: string[]): boolean;
 export type CommitteeNameRecord = {
   tokens: string[];
-  sectionId: string;
+  sectionId?: string;
   citationLabel: string;
   path: string[];
 };

@@ -72,9 +72,46 @@ test("the same body in another form matches, and a shared word does not", () => 
     "Widgets, Gadgets and Trade Committee",
     "Gadgets Affairs Committee",
   ], () => {
-    match("Widgets Committee", "Widgets, Gadgets and Trade Committee");
+    match("Widgets and Gadgets Committee", "Widgets, Gadgets and Trade Committee");
     reject("Gadgets Affairs Committee", "Widgets, Gadgets and Trade Committee");
-    reject("Gadgets Committee", "Widgets, Gadgets and Trade Committee");
+    assert.equal(forumIdentityOutcome("Widgets Committee", ["Widgets, Gadgets and Trade Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("Gadgets Committee", ["Widgets, Gadgets and Trade Committee"]), "uncertain");
+  });
+});
+
+test("a longer unlisted name does not collapse onto a listed body", () => {
+  withCorpusCommitteeNames(["Widget Committee"], () => {
+    for (const setting of [
+      "Tarn Widget Committee",
+      "Widget Tarn Committee",
+      "Widget and Tarn Committee",
+      "Committee on Widgets and Tarns",
+    ]) {
+      assert.equal(forumIdentityOutcome(setting, ["Widget Committee"]), "uncertain", setting);
+      assert.equal(forumIdentityMismatch(setting, ["Widget Committee"]), null, setting);
+    }
+  });
+});
+
+test("one shared word does not resolve to a listed body", () => {
+  withCorpusCommitteeNames([
+    "Standing Orders Committee",
+    "Regulations Review Committee",
+  ], () => {
+    for (const phrase of ["a standing committee", "Standing Committee", "the review committee", "a committee of the Assembly"]) {
+      assert.equal(forumIdentityOutcome(phrase, ["Regulations Review Committee"]), "uncertain", phrase);
+      assert.equal(forumIdentityOutcome(phrase, ["Standing Orders Committee"]), "uncertain", phrase);
+      assert.equal(forumIdentityMismatch(phrase, ["Standing Orders Committee"]), null, phrase);
+    }
+    match("this committee", "Standing Orders Committee");
+  });
+});
+
+test("a setting with no forum class is ambiguous against a named body", () => {
+  withCorpusCommitteeNames(["Widget Oversight Committee"], () => {
+    assert.equal(forumIdentityOutcome("the Tarn Subcommittee", ["Widget Oversight Committee"]), "uncertain");
+    assert.equal(forumIdentityMismatch("the Tarn Subcommittee", ["Widget Oversight Committee"]), null);
+    match("the Tarn Subcommittee", "select committees");
   });
 });
 
