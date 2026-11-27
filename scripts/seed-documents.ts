@@ -29,6 +29,10 @@ async function main() {
   const manifest = JSON.parse(raw) as SourceManifest
 
   for (const source of manifest.sources) {
+    if (source.corpus === "standing_orders") {
+      console.log("Standing Orders are managed by the edition replacement workflow; skipping metadata seed.");
+      continue;
+    }
     const resolvedSource = source.sourcePath ?? source.sourceUrl ?? null
 
     await db.query(

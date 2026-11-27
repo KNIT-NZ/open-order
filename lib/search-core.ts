@@ -4,12 +4,23 @@ export function cleanQuery(input: string): string {
   return input.trim().replace(/\s+/g, " ");
 }
 
+function deriveAppendixKey(query: string): string | null {
+  const q = cleanQuery(query).toLowerCase();
+  const clause = q.match(/^appendix\s+([a-f])\s+cl(?:ause)?\.?\s+(\d+[a-z]*)$/);
+  if (clause) return `appendix-${clause[1]}-cl-${clause[2]}`;
+  const row = q.match(/^appendix\s+([a-f])\s+(table|part)\s+(\d+)\s+row\s+(\d+)$/);
+  if (row) return `appendix-${row[1]}-${row[2]}-${row[3]}-row-${row[4]}`;
+  return q === "appendix a note" ? "appendix-a-note" : null;
+}
+
 export function deriveExactSectionKey(query: string): string | null {
   const cleaned = cleanQuery(query);
+  const appendix = deriveAppendixKey(cleaned);
+  if (appendix) return appendix;
 
   const standingOrderMatch =
-    cleaned.match(/^so\s*(\d+[a-z]?)$/i) ??
-    cleaned.match(/^standing\s+order\s+(\d+[a-z]?)$/i);
+    cleaned.match(/^so\s*(\d+[a-z]*)$/i) ??
+    cleaned.match(/^standing\s+order\s+(\d+[a-z]*)$/i);
 
   if (standingOrderMatch) {
     return `so-${standingOrderMatch[1].toLowerCase()}`;
@@ -25,10 +36,12 @@ export function deriveExactSectionKey(query: string): string | null {
 
 export function deriveExactCitationCompact(query: string): string | null {
   const cleaned = cleanQuery(query);
+  const appendix = deriveAppendixKey(cleaned);
+  if (appendix) return appendix.replace(/-/g, "");
 
   const standingOrderMatch =
-    cleaned.match(/^so\s*(\d+[a-z]?)$/i) ??
-    cleaned.match(/^standing\s+order\s+(\d+[a-z]?)$/i);
+    cleaned.match(/^so\s*(\d+[a-z]*)$/i) ??
+    cleaned.match(/^standing\s+order\s+(\d+[a-z]*)$/i);
 
   if (standingOrderMatch) {
     return `so${standingOrderMatch[1].toLowerCase()}`;

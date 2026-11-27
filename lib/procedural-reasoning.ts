@@ -2086,6 +2086,7 @@ function stripBracketedCitations(text: string): string {
 function normalizeAuthorityMention(text: string): string {
   return text
     .replace(/^standing order\s+/i, "SO ")
+    .replace(/^(appendix\s+[a-f]\s+)cl(?:ause)?\.?\s+/i, "$1cl ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -2103,7 +2104,7 @@ export function validateAnswerAuthorityMentions(input: {
 
   const matches = [
     ...new Set(
-      prose.match(/\b(?:standing order|so)\s+\d+[a-z]?|\b\d+\/\d+\b/gi) ?? [],
+      prose.match(/\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi) ?? [],
     ),
   ];
 
@@ -2130,7 +2131,7 @@ export function rewriteForbiddenAuthorityMentions(input: {
     input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
   );
 
-  const pattern = /\b(?:standing order|so)\s+\d+[a-z]?|\b\d+\/\d+\b/gi;
+  const pattern = /\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi;
   const removed: string[] = [];
 
   const rewritten = input.answerText.replace(pattern, (match) => {

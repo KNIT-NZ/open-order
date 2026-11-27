@@ -6,6 +6,8 @@
  * operative rule can veto a categorical claim about the same actor and action.
  * Does not infer what a cross-referenced provision says or add authorities.
  */
+import { sourceLabel } from "./claim-appeal";
+
 export type QualificationClaim = {
   id: string;
   text: string;
@@ -77,7 +79,7 @@ function hasSubjectOverlap(claim: string, operative: string): boolean {
 function numberedSubsections(text: string): string[] {
   // Do not split lettered lists: the exception and governing rule must remain
   // together even where nested (a)/(b) paragraphs occur.
-  const chunks = text.split(/(?=\(\d+[a-z]?\)\s)/i).map((part) => part.trim()).filter(Boolean);
+  const chunks = text.split(/(?=\(\d+[a-z]*\)\s)/i).map((part) => part.trim()).filter(Boolean);
   return chunks.length ? chunks : [text];
 }
 function exceptionArms(subsection: string): Array<{kind: string; text: string}> {
@@ -98,7 +100,7 @@ function acknowledgesArm(claim: string, arm: {kind: string; text: string}): bool
   if (GENERIC_ACKNOWLEDGEMENT.test(claim)) return true;
   const claimNormal = normalise(claim);
   const armNormal = normalise(arm.text);
-  const references = [...armNormal.matchAll(/standing\s+order\s+(\d+[a-z]?)/gi)];
+  const references = [...armNormal.matchAll(/standing\s+order\s+(\d+[a-z]*)\b/gi)];
   // An express reference is an adequate acknowledgement of an unexamined
   // cross-reference; we do not infer the contents of that other provision.
   if (references.some((m) => new RegExp(`\\b(?:so|standing order)\\s+${m[1]}\\b`, "i").test(claimNormal))) return true;
@@ -124,7 +126,7 @@ export function findOmittedSourceQualifications(input: {
     for (const citation of claim.citations) {
       // Section qualifiers cite the same selected parent authority, but a
       // reference alone must never manufacture another available source.
-      const parent = citation.replace(/(?:\(\d+[a-z]?\))+$/i, "").trim();
+      const parent = sourceLabel(citation);
       const authority = authorityMap.get(normalise(parent));
       if (!authority?.sectionContent) continue;
       for (const subsection of numberedSubsections(authority.sectionContent)) {

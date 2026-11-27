@@ -1,0 +1,304 @@
+{
+  "edition": "2026",
+  "effectiveDate": "2026-10-02",
+  "candidateSha256": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100",
+  "wordSha256": "bd8fb64c2513279debc5f869c94b8f855c6e07e16291d9e3f0677cf7dcef27d0",
+  "wordUrl": "https://www3.parliament.nz/media/12273/standing-orders-2026.docx",
+  "sourceManifestSha256": "a0850c179400da769a2cd50ea1c1c7cbd15f0c63ee21af22fb77c7eacf995916",
+  "sectionCount": 561,
+  "chunkCount": 620,
+  "document": {
+    "slug": "standing-orders-2026",
+    "title": "Standing Orders of the House of Representatives 2026",
+    "corpus": "standing_orders",
+    "sourceType": "reconciled_html_word",
+    "sourceUrl": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/",
+    "edition": "2026",
+    "language": "en",
+    "metadata": {
+      "jurisdiction": "New Zealand",
+      "institution": "House of Representatives",
+      "effectiveDate": "2026-10-02",
+      "candidateSha256": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100",
+      "wordSha256": "bd8fb64c2513279debc5f869c94b8f855c6e07e16291d9e3f0677cf7dcef27d0",
+      "provenanceFile": "data/sources/standing-orders-2026.provenance.json"
+    }
+  },
+  "sources": [
+    {
+      "id": "index",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/",
+      "contentSha256": "4691f6238337c3dda825b62d82fe7da6b9e9bd7e16fc7f8ec60426a5900aea13",
+      "fetchedAt": "2026-11-27T00:03:32.953Z"
+    },
+    {
+      "id": "contents",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-links/",
+      "contentSha256": "f01db3c9564670e8500111436c89e198ad3e426d8d2f3ad358e0f0f70cf4c0d5",
+      "fetchedAt": "2026-11-27T00:03:34.302Z"
+    },
+    {
+      "id": "chapter-1",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-1-general-provisions-and-office-holders/",
+      "contentSha256": "fb5cfe5ae51f38c0d6f87cc03a2bb63269664db1cfb6583548ff5f6bae4bb134",
+      "fetchedAt": "2026-11-27T00:03:35.428Z"
+    },
+    {
+      "id": "chapter-2",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-2-sittings-of-the-house/",
+      "contentSha256": "78c874d12325358adab78e7a839069347701e7022270023c9a33e16d2fa77b0f",
+      "fetchedAt": "2026-11-27T00:03:36.396Z"
+    },
+    {
+      "id": "chapter-3",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-3-general-procedures/",
+      "contentSha256": "fafeb9a789561656b4c86784dbce3daee99c6fe1dae4f9de6f683b252222a4bf",
+      "fetchedAt": "2026-11-27T00:03:37.391Z"
+    },
+    {
+      "id": "chapter-4",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-4-select-committees/",
+      "contentSha256": "52a880a41bb85914f777822713d83c0247e72704fea5e5ab13a211b1941319df",
+      "fetchedAt": "2026-11-27T00:03:38.418Z"
+    },
+    {
+      "id": "chapter-5",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-5-legislative-procedures/",
+      "contentSha256": "df2b0a1c8915d32dcbbfac56c8e025dd3ba169a4976475c973293b81fd048673",
+      "fetchedAt": "2026-11-27T00:03:39.373Z"
+    },
+    {
+      "id": "chapter-6",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-6-financial-procedures/",
+      "contentSha256": "b3d5b10f87fd5ca4584280e0fdca55da7457f2e01588e003f05405f980f71417",
+      "fetchedAt": "2026-11-27T00:03:40.505Z"
+    },
+    {
+      "id": "chapter-7",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-7-non-legislative-procedures/",
+      "contentSha256": "d0e897eeb4265e86a666a6ff2d743f40a2ed05caad2a7a2feedf044a8a38f0a5",
+      "fetchedAt": "2026-11-27T00:03:41.507Z"
+    },
+    {
+      "id": "chapter-8",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/chapter-8-parliamentary-privilege/",
+      "contentSha256": "5a5f1b5c86c6da0a9abca9689c02256e8c725e2703135d2f57b65b0d8044f472",
+      "fetchedAt": "2026-11-27T00:03:42.265Z"
+    },
+    {
+      "id": "appendix-a",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-a-time-limits-for-speeches-and-debates/",
+      "contentSha256": "276b3dd24589d7ee36c7df49b4a7237ed0eb5cc9124b01564c00326881ca80da",
+      "fetchedAt": "2026-11-27T00:03:43.247Z"
+    },
+    {
+      "id": "appendix-b",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-b-pecuniary-and-other-specified-interests/",
+      "contentSha256": "a201cc69e1c12069a4c015b008a225798742ca373569a868298445c777c3a149",
+      "fetchedAt": "2026-11-27T00:03:44.406Z"
+    },
+    {
+      "id": "appendix-c",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-c-preliminary-procedures-for-private-bills-and-local-bills-and-local-legislation-bills/",
+      "contentSha256": "23b882c3e6af2f31b04e72c5eeb8858eddeb12e7a66ba5b7d031af095fe010d0",
+      "fetchedAt": "2026-11-27T00:03:45.313Z"
+    },
+    {
+      "id": "appendix-d",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-d-coverage-of-proceedings/",
+      "contentSha256": "5109b0ca5b3f2a77aecbe7c454060e40f9f324a5460143472b46543754b59294",
+      "fetchedAt": "2026-11-27T00:03:46.665Z"
+    },
+    {
+      "id": "appendix-e",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-e-select-committee-examination-of-parliamentary-papers/",
+      "contentSha256": "1ed68c27a7b3b971ba9882232dfbfcc3be75ca9399d59cc64b32471738145957",
+      "fetchedAt": "2026-11-27T00:03:47.683Z"
+    },
+    {
+      "id": "appendix-f",
+      "url": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/appendix-f-declarations-of-inconsistency/",
+      "contentSha256": "20a7824ce191ce15de41ac9fcd8e2afd72dda9d0ac023a142a91b29c9c730871",
+      "fetchedAt": "2026-11-27T00:03:48.680Z"
+    }
+  ],
+  "wordReview": {
+    "counts": {
+      "orders": 445,
+      "appendix_A": 25,
+      "appendix_B": 24,
+      "appendix_C": 22,
+      "appendix_D": 9,
+      "appendix_E": 26,
+      "appendix_F": 10
+    },
+    "changes": [
+      {
+        "section": "appendix-c-cl-4",
+        "reason": "split distinct clause from nonstandard HTML paragraph heading; Word confirms boundary"
+      },
+      {
+        "section": "so-94",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Time during which member is suspended",
+        "heading": "Period of suspension of member after being named",
+        "priorContentSha256": "8b8f9382983e78826ac137dc143fdd49350756a765b12f50b64e0d0b304de4f9",
+        "newContentSha256": "8b8f9382983e78826ac137dc143fdd49350756a765b12f50b64e0d0b304de4f9"
+      },
+      {
+        "section": "so-134",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Adjournment of debate",
+        "heading": "Motion to interrupt debate",
+        "priorContentSha256": "b66507d027b9d0217b47d1890643c9a83a35bb8d25865f17cf176cbf7b02641a",
+        "newContentSha256": "b66507d027b9d0217b47d1890643c9a83a35bb8d25865f17cf176cbf7b02641a"
+      },
+      {
+        "section": "so-145",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Split-party votes and separate votes",
+        "heading": "Split-party votes and separate votes",
+        "priorContentSha256": "1cb6f79c448d886e6b1611d6c62fa066da2f67ad10966de9a98b8570cc428c01",
+        "newContentSha256": "6bfb5fff4c07c211f55a44abde13920473f5c560d77fa3bd47aabc0e1c54ccdf"
+      },
+      {
+        "section": "so-154",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Minimum attendance for personal vote",
+        "heading": "Minimum number of members present for personal vote",
+        "priorContentSha256": "850f59ce88dd3aec2b6b707f0355a4d1c49b34620b24aaeaf89c416567597e24",
+        "newContentSha256": "850f59ce88dd3aec2b6b707f0355a4d1c49b34620b24aaeaf89c416567597e24"
+      },
+      {
+        "section": "so-181",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Committee may not adjourn",
+        "heading": "Committee may not interrupt debate or adjourn",
+        "priorContentSha256": "b0677458b1633fbc03bf717f588072391c3ecfd3935bac97964d6c02d99d4f4a",
+        "newContentSha256": "b0677458b1633fbc03bf717f588072391c3ecfd3935bac97964d6c02d99d4f4a"
+      },
+      {
+        "section": "so-264",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Bills to relate to one subject area",
+        "heading": "Single subject for each bill",
+        "priorContentSha256": "72b9a170b96f363c3dbbf18f7b858c0d136aa6b75b6db22f7848d2d20b6d7191",
+        "newContentSha256": "ec67eae35d5c73cc6f6c0bfc67825037a1c3dffc3bef6ea89d6795f3c59efe72"
+      },
+      {
+        "section": "so-275",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Special rules in respect of Appropriation and Imprest Supply bills",
+        "heading": "Special rules in respect of appropriation and imprest supply bills",
+        "priorContentSha256": "4ff5595bc93eefc8b4752971465f39b2ea76bd4cf0a96dcdd5c3d858bdae6ff1",
+        "newContentSha256": "4ff5595bc93eefc8b4752971465f39b2ea76bd4cf0a96dcdd5c3d858bdae6ff1"
+      },
+      {
+        "section": "so-278a",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Approval to commence preliminary procedures for privates bills and local bills",
+        "heading": "Approval to commence preliminary procedures for private bills and local bills",
+        "priorContentSha256": "c09c3847ed043e76c5f15259f30927e72b07b7e2a10fb444274f49b148ebff24",
+        "newContentSha256": "c09c3847ed043e76c5f15259f30927e72b07b7e2a10fb444274f49b148ebff24"
+      },
+      {
+        "section": "so-279",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Withdrawal of local bills and private bills",
+        "heading": "Withdrawal of private bills and local bills",
+        "priorContentSha256": "4b3867041874f82318cb59b4dd27929cf60d3b617e98f22613d0a4e7c0271f27",
+        "newContentSha256": "84865b8fa8dd581359220c125f0e9de7c1ab3ff2d247f087529919a3b18e90b2"
+      },
+      {
+        "section": "so-290",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Introduction of local bills and private bills",
+        "heading": "Introduction of private bills and local bills",
+        "priorContentSha256": "52792c98112160aa82f1a986999547ae3346c1b6b50b8ad4177dd2d8045431ef",
+        "newContentSha256": "52792c98112160aa82f1a986999547ae3346c1b6b50b8ad4177dd2d8045431ef"
+      },
+      {
+        "section": "so-292",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Introduction of appropriation bills, imprest Supply bills, and bills under urgency",
+        "heading": "Introduction of appropriation bills, imprest supply bills, and bills under urgency",
+        "priorContentSha256": "cd5dd0eb0ee34651a9d83cab360cf255373cfcb25d47055d18da3edffbf2f897",
+        "newContentSha256": "cd5dd0eb0ee34651a9d83cab360cf255373cfcb25d47055d18da3edffbf2f897"
+      },
+      {
+        "section": "so-339",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Imprest Supply bills",
+        "heading": "Imprest supply bills",
+        "priorContentSha256": "0cab578c15ec1f5faa57e7e0c858b3bacd89560496a54617a08537c427edabed",
+        "newContentSha256": "0cab578c15ec1f5faa57e7e0c858b3bacd89560496a54617a08537c427edabed"
+      },
+      {
+        "section": "so-349",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Third reading of main Appropriation bill",
+        "heading": "Third reading of main Appropriation Bill",
+        "priorContentSha256": "e1cc4a0ce377603b0d7a337e8a36f6b35fd6c41b20a79a29cdf82499e384e281",
+        "newContentSha256": "ea94c522e93ffdb94768496a2ce6854a1f594cc78ca70ea15fe2355751cd6df4"
+      },
+      {
+        "section": "appendix-b-cl-8",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Contents of return relating to member’s activities during period coverd by return",
+        "heading": "Contents of return relating to member’s activities during period covered by return",
+        "priorContentSha256": "b5d104f3aa8f57aa8b5af3c0ea990e78b0523aec3b3329ea533ce39c505ab0d8",
+        "newContentSha256": "9cbb62603ea9bd758cb6d9ab70b43db75c7ab8663bb9784744e79539bd3f69d3"
+      },
+      {
+        "section": "appendix-b-cl-16",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Registrar’s inquiry",
+        "heading": "Registrar’s inquiry",
+        "priorContentSha256": "23f6c919bc484241d5e55444d365da38830d08fdb9b8a0c0cd411d53d84071f9",
+        "newContentSha256": "0526cc70abaf588055c9e558931e6a88670fa8a093e21ed98226a0d1e58474ee"
+      },
+      {
+        "section": "appendix-b-cl-19",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "[Revoked - see Clause 18(3)]",
+        "heading": "[Revoked – see Clause 18(3)]",
+        "priorContentSha256": "a1dd24e5115c74e36c3c5f767e142fee36119008b368b1a9bf9981a5d352d8ed",
+        "newContentSha256": "18c90f73d39a3ecc48b24f22612e5d7bb2535153c693605fb856838c181da96d"
+      },
+      {
+        "section": "appendix-b-cl-23",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Responsibilities of members and Registrar",
+        "heading": "Responsibilities of members and Registrar",
+        "priorContentSha256": "90b13c69e4e166cb5716fd5f7880c96f8d75c5812ed6ddb376059b8b2b72e2d2",
+        "newContentSha256": "b41256e0f5c98372d12979e0f64e47d545eed56afc365d1499c58209789f7379"
+      },
+      {
+        "section": "appendix-c-cl-14",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Form and content of declaration for private bill or local bill",
+        "heading": "Form and content of declaration for private bill or local bill",
+        "priorContentSha256": "b0be151c0f96552c92ce6b1c6f452f013aeb3d82f8468e593894dd23e105290f",
+        "newContentSha256": "a61ea6ab56589145bc4476678c188815415d0a7e5b0fe41b4011b4b11cdce073"
+      },
+      {
+        "section": "appendix-c-cl-16",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Initiation of clauses in Local Legislation bills",
+        "heading": "Initiation of clauses in local legislation bills",
+        "priorContentSha256": "d3e77b6fa78aa4a002ee843624a805f426e861789a99769bd363b5188de3ad2a",
+        "newContentSha256": "d3e77b6fa78aa4a002ee843624a805f426e861789a99769bd363b5188de3ad2a"
+      },
+      {
+        "section": "appendix-c-cl-17",
+        "reason": "official Word text/heading differs from captured HTML",
+        "priorHeading": "Repeal of spent local legislation",
+        "heading": "Repeal of spent local legislation",
+        "priorContentSha256": "95ddc5f3c9d4c4b279798632be56a38462fa3521ea89bec20fbae5887a54165b",
+        "newContentSha256": "961d9583b8ba529a9628718ef737e9f2b5d3ed829f39d1e77dd6cd232831a23c"
+      }
+    ],
+    "tableReview": "B3 exact expanded row/cell equality; A/E all 50 table sections and Appendix A note reviewed against corresponding rendered Word pages. Row associations agree; formatting differences retained."
+  },
+  "note": "Source candidate verified offline; active database and application acceptance are separate gates."
+}

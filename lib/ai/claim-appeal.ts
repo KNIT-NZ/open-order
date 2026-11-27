@@ -17,7 +17,7 @@ export type AppealCheck = { accepted: boolean; reason: string };
 
 export function sourceLabel(citation: string): string {
   const trimmed = citation.trim();
-  const m = /^((?:SO\s+\d+[a-z]?)|(?:\d+\/\d+))\s*(?:\(\d+[a-z]?\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]?\)(?:\([a-z]\))?)?)$/i.exec(trimmed);
+  const m = /^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(?:\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i.exec(trimmed);
   return (m ? m[1] : trimmed).replace(/\s+/g, " ");
 }
 function key(label: string): string {

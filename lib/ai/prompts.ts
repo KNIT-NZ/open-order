@@ -330,7 +330,7 @@ export function buildAnswerClaimValidationPrompt(input: {
   const sourceLabelForClaimCitation = (citation: string): string => {
     const label = citation.trim();
     const qualified = label.match(
-      /^((?:SO\s+\d+)|(?:\d+\/\d+))\s*(\(\d+[a-z]?\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]?\)(?:\([a-z]\))?)?)$/i,
+      /^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i,
     );
     return qualified ? qualified[1].replace(/\s+/g, " ") : label;
   };
@@ -418,7 +418,7 @@ export function buildAnswerClaimAppealPrompt(input: {
   authorities: ProceduralSearchResult[];
 }): string {
   const parentLabel = (label: string): string => {
-    const qualified = label.trim().match(/^((?:SO\s+\d+[a-z]?)|(?:\d+\/\d+))\s*(\(\d+[a-z]?\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]?\)(?:\([a-z]\))?)?)$/i);
+    const qualified = label.trim().match(/^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i);
     return (qualified ? qualified[1] : label).replace(/\s+/g, " ");
   };
   const allowed = new Set(input.claims.flatMap((claim) => claim.citations.map(parentLabel)));

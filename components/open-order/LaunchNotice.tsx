@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import styles from "./LaunchNotice.module.css";
 
 // Public notice only. No user data or telemetry is collected here.
-const standingOrders = "2023 (database edition labels; coverage not certified)";
-const speakersRulings = "2023 (database edition labels; coverage not certified)";
 const privacyContact = "admin@knit.nz";
 const operator = "KNIT Aotearoa Charitable Trust";
 export function LaunchFooter() {
@@ -46,9 +44,9 @@ export function PrivacyContent() {
   </>;
 }
 
-export function SourcesContent() {
+export function SourcesContent({ standingOrders, speakersRulings, reconciled }: { standingOrders: string; speakersRulings: string; reconciled: boolean }) {
   return <>
-    <p>Indexed Standing Orders: {standingOrders}. Indexed Speakers’ Rulings: {speakersRulings}. Parliament publishes the 2026 Standing Orders; source migration and completeness have not been certified. Check the <a href="https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders/">official Standing Orders</a> and <a href="https://www3.parliament.nz/en/pb/parliamentary-rules/speakers-rulings/">Speakers’ Rulings</a> before relying on results.</p>
+    <p>Indexed Standing Orders: {standingOrders}. Indexed Speakers’ Rulings: {speakersRulings}. {reconciled ? "The indexed 2026 edition was reconciled against the official Word volume and includes all six appendices. Table row labels are Open Order retrieval locators, not official clause numbers. Online variants, later amendments and sessional orders should be checked against Parliament." : "Parliament publishes the 2026 Standing Orders; the active reconciled migration has not been established here."} Check the <a href="https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders/">official Standing Orders</a> and <a href="https://www3.parliament.nz/en/pb/parliamentary-rules/speakers-rulings/">Speakers’ Rulings</a> before relying on results.</p>
     <p>Source attribution: Open Order includes and adapts Standing Orders and Speakers’ Rulings material from the Office of the Clerk and Parliamentary Service. For content covered by Parliament’s reuse licence, credit is due to the Clerk of the House of Representatives and/or the Parliamentary Corporation on behalf of Parliamentary Service under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Open Order indexes, excerpts and transforms this material; consult <a href="https://www.parliament.nz/Copyright">Parliament’s copyright policy</a> and the original authorities. The software licence does not relicense parliamentary material or third-party content.</p>
   </>;
 }

@@ -15,17 +15,20 @@
       }
     },
     {
-      "slug": "standing-orders-2023",
-      "title": "Standing Orders of the House of Representatives 2023",
+      "slug": "standing-orders-2026",
+      "title": "Standing Orders of the House of Representatives 2026",
       "corpus": "standing_orders",
-      "sourceType": "html_index",
-      "sourceUrl": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2023-by-chapter/",
-      "edition": "2023",
+      "sourceType": "reconciled_html_word",
+      "sourceUrl": "https://www3.parliament.nz/en/pb/parliamentary-rules/standing-orders-2026-by-chapter/",
+      "edition": "2026",
       "language": "en",
-      "publishedDate": "2023-09-09",
       "metadata": {
         "jurisdiction": "New Zealand",
-        "institution": "House of Representatives"
+        "institution": "House of Representatives",
+        "effectiveDate": "2026-10-02",
+        "candidateSha256": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100",
+        "wordSha256": "bd8fb64c2513279debc5f869c94b8f855c6e07e16291d9e3f0677cf7dcef27d0",
+        "provenanceFile": "data/sources/standing-orders-2026.provenance.json"
       }
     }
   ]

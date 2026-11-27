@@ -29,14 +29,14 @@ export function isRulingStart(line: string): boolean {
 }
 
 export function isStandingOrderStart(line: string): boolean {
-  return /^\d+[A-Z]?\s+\S/.test(cleanLine(line))
+  return /^\d+[A-Z]*\s+\S/.test(cleanLine(line))
 }
 
 export function extractStandingOrderNumberAndHeading(line: string): {
   orderNumber: string
   heading: string | null
 } | null {
-  const match = cleanLine(line).match(/^(\d+[A-Z]?)\s+(.*)$/)
+  const match = cleanLine(line).match(/^(\d+[A-Z]*)\s+(.*)$/)
 
   if (!match) {
     return null
