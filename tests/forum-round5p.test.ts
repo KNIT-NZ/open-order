@@ -73,6 +73,7 @@ test("of stops a committee name; a listed reorder matches and an unlisted one do
   assert.equal(forumIdentityOutcome("the Quillon Committee", ["Quillon Committee"]), "match");
   for (const record of committeeRecords()) {
     const heading = [...(record.path ?? [])].reverse().find((segment) => /\bcommittees?\b/i.test(segment));
+    if (!heading) throw new Error("committee record has no committee heading");
     assert.equal(forumIdentityOutcome(heading, [heading]), "match", heading);
   }
   assert.equal(forumIdentityOutcome("Business Committee", ["Committee of Business"]), "match");
