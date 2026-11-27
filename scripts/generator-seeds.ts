@@ -27,3 +27,12 @@ export const HEADING_PREFIX_SEED = [
 
 /** Generic reference words. A name made only of these and class words is generic. */
 export const COMMITTEE_REFERENCE_SEED = ["relevant", "appropriate", "responsible", "same", "similar"] as const;
+
+/**
+ * Domain words dropped before dossier overlap. Grammatical stops come from
+ * the closed-class module. These are the forms left after the ranker's suffix trim.
+ */
+export const DOSSIER_DOMAIN_STOP_SEED = [
+  "house", "member", "members", "order", "parliament", "parliamentary",
+  "procedure", "proceeding", "proceedings", "rule", "rules", "ruling", "speaker",
+] as const;

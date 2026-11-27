@@ -4,6 +4,7 @@ export function foldCommitteeText(text: string): string;
 export function extractCommitteeTokens(text: string): string[];
 export function committeeNameTokens(text: string): string[];
 export function isCommitteeHeadingPrefix(word: string): boolean;
+export function stripLeadingHeadingPrefix(tokens: string[]): string[];
 export function isGenericCommitteePhrase(tokens: string[]): boolean;
 export function nameShapedCommitteeText(text: string): boolean;
 export function identifiesCorpusRecord(parsed: string[], record: string[]): boolean;

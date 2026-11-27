@@ -1,3 +1,5 @@
+import { CLOSED_CLASS } from "@/lib/closed-class.js";
+import { dossierDomainStops } from "@/lib/domain-vocabulary-data.js";
 import {
   forumIdentityMismatch,
   forumIdentityOutcome,
@@ -98,16 +100,14 @@ export type V40Review<T extends V40Authority> = {
   rejectedGoverning: RejectedGoverningNomination[];
 };
 
-const COMMON = new Set([
-  "a", "an", "the", "of", "to", "and", "in", "or", "on", "at", "for", "by", "is", "are", "be", "do", "does", "can", "could", "would", "should", "with", "as", "it", "their", "them", "that", "this", "there", "what", "which", "when", "where", "who", "how", "from", "during", "after", "before", "about", "under", "into", "members", "member", "parliament", "parliamentary", "speaker", "house", "rules", "ruling", "order", "procedure", "proceedings",
-]);
 function words(input: string): Set<string> {
+  const domainStops = new Set<string>(dossierDomainStops);
   return new Set(input.toLowerCase().normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .map((word) => word.replace(/(?:ing|ed|es|s)$/,""))
-    .filter((word) => word.length >= 3 && !COMMON.has(word)));
+    .map((word) => word.replace(/(?:ing|ed|es|s)$/, ""))
+    .filter((word) => word.length >= 3 && !CLOSED_CLASS.has(word) && !domainStops.has(word)));
 }
 function intersection(a: Set<string>, b: Set<string>): number {
   let count = 0;

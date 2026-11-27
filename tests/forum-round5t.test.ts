@@ -34,15 +34,30 @@ test("a house word does not turn a named committee into the House", () => {
 
 test("an unlisted committee matches its own heading", () => {
   assert.equal(forumIdentityOutcome("Quill Committee", ["QUILL COMMITTEE"]), "match");
-  assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "QUILL COMMITTEE", "SO 5", "Quill Committee"]), "match");
+  assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "QUILL COMMITTEE", "SO 5", "Meetings"]), "match");
   assert.equal(forumIdentityOutcome("Quill Committee", ["Chapter 4", "MERRON COMMITTEE"]), "uncertain");
+});
+
+test("a lone prefix word before a class word is the committee name", () => {
+  assert.equal(
+    forumIdentityOutcome("the committee", ["Question Subject Committee"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("the committee", ["Time Select Committee"]),
+    "uncertain",
+  );
 });
 
 test("house in committee is the whole-house forum", () => {
   const leaf = ["Chapter 2", "Sittings", "SO 9", "Pause while House in committee"];
   assert.equal(forumIdentityOutcome("Committee of the whole House", leaf), "match");
   assert.equal(forumIdentityOutcome("Business Committee", leaf), "reject");
-  assert.equal(forumIdentityOutcome("Quill Committee", leaf), "uncertain");
+  assert.equal(forumIdentityOutcome("Quill Committee", leaf), "reject");
+  assert.equal(
+    forumIdentityOutcome("Business Committee", ["HOUSE IN COMMITTEE", "SO 5", "Meetings"]),
+    "reject",
+  );
 });
 
 test("a possessive determiner does not name a committee", () => {
