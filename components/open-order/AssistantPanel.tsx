@@ -183,7 +183,7 @@ export function AssistantPanel({
                   </span>
                   <span>
                     Final authorities:{" "}
-                    {assistant.diagnostics.finalAuthoritySelection.length}
+                    {assistant.authorities.length}
                   </span>
                   <span>
                     Latency:{" "}

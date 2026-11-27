@@ -194,17 +194,7 @@ export async function runClaimValidationWithRetry<T>(input: {
   throw new Error("Unreachable validation retry state");
 }
 
+/** A code only. No HTTP status, attempt count, or provider prose. */
 export function publicFailureReason(diagnostic: AiFailureDiagnostic): string {
-  const phase = diagnostic.phase === "drafting" ? "Answer drafting" :
-    diagnostic.phase === "claim_validation" ? "Grounded-claim validation" :
-    "Answer post-validation";
-  const explanation = diagnostic.kind === "provider_transient"
-    ? "encountered a transient AI-service error"
-    : diagnostic.kind === "provider_nonretryable"
-      ? "encountered a non-retryable AI-service error"
-      : diagnostic.kind === "validation_format"
-        ? "received an invalid structured validation result"
-        : "encountered an unclassified internal error";
-  const status = diagnostic.httpStatus === null ? "" : ` (HTTP ${diagnostic.httpStatus})`;
-  return `${phase} ${explanation}${status}; attempts: ${diagnostic.attempts}.`;
+  return diagnostic.phase === "drafting" ? "drafting_unavailable" : "validation_unavailable";
 }

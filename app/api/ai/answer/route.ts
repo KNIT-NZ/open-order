@@ -83,6 +83,7 @@ import {
   buildAuthorityProfile,
   buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
+  firstDraftDebugEnabled,
   withholdingStage,
   buildMissingSlotRecoveryRequests,
   buildProceduralQueryPlan,
@@ -279,6 +280,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       let openAttemptIndex: number | null = null;
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
+      let repairModel: string | null = null;
       let activeSignal: AbortSignal | undefined;
         const noteRetry = () => { outcomeState.providerRetries += 1; };
         const noteCheckedWithholding = () => {
@@ -311,14 +313,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           stageModels.push({ task, model: attempt.model, outcome: attempt.outcome });
         }
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
+        if (task === "answer.repair" && attempt.outcome === "ok") repairModel = attempt.model;
       };
       // Only models that actually served a stage. A failed attempt does not count.
       const mixedModels = () => new Set(stageModels.filter((attempt) => attempt.outcome === "ok").map((attempt) => attempt.model)).size > 1;
       // Last model whose attempt started. This does not mean the attempt succeeded;
       // read providerAttempts for each outcome.
       const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
-      const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
-        && process.env.VERCEL_ENV !== "production";
+      const exposeFirstDraft = firstDraftDebugEnabled(process.env);
       const decorate = (event: string, data: unknown) => {
         if (event === "stage" && data && typeof data === "object") {
           const stage = data as { key?: unknown; label?: unknown };
@@ -1351,7 +1353,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
               const recheckMentions = validateAnswerAuthorityMentions({
                 answerText: finalAnswer,
-                authorities: authorityPayload,
+                authorities: finalAuthorities.map((authority) => ({
+                  citationLabel: authority.citationLabel,
+                  sectionContent: authority.sectionContent,
+                })),
+                acceptVerifiedCrossReferences: true,
               });
 
               const recheckCitations = validateAnswerCitations({
@@ -1577,6 +1583,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     });
                     outcomeState.repairAccepted = true;
                     outcomeState.settlement = null;
+                    if (repairModel) answerModel = repairModel;
                     noteCheckedWithholding();
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
@@ -1833,6 +1840,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
                       outcomeState.repairAccepted = true;
+                      if (repairModel) answerModel = repairModel;
                       outcomeState.settlement = null;
                       noteCheckedWithholding();
                     }

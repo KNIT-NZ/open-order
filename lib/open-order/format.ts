@@ -544,7 +544,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     ? [
         "Selector: v5.18 semantic authority pack (not the legacy blueprint)",
         `Candidate authorities evaluated: ${selector.candidateCount}`,
-        `Final authorities selected: ${selector.selectedLabels.join(", ") || "None"}`,
+        `Final authorities selected: ${input.authorities.map((authority) => authority.citationLabel).join(", ") || "None"}`,
         `Minimum obligation coverage: ${selector.minObligationCoverage.toFixed(3)}`,
         `All semantic obligations met by selector: ${selector.allObligationsComplete ? "Yes" : "No"}`,
         "Per-obligation coverage:",

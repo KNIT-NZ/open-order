@@ -281,9 +281,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
     return value as T;
   };
   const streamText = async (request: AiStreamTextRequest): Promise<string> => {
-    request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
-    request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
-    if (request.systemInstruction.includes("repairing an incomplete")) return draftFor("supported");
+    const repair = request.systemInstruction.includes("repairing an incomplete");
+    const model = repair ? "gemini-repair-model" : "gemini-3.5-flash-lite";
+    request.onProviderAttemptStart?.(model);
+    request.onProviderAttempt?.({ model, outcome: "ok" });
+    if (repair) return draftFor("supported");
     return draftFor(scenario);
   };
   const search = async (): Promise<ProceduralSearchResponse> => ({
@@ -398,6 +400,7 @@ test("an accepted incident repair caps the done answer at partial", async () => 
   assert.equal(done.answerState, "partial");
   assert.equal(done.repairAccepted, true);
   assert.match(String(done.claimValidationNote), /repair=accepted/);
+  assert.equal(done.servedModel, "gemini-repair-model");
 });
 
 test("dropping an unreferenced authority list entry caps the done answer at partial", async () => {

@@ -1846,7 +1846,10 @@ function normalizeAuthorityMention(text: string): string {
 
 export function validateAnswerAuthorityMentions(input: {
   answerText: string;
-  authorities: Array<{ citationLabel: string }>;
+  authorities: Array<{ citationLabel: string; sectionContent?: string }>;
+  // Only the rewrite recheck may accept a suffix, and only when that source
+  // text actually contains the provision. A model-written suffix never does.
+  acceptVerifiedCrossReferences?: boolean;
 }): { ok: true } | { ok: false; invalidAuthorityMentions: string[] } {
   const allowed = new Set(
     input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
@@ -1863,9 +1866,9 @@ export function validateAnswerAuthorityMentions(input: {
   const invalid = matches.filter((mention) => {
     const normalized = normalizeAuthorityMention(mention);
     if (allowed.has(normalized)) return false;
+    if (!input.acceptVerifiedCrossReferences) return true;
     const at = prose.toLowerCase().indexOf(mention.toLowerCase());
-    if (at >= 0 && markedAsUnretrievedCrossReference(prose, at, mention.length)) return false;
-    return true;
+    return !(at >= 0 && verifiedCrossReference(prose, at, mention.length, input.authorities));
   });
 
   if (invalid.length > 0) {
@@ -1875,20 +1878,42 @@ export function validateAnswerAuthorityMentions(input: {
   return { ok: true };
 }
 
-function markedAsUnretrievedCrossReference(text: string, index: number, length: number): boolean {
+function verifiedCrossReference(
+  text: string,
+  index: number,
+  length: number,
+  authorities: Array<{ citationLabel: string; sectionContent?: string }>,
+): boolean {
   const after = text.slice(index + length);
-  return /^\s*(?:\(\d+[a-z]*\))?\s*\(referred to in\b[^)]*;\s*not retrieved\)/i.test(after);
+  const suffix = after.match(/^\s*(?:\(\d+[a-z]*\))?\s*\(referred to in\s+([^;)]+);\s*not retrieved\)/i);
+  if (!suffix) return false;
+  const referred = suffix[1].trim();
+  const source = authorities.find((authority) =>
+    normalizeAuthorityMention(referred) === normalizeAuthorityMention(authority.citationLabel)
+    || citationTokenMatchesLabel(referred, authority.citationLabel));
+  if (!source?.sectionContent) return false;
+  return sourceContainsMention(source.sectionContent, text.slice(index, index + length));
 }
 
 function mentionPattern(): RegExp {
   return /\b(?:standing order|so)\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+(?:\s*\(\d+[a-z]*\))?/gi;
 }
 
+/** A provision form in the source. A bare number, such as "39 minutes", is not one. */
 function sourceContainsMention(source: string, mention: string): boolean {
-  const number = mention.replace(/^(?:standing orders?|so)\s+/i, "").replace(/\s+/g, "").toLowerCase();
-  if (!number) return false;
-  const escaped = number.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\(/g, "\\s*\\(");
-  return new RegExp(`\\b(?:standing orders?|so)\\s*${escaped}(?![0-9])|\\b${escaped}(?![0-9])`, "i").test(source);
+  const compactMention = mention.replace(/\s+/g, " ").trim();
+  const standing = compactMention.match(/^(?:standing orders?|so)\s+(\d+[a-z]*)\s*(\(\d+[a-z]*\))?$/i);
+  if (standing) {
+    const subsection = standing[2] ? `\\s*\\(${standing[2].slice(1, -1)}\\)` : "";
+    return new RegExp(`\\b(?:standing orders?|so)\\s+${standing[1]}${subsection}(?![0-9])`, "i").test(source);
+  }
+  const ruling = compactMention.match(/^(\d+\/\d+)\s*(\(\d+[a-z]*\))?$/);
+  if (ruling) {
+    const subsection = ruling[2] ? `\\s*\\(${ruling[2].slice(1, -1)}\\)` : "";
+    return new RegExp(`\\b(?:speakers?'?\\s+rulings?|sr)\\s+${ruling[1]}${subsection}(?![0-9])`, "i").test(source);
+  }
+  const escaped = compactMention.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped.replace(/\\ /g, "\\s+"), "i").test(source);
 }
 
 function referredToForm(mention: string, label: string): string {
@@ -1912,15 +1937,19 @@ export function rewriteForbiddenAuthorityMentions(input: {
     input.authorities.map((authority) => normalizeAuthorityMention(authority.citationLabel)),
   );
   const removed: string[] = [];
-  const rewritten = input.answerText.replace(mentionPattern(), (mention) => {
-    const normalized = normalizeAuthorityMention(mention);
-    if (allowed.has(normalized)) return mention;
-    removed.push(mention);
-    const source = input.authorities.find((authority) =>
-      authority.sectionContent && sourceContainsMention(authority.sectionContent, mention));
-    if (source) return referredToForm(mention, source.citationLabel);
-    return "a provision that was not retrieved";
-  });
+  const rewritten = input.answerText.replace(
+    new RegExp(`(?:${mentionPattern().source})(?:\\s*\\(referred to in\\b[^)]*;\\s*not retrieved\\))?`, "gi"),
+    (full) => {
+      const suffix = full.match(/\s*\(referred to in\b[^)]*;\s*not retrieved\)$/i);
+      const mention = suffix ? full.slice(0, full.length - suffix[0].length) : full;
+      if (allowed.has(normalizeAuthorityMention(mention))) return mention;
+      removed.push(mention);
+      const source = input.authorities.find((authority) =>
+        authority.sectionContent && sourceContainsMention(authority.sectionContent, mention));
+      if (source) return referredToForm(mention, source.citationLabel);
+      return "a provision that was not retrieved";
+    },
+  );
   return {
     rewrittenText: rewritten,
     removedMentions: [...new Set(removed)],
@@ -1998,13 +2027,28 @@ export type ClaimRemovalCode =
   | "unsupported_by_passage"
   | "omitted_source_qualification";
 
+function stripModelCrossReferenceSuffixes(line: string): string {
+  return line.replace(/\(\s*referred to in\b[^)]*;\s*not retrieved\s*\)/gi, " ");
+}
+
+/** Full "Standing Order N" or uppercase "SO N". Never the word "so", and never a bare fraction. */
 function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string[] {
-  const mentions = line.match(/\b(?:standing order|so)\s+\d+[a-z]*\b|\b\d+\/\d+\b/gi) ?? [];
+  const visible = stripModelCrossReferenceSuffixes(line);
+  const mentions = [
+    ...visible.matchAll(/\bStanding Orders?\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?/gi),
+    ...visible.matchAll(/\bSO\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?/g),
+    ...visible.matchAll(/\bSpeakers?'?\s+rulings?\s+\d+\/\d+(?:\s*\(\d+[a-z]*\))?/gi),
+    ...visible.matchAll(/\bSR\s+\d+\/\d+(?:\s*\(\d+[a-z]*\))?/g),
+  ].map((match) => match[0]);
   const found: string[] = [];
   for (const mention of mentions) {
+    const ruling = mention.match(/(\d+\/\d+)/);
     const normalized = normalizeAuthorityMention(mention);
     for (const label of allowedLabels) {
-      if (normalizeAuthorityMention(label) === normalized && !found.includes(label)) found.push(label);
+      const labelNorm = normalizeAuthorityMention(label);
+      const same = labelNorm === normalized
+        || (ruling !== null && (labelNorm === ruling[1] || labelNorm === `sr ${ruling[1]}`));
+      if (same && !found.includes(label)) found.push(label);
     }
   }
   return found;
@@ -2091,6 +2135,18 @@ export function pruneValidatedAnswerContent(input: {
   };
 }
 
+/** Off in any production environment, hosted or not. */
+export function firstDraftDebugEnabled(env: {
+  OPEN_ORDER_DEBUG_FIRST_DRAFT?: string;
+  NODE_ENV?: string;
+  VERCEL_ENV?: string;
+} = process.env): boolean {
+  if (env.OPEN_ORDER_DEBUG_FIRST_DRAFT !== "1") return false;
+  if (env.NODE_ENV === "production") return false;
+  if (env.VERCEL_ENV === "production") return false;
+  return true;
+}
+
 /** A count only. The removed mention text stays out of the response. */
 export function mentionRewriteEdit(count: number): string | null {
   if (!Number.isInteger(count) || count < 1 || count > 99) return null;
@@ -2124,30 +2180,28 @@ export function attachClaimQualifications(answerText: string, input: {
     }
     if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
   });
-  const hedgesFor = (label: string, sentence: string): number[] => {
-    const citing = claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
-    if (citing.length > 0) return citing;
-    const bottom = claimIndexes.find((index) => {
-      const prior = lines.slice(0, index).reverse().find((line) => line.trim().endsWith(":"));
-      return prior === "Bottom line:";
-    });
-    return [bottom ?? claimIndexes[0]].filter((index): index is number => index !== undefined && !lines[index].includes(sentence));
-  };
+  const citing = (label: string): number[] =>
+    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
   const append = (indexes: number[], sentence: string) => {
     for (const index of indexes) {
       if (lines[index].includes(sentence)) continue;
       lines[index] = `${lines[index]} ${sentence}`;
     }
   };
-  for (const label of actLabels) append(hedgesFor(label, `[${label}] ${ACT_QUALIFICATION}`), `[${label}] ${ACT_QUALIFICATION}`);
-  for (const label of forumLabels) append(hedgesFor(label, `[${label}] ${FORUM_QUALIFICATION}`), `[${label}] ${FORUM_QUALIFICATION}`);
-  if (claimIndexes.length === 0) {
-    const trailing = [
-      ...actLabels.map((label) => `[${label}] ${ACT_QUALIFICATION}`),
-      ...forumLabels.map((label) => `[${label}] ${FORUM_QUALIFICATION}`),
-    ].filter((sentence) => !answerText.includes(sentence));
-    if (trailing.length > 0) lines.push("", ...trailing);
+  const qualificationSection: string[] = [];
+  for (const label of actLabels) {
+    const sentence = `[${label}] ${ACT_QUALIFICATION}`;
+    const hits = citing(label);
+    if (hits.length > 0) append(hits, sentence);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
   }
+  for (const label of forumLabels) {
+    const sentence = `[${label}] ${FORUM_QUALIFICATION}`;
+    const hits = citing(label);
+    if (hits.length > 0) append(hits, sentence);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
+  }
+  if (qualificationSection.length > 0) lines.push("", "Qualification:", ...qualificationSection);
   return lines.join("\n");
 }
 
@@ -2309,7 +2363,7 @@ export function buildFallbackAnswer(input: {
         : foundButRejected
           ? "Retrieval found possible authorities, but none passed source-grounded selection; no procedural conclusion can be made from this result."
           : best.length > 0
-            ? `Relevant authorities were retrieved, but they do not support a fuller procedural conclusion from this result set ${citations.join(" ")}.`
+            ? `Relevant authorities were retrieved, but the drafted answer did not pass the checks ${citations.join(" ")}.`
             : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
 
   const whatThisMeans = foundButRejected
