@@ -17,4 +17,12 @@ test("a combined heading is split before the name test, and a referent is not st
   assert.equal(forumIdentityOutcome("the state", ["Chapter 2", "STATEMENTS", "SO 7", "General rules"]), "uncertain");
   assert.equal(forumIdentityOutcome("the member", ["Chapter 2", "SO 7", "Membership"]), "uncertain");
   assert.equal(forumIdentityOutcome("the ballot", ["Chapter 2", "SO 7", "Clerk"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Tarnwick", ["TARNWICK AND TARNWICKS", "Tarnwick"]), "match");
+  assert.equal(forumIdentityOutcome("the Sandor", ["SANDOR"]), "match");
+  assert.equal(forumIdentityOutcome("the Anderson", ["ANDERSON"]), "match");
+  assert.equal(forumIdentityOutcome("the Quendle", ["QUENDLE&HARROWBY", "Quendle"]), "match");
+  assert.equal(forumIdentityOutcome("the Quendle", ["Quendle order paper"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Quendle order paper", ["Quendle order paper"]), "match");
+  assert.equal(forumIdentityOutcome("the Brisault", ["Brisault Speaker"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Quendle", ["QUENDLE OPENING AND HARROWBY", "Quendle"]), "uncertain");
 });

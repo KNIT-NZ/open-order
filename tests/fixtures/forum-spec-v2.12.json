@@ -1,6 +1,6 @@
 {
- "version": "forum-spec-v2.11",
- "schema": "see PR15-forum-spec-v2.11-ENGINEER-SAFE.md (which refers to the v2.10 and earlier mds)",
+ "version": "forum-spec-v2.12",
+ "schema": "see PR15-forum-spec-v2.12-ENGINEER-SAFE.md (which refers to the v2.11 and earlier mds)",
  "fixtures": {
   "committeeList": {
    "fixture": [
@@ -7515,13 +7515,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "qualified_partial",
-    "selector": "qualified_partial"
+    "adjudication": "supported",
+    "selector": "supported"
    },
    "principle": "same_body_passes",
-   "reason": "[R4] R4: the segment that names the setting adds a name word or a referent. (v2.10: R5: classless self-match on the leaf. (Own proceeding leaf under a combined heading.))",
+   "reason": "[R5] R5: classless self-match on the leaf. (v2.11: R4: the segment that names the setting adds a name word or a referent. (v2.10: R5: classless self-match on the leaf. (Own proceeding leaf under a combined heading.)))",
    "policyCall": null,
-   "rule": "R4",
+   "rule": "R5",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
   },
@@ -8076,6 +8076,110 @@
    },
    "rule": "R4",
    "reason": "[R4] R4: the segment that names the setting adds a name word or a referent. (Classless setting: the leaf names the setting but adds a referent word (R4).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-182",
+   "setting": "the Quendle",
+   "question": "During the Quendle, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Proceedings",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "QUENDLE OPENING AND HARROWBY",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 5",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Quendle",
+     "kind": "proceeding:proper",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: the name-bearing part of a segment adds a name word or a referent. (Classless setting: a combined heading whose name-bearing part adds a referent word (addendum 2 B + ruling 4).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-183",
+   "setting": "the Brisault",
+   "question": "During the Brisault, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Brisault Speaker",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: the name-bearing part of a segment adds a name word or a referent. (Classless setting: the leaf names the setting and adds a referent word that is also a generated function word (addendum 2 C).)"
   }
  ],
  "changelog": [
@@ -8128,6 +8232,9 @@
   "Overlap (T-3 and T-4(3)): two words overlap if they are equal, or if one is a case-insensitive prefix of the other with a shared prefix of at least 4 characters. The v2.9 clause 'or the two share a prefix of at least 5 letters' is withdrawn, so 'committal' and 'committee' no longer overlap.",
   "Ancestors: the overlap test runs on the leaf and on every ancestor. A segment that overlaps the setting without equalling it gives qualified.",
   "'Names it' is necessary but not sufficient. A classless setting with a name word needs a segment (the leaf or an ancestor) that contains its name word(s). Each such segment is then reduced by removing articles and the generated function words (the top-60 list in GENERATION-ALGORITHM.md). If what remains equals the setting, it is supported. If it adds a name word or an F+ referent, it is qualified. If it adds only ordinary words, it is supported.",
-  "Rows re-derived under these rulings: S-170 becomes qualified because its combined heading adds a second name word. S-177 becomes supported because 'building' is an ordinary word. The new rows S-180 and S-181 are information only for 5l and binding from r5l."
+  "Rows re-derived under these rulings: S-170 becomes qualified because its combined heading adds a second name word. S-177 becomes supported because 'building' is an ordinary word. The new rows S-180 and S-181 are information only for 5l and binding from r5l.",
+  "v2.12 encodes rulings addendum 2 (PR15-rulings-r5l-addendum-2-ENGINEER-SAFE.md). Combined headings: before the ruling-4 test, a segment that contains the name word is split at 'and', 'or', '&' and commas, and only the part that contains the name word is tested. S-170 is supported again, and FR20 combined-heading behaviour stands.",
+  "Ruling-4 reduction: generated referent words, referent phrases and the committee head word are never removed as function words, even when they appear in the top-60 list.",
+  "Ruling 4 applies to the name-bearing segments (their name-bearing parts). Ruling 3, overlap without equality, applies to every other segment. Name words take part in the prefix test, which needs a prefix of at least 4 characters. New rows S-182 and S-183 are information only for 5l and binding from r5l."
  ]
 }
