@@ -6,10 +6,18 @@
  * - OPEN_ORDER_CORPUS_DB_HOST is set to the hostname the operator intends.
  * - OPEN_ORDER_ALLOWED_TEST_BRANCH_HOST is set to the one allowed test-branch hostname.
  * - those two values are exactly equal.
- * - the DATABASE_URL hostname is exactly that same host.
+ * - pg's own connection-string parser resolves the database host to that exact host.
+ * The guard refuses host and hostaddr query parameters, a service name, more than
+ * one host, a unix-socket or path host, and a port that disagrees with itself.
  * Does not print the connection string.
  */
+import { createRequire } from "node:module";
 import pg from "pg";
+
+const require = createRequire(import.meta.url);
+const { parse: parseConnectionString } = require("pg-connection-string") as {
+  parse: (connectionString: string) => { host?: string | null; port?: string | null; service?: string | null };
+};
 
 function allowedTestBranchHost(): string {
   const intended = process.env.OPEN_ORDER_CORPUS_DB_HOST ?? "";
@@ -23,13 +31,34 @@ function allowedTestBranchHost(): string {
 }
 
 function assertTestBranch(databaseUrl: string): string {
-  let host = "";
+  const expected = allowedTestBranchHost();
+  if (/[?&](?:host|hostaddr)=/i.test(databaseUrl)) {
+    throw new Error("Refusing to write: connection string sets host or hostaddr.");
+  }
+  let parsed: { host?: string | null; port?: string | null; service?: string | null };
   try {
-    host = new URL(databaseUrl).hostname;
+    parsed = parseConnectionString(databaseUrl);
+  } catch {
+    throw new Error("Refusing to write: DATABASE_URL is not a connection string.");
+  }
+  if (parsed.service) throw new Error("Refusing to write: connection string uses a service name.");
+  const host = String(parsed.host ?? "");
+  if (!host || host.includes(",") || host.startsWith("/") || host.includes("/")) {
+    throw new Error("Refusing to write: database host is not a single TCP host.");
+  }
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
   } catch {
     throw new Error("Refusing to write: DATABASE_URL is not a URL.");
   }
-  const expected = allowedTestBranchHost();
+  const queryPort = url.searchParams.get("port");
+  if (queryPort && url.port && queryPort !== url.port) {
+    throw new Error("Refusing to write: connection string ports disagree.");
+  }
+  if (parsed.port && url.port && String(parsed.port) !== url.port) {
+    throw new Error("Refusing to write: parsed port does not match the URL port.");
+  }
   if (host !== expected) {
     throw new Error("Refusing to write: database host is not exactly the allowed test-branch host.");
   }

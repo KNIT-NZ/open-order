@@ -82,7 +82,7 @@ const forumCase: Partial<Record<Scenario, { setting: string; path: string | stri
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
 const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
 
-function authority(label: string, sectionId: string, sectionContent = QUOTE, path = ["Sittings of the House"]): ProceduralSearchResult {
+function authority(label: string, sectionId: string, sectionContent = QUOTE, path = ["Debate"]): ProceduralSearchResult {
   return {
     sectionId,
     sectionKey: sectionId,
@@ -559,7 +559,7 @@ test("the selector route applies all four forum outcomes", async () => {
   assert.deepEqual(subclass.authorities, []);
 });
 
-test("a body's own multi-segment path is admitted, and other proceedings still reject", async () => {
+test("a body's own multi-segment path is admitted, and a different proceeding is qualified", async () => {
   const names = ["Widget Oversight Committee", "Gadget Review Committee"];
   for (const scenario of ["forum_own", "forum_own_incident"] as const) {
     const done = doneOf(await withCorpusCommitteeNames(names, () => ask(scenario)));
@@ -574,7 +574,7 @@ test("a body's own multi-segment path is admitted, and other proceedings still r
     "forum_motion", "forum_motion_incident",
   ] as const) {
     const done = doneOf(await ask(scenario));
-    assert.equal(done.answerState, "not_answered", scenario);
+    assert.equal(done.answerState, "partial", scenario);
     assert.notEqual(done.answerState, "supported", scenario);
     assert.deepEqual(done.authorities, [], scenario);
   }

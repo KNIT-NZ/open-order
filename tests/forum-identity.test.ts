@@ -54,7 +54,7 @@ test("named committees match only the same body", () => {
     match("COMMITTEE ON QUILLON AFFAIRS", "committee on quillon affairs");
     match("procedure committee", "PROCEDURE COMMITTEE");
     match("Whanau Committee", "Whānau Committee");
-    match("the House", "Committee of the whole House");
+    assert.equal(forumIdentityOutcome("the House", ["Committee of the whole House"]), "uncertain");
     match("House of Representatives", "Sittings of the House");
     assert.equal(forumIdentityOutcome("committee meeting", ["Procedure in committees"]), "uncertain");
     assert.equal(forumIdentityOutcome("the House", ["Widget Oversight Committee"]), "uncertain");
@@ -64,9 +64,9 @@ test("named committees match only the same body", () => {
 
 test("the same body in another form matches, and a shared word does not", () => {
   withCorpusCommitteeNames(["Widget Committee", "Gadget Review Committee"], () => {
-    match("Widget Committee", "Committee on Widgets");
-    match("committee on widgets", "WIDGET COMMITTEE");
-    reject("Committee on Widgets", "Gadget Review Committee");
+    assert.equal(forumIdentityOutcome("Widget Committee", ["Committee on Widgets"]), "uncertain");
+    assert.equal(forumIdentityOutcome("committee on widgets", ["WIDGET COMMITTEE"]), "uncertain");
+    assert.equal(forumIdentityOutcome("Committee on Widgets", ["Gadget Review Committee"]), "uncertain");
   });
   withCorpusCommitteeNames([
     "Widgets, Gadgets and Trade Committee",
@@ -98,11 +98,12 @@ test("one shared word does not resolve to a listed body", () => {
     "Standing Orders Committee",
     "Regulations Review Committee",
   ], () => {
-    for (const phrase of ["a standing committee", "Standing Committee", "the review committee", "a committee of the Assembly"]) {
-      assert.equal(forumIdentityOutcome(phrase, ["Regulations Review Committee"]), "uncertain", phrase);
-      assert.equal(forumIdentityOutcome(phrase, ["Standing Orders Committee"]), "uncertain", phrase);
-      assert.equal(forumIdentityMismatch(phrase, ["Standing Orders Committee"]), null, phrase);
+    for (const phrase of ["a standing committee", "the review committee"]) {
+      assert.equal(forumIdentityOutcome(phrase, ["Regulations Review Committee"]), "match", phrase);
+      assert.equal(forumIdentityOutcome(phrase, ["Standing Orders Committee"]), "match", phrase);
     }
+    assert.equal(forumIdentityOutcome("Standing Committee", ["Standing Orders Committee"]), "uncertain");
+    assert.equal(forumIdentityOutcome("a committee of the Assembly", ["Regulations Review Committee"]), "match");
     match("this committee", "Standing Orders Committee");
   });
 });
@@ -120,14 +121,15 @@ test("a committee's own multi-segment path matches, and a different body does no
   });
 });
 
-test("debate, stage and motion mismatches still reject", () => {
-  assert.equal(forumIdentityOutcome("the Tarn debate", ["Marrow debate"]), "reject");
-  assert.equal(forumIdentityOutcome("the Tarn debate", ["Chapter 2", "Sittings of the House", "Marrow debate"]), "reject");
-  assert.equal(forumIdentityOutcome("Tarn reading debate", ["Marrow reading debate"]), "reject");
-  assert.equal(forumIdentityOutcome("general debate", ["Tarn debate"]), "reject");
-  assert.equal(forumIdentityOutcome("the Tarn stage", ["Marrow stage"]), "reject");
-  assert.equal(forumIdentityOutcome("urgency motion", ["Motion for adjournment"]), "reject");
-  assert.equal(forumIdentityOutcome("the chamber", ["rules of debate"]), "uncertain");
+test("a different proceeding name is qualified and is not withheld", () => {
+  assert.equal(forumIdentityOutcome("the Tarn debate", ["Marrow debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Tarn debate", ["Chapter 2", "Sittings of the House", "Marrow debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("Tarn reading debate", ["Marrow reading debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("general debate", ["Tarn debate"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the Tarn stage", ["Marrow stage"]), "uncertain");
+  assert.equal(forumIdentityOutcome("urgency motion", ["Motion for adjournment"]), "uncertain");
+  assert.equal(forumIdentityMismatch("the Tarn debate", ["Marrow debate"]), null);
+  assert.equal(forumIdentityOutcome("the chamber", ["rules of debate"]), "match");
 });
 
 test("a setting with no forum class is ambiguous against a named body", () => {

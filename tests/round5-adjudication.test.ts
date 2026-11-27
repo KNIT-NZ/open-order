@@ -122,7 +122,7 @@ test("forum type matches a generic body and rejects two different names", () => 
     proposal: { selected: [governing("QX 8", suspension)], remainingUncertainties: [], explanation: "" },
   });
   assert.equal(house.authorities.length, 1);
-  assert.deepEqual(house.qualifications, []);
+  assert.deepEqual(house.qualifications, ["forum_identity_unconfirmed"]);
   });
 });
 

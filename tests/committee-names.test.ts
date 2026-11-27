@@ -55,7 +55,7 @@ test("every listed body matches its own source path", () => {
     assert.notEqual(forumIdentityOutcome(heading, record.path), "reject", record.citationLabel);
   }
   const synthetic: Array<[string, string[]]> = [
-    ["the Pylon address", ["Chapter 7", "QUILL ADDRESS", "the Pylon address"]],
+    ["the Pylon address", ["Chapter 7", "ADDRESSES", "the Pylon address"]],
     ["Sittings of the House", ["Chapter 2", "COMMITTEES", "Sittings of the House"]],
     ["Asking a question", ["Chapter 3", "QUESTIONS", "Asking a question"]],
     ["the second", ["Chapter 4", "SECONDER", "the second"]],
