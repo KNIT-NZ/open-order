@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.21.json", import.meta.url), "utf8"));
+const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.22.json", import.meta.url), "utf8"));
 
 type SpecRow = {
   id: string;
@@ -178,7 +178,7 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.21 matches the fixture on either route", async () => {
+test("forum spec v2.22 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;
