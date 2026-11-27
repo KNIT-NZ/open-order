@@ -1,7 +1,7 @@
+import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import type {
   AiDiagnosticTopResult,
   AiDiagnostics,
-  AiSourceDisposition,
   SearchResult,
 } from "./types";
 import { clientCheckNote } from "./client-check-note";
@@ -80,7 +80,8 @@ export function buildSourceHref(result: SearchResult): string | null {
   const baseUrl = result.sourceUrl.split("#")[0];
   // Corrected provisions may link to the official Word volume, not stale HTML.
   if (/\.docx$/i.test(baseUrl)) return baseUrl;
-  const anchor = result.sourceAnchor ? encodeURI(result.sourceAnchor) : null;
+  const anchorValue = usableSourceAnchor(result.sourceAnchor);
+  const anchor = anchorValue ? encodeURI(anchorValue) : null;
 
   if (textStart && anchor) {
     return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;
@@ -384,23 +385,15 @@ function publicPruneNote(note: string | null | undefined): string | null {
 }
 
 export function formatAiDebugSnapshot(input: AiDiagnostics): string {
-  const searchQueries = input.plan?.searchQueries?.length
-    ? input.plan.searchQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
-    : "None";
-
-  const salientTermsText = input.plan?.salientTerms?.length
-    ? input.plan.salientTerms.map((term, i) => `${i + 1}. ${term}`).join("\n")
-    : "None";
+  const searchQueryCount = input.plan?.searchQueries?.length ?? 0;
+  const salientTermCount = input.plan?.salientTerms?.length ?? 0;
 
   const inferredConceptsText =
     input.inferredConcepts.length > 0
       ? input.inferredConcepts.map((c, i) => `${i + 1}. ${c}`).join("\n")
       : "None";
 
-  const expandedQueriesText =
-    input.expandedQueries.length > 0
-      ? input.expandedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
-      : "None";
+  const expandedQueryCount = input.expandedQueryCount ?? input.expandedQueries.length;
 
   const blueprintSlotsText =
     input.blueprintSlots.length > 0
@@ -478,14 +471,14 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
                   `   Discovery heading: ${retrieval.discovery.heading ?? "None"}`,
                   `   Discovery evidence count: ${retrieval.discovery.evidenceCount}`,
                   `   Discovery slot: ${retrieval.discovery.slotKey ?? "None"}`,
-                  `   Discovery bridge source query: ${retrieval.discovery.bridgeSourceQuery ?? "None"}`,
+                  `   Discovery bridge matched: ${retrieval.discovery.bridgeMatched ? "Yes" : "No"}`,
                   `   Discovery bridge source authority: ${retrieval.discovery.bridgeSourceCitationLabel ?? "None"}`,
                   `   Discovery validation: ${retrieval.discovery.validation}`,
                 ]
               : ["   Discovery status: not evaluated"];
 
             return [
-              `${retrievalIndex + 1}. Query: ${retrieval.query}`,
+              `${retrievalIndex + 1}. Matched a row: ${retrieval.matchedRow || retrieval.resultCount > 0 ? "Yes" : "No"}`,
               `   Corpus: ${retrieval.corpus ?? "Auto"}`,
               `   Provenance: ${retrieval.provenance ?? "unknown"}`,
               ...discoveryText,
@@ -544,36 +537,32 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
         `Candidate authorities evaluated: ${selector.candidateCount}`,
         `Final authorities selected: ${selector.selectedLabels.join(", ") || "None"}`,
         `Minimum obligation coverage: ${selector.minObligationCoverage.toFixed(3)}`,
-        `All semantic obligations complete: ${selector.allObligationsComplete ? "Yes" : "No"}`,
+        `All semantic obligations met by selector: ${selector.allObligationsComplete ? "Yes" : "No"}`,
         "Per-obligation coverage:",
         ...selector.obligationDetails.slice(0, 12).map((detail, index) =>
           `  ${index + 1}. ${detail.coverage.toFixed(3)} (${detail.complete ? "complete" : "incomplete"})`),
-        `Selection before redundancy pruning: ${selector.prePruneLabels.join(", ") || "None"}`,
+        `Selection before redundancy pruning: ${selector.prePruneCount ?? selector.prePruneLabels?.length ?? 0}`,
       ].join("\n")
     : "Semantic selection summary: Not received";
 
-  // Print only the public form: counts and reason codes for refusals, no adjudicator free text.
+  // Counts and reason codes only. Authority labels stay out of this snapshot.
   const adjudication = selector?.scenarioAdjudication
     ? publicScenarioAdjudication(selector.scenarioAdjudication) : undefined;
-  const admittedRows = (rows: AiSourceDisposition[]) =>
-    rows.map((row) => `  ${row.corpus}:${row.citationLabel} — admitted; ${row.role ?? "no role"}; ${row.reason}`);
   const adjudicationSummary = adjudication ? [
-    `Status: ${adjudication.status}`,
+    `Status: ${/^[a-z0-9_:-]+$/i.test(adjudication.status) ? adjudication.status : "other"}`,
     `Dossier count: ${adjudication.candidateCount}; primary review attempts: ${adjudication.providerAttempts}`,
-    `Dossier: ${adjudication.dossier?.join(", ") || "None reported"}`,
-    `Retrieved outside dossier (bounded): ${adjudication.retrievedOutsideDossier?.join(", ") || "None reported"}`,
-    `Final accepted: ${adjudication.selected.join(", ") || "None"}`,
+    `Dossier entries: ${adjudication.dossierCount ?? 0}`,
+    `Outside dossier: ${adjudication.outsideDossierCount ?? 0}`,
+    `Accepted sources: ${adjudication.selectedCount ?? 0}`,
     `Primary refusals: ${adjudication.rejected.join("; ") || "None"}`,
     `Unknown nominations: ${adjudication.unavailableNominations ?? "Not reported"}`,
     `Primary dispositions: ${adjudication.dispositionCounts?.join("; ") || "None reported"}`,
-    ...admittedRows(adjudication.dispositions),
     `Recovery: ${adjudication.recovery.status}`,
-    `Recovery candidates: ${adjudication.recovery.candidates.join(", ") || "None"}`,
-    `Recovery accepted: ${adjudication.recovery.selected.join(", ") || "None"}`,
+    `Recovery candidates: ${adjudication.recovery.candidates.join("; ") || "None"}`,
+    `Recovery accepted: ${adjudication.recovery.selectedCount ?? 0}`,
     `Recovery refusals: ${adjudication.recovery.rejected.join("; ") || "None"}`,
     `Recovery unknown nominations: ${adjudication.recovery.unavailableNominations ?? "Not reported"}`,
     `Recovery dispositions: ${adjudication.recovery.dispositionCounts?.join("; ") || "None reported"}`,
-    ...admittedRows(adjudication.recovery.dispositions),
     `Unresolved facets: ${adjudication.gaps.join("; ") || "None reported"}`,
   ].join("\n") : "Scenario adjudication: Not received";
 
@@ -638,18 +627,13 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     "----",
     `Intent: ${input.plan?.intent ?? "None"}`,
     `Preferred corpus: ${input.plan?.preferredCorpus ?? "None"}`,
-    `Notes: ${input.plan?.notes ?? "None"}`,
-    "Planner search queries:",
-    searchQueries,
-    "",
-    "Salient user terms:",
-    salientTermsText,
+    `Planner search queries: ${searchQueryCount}`,
+    `Salient terms: ${salientTermCount}`,
     "",
     "Inferred concepts:",
     inferredConceptsText,
     "",
-    "Expanded queries:",
-    expandedQueriesText,
+    `Expanded queries: ${expandedQueryCount}`,
     "",
     "BLUEPRINT COVERAGE",
     "------------------",

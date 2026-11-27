@@ -66,6 +66,28 @@ test("primary retrieval leaders survive lexical reranking and dossier pressure",
   assert.equal(rejected.authorities.length,0);
 });
 
+test("dossier ranker drops closed-class words before stemming", () => {
+  const question = "Is this rule applied during sittings whereas notice was given unless waived?";
+  const leak = {
+    sectionId: "leak", citationLabel: "LEAK", documentCorpus: "standing_orders",
+    heading: "thi dur wherea unles", path: ["thi dur wherea unles"],
+    sectionContent: "thi dur wherea unles",
+  };
+  const kept = Array.from({ length: 8 }, (_, index) => ({
+    sectionId: `kept-${index}`, citationLabel: `KEPT-${index}`, documentCorpus: "standing_orders",
+    heading: "rule notice waived sittings", path: ["rule notice waived sittings"],
+    sectionContent: "The rule on notice is waived at sittings.",
+  }));
+  const result = buildV40Dossier({
+    question,
+    legacySelected: [],
+    max: 8,
+    searches: [{ query: question, corpus: null, provenance: "corpus_bridge", results: [leak, ...kept] }],
+  });
+  assert.equal(result.some((source) => source.citationLabel === "LEAK"), false);
+  assert.equal(result.length, 8);
+});
+
 test("primary reservation does not bypass corpus, source-body or dossier limits",()=>{
   const invalid={...a,sectionId:"invalid",citationLabel:"INVALID",documentCorpus:"unknown"};
   const empty={...a,sectionId:"empty",citationLabel:"EMPTY",sectionContent:" "};

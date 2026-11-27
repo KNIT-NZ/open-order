@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clientCheckNote } from "../lib/open-order/client-check-note";
+import { publicScenarioAdjudication } from "../lib/open-order/public-diagnostics";
 import { formatAiDebugSnapshot } from "../lib/open-order/format";
 import { EMPTY_AI_DIAGNOSTICS } from "../lib/open-order/types";
 
@@ -65,8 +66,7 @@ test("done, error and debug output omit rejected labels and check prose", () => 
   assert.match(snapshot, /rewritten_mentions=1|None reported/);
 });
 
-test("diagnostics event and debug snapshot omit rejected labels, reasons and adjudicator gaps", async () => {
-  const { publicScenarioAdjudication } = await import("../lib/open-order/public-diagnostics");
+test("diagnostics event and debug snapshot omit rejected labels, reasons and adjudicator gaps", () => {
   const markers = {
     rejectedLabel: "SO 404",
     rejectedRuling: "77/9",
@@ -124,7 +124,11 @@ test("diagnostics event and debug snapshot omit rejected labels, reasons and adj
   }
   assert.deepEqual(sent.rejected, ["rejected=3", "scope-not-established:actor=1", "other_reason=1", "unavailable-or-duplicate=1"]);
   assert.deepEqual(sent.gaps, ["unresolved_facets=2"]);
-  assert.deepEqual(sent.dispositions.map((row) => row.citationLabel), ["SO 1"]);
+  assert.deepEqual(sent.dispositions, []);
+  assert.deepEqual(sent.selected, []);
+  assert.deepEqual(sent.dossier, []);
+  assert.equal(sent.dossierCount, 1);
+  assert.equal(sent.selectedCount, 1);
   assert.deepEqual(sent.dispositionCounts, [
     "admitted:verified_source_witness=1", "rejected:scope-not-established:actor=1",
     "rejected:other_reason=1", "not_nominated:model_did_not_nominate=1",
@@ -134,7 +138,8 @@ test("diagnostics event and debug snapshot omit rejected labels, reasons and adj
   for (const snapshot of snapshots) {
     assert.match(snapshot, /Primary refusals: rejected=3; scope-not-established:actor=1/);
     assert.match(snapshot, /Unresolved facets: unresolved_facets=2/);
-    assert.match(snapshot, /standing_orders:SO 1 — admitted; governing; verified_source_witness/);
+    assert.equal(snapshot.includes("standing_orders:SO 1 — admitted"), false);
+    assert.match(snapshot, /Dossier entries: 1/);
   }
 });
 
@@ -163,4 +168,133 @@ test("debug snapshot keeps the route's fixed prune count and drops any other pru
     assert.equal(snapshot.includes("expel"), false, note);
     assert.match(snapshot, /Deterministic pruning: None reported\n/, note);
   }
+});
+
+test("a refused dossier label and an unshown selected label stay out of public diagnostics", () => {
+  const refused = "QX REFUSED GOVERNING";
+  const unshown = "QX NEVER SHOWN";
+  const raw = {
+    status: "v40_no_governing_witness",
+    candidateCount: 1,
+    selected: [unshown],
+    rejected: [`${refused}:scope-not-established:actor`],
+    gaps: ["a private gap"],
+    providerAttempts: 1,
+    dossier: [`standing_orders:${refused}`],
+    retrievedOutsideDossier: [],
+    dispositions: [{ citationLabel: refused, corpus: "standing_orders", status: "rejected", reason: "scope-not-established:actor", role: "governing" }],
+    unavailableNominations: 0,
+    recovery: {
+      status: "not_needed",
+      candidates: [`standing_orders:${refused}`],
+      dispositions: [],
+      unavailableNominations: 0,
+      selected: [unshown],
+      rejected: [],
+    },
+  };
+  const sent = publicScenarioAdjudication(raw);
+  const event = JSON.stringify({ selectorSummary: { scenarioAdjudication: sent } });
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    selectorSummary: {
+      candidateCount: 0, minObligationCoverage: 0, allObligationsComplete: false,
+      obligationDetails: [], prePruneLabels: [], selectedLabels: [], scenarioAdjudication: raw,
+    },
+  });
+  for (const blob of [event, snapshot]) {
+    assert.equal(blob.includes(refused), false, blob.slice(0, 200));
+    assert.equal(blob.includes(unshown), false);
+  }
+  assert.deepEqual(sent.selected, []);
+  assert.deepEqual(sent.dossier, []);
+  assert.deepEqual(sent.recovery.selected, []);
+  assert.deepEqual(sent.recovery.candidates, ["recovery_candidates=1"]);
+  assert.deepEqual(sent.gaps, ["unresolved_facets=1"]);
+});
+
+test("provider failure codes stay, and a token with a space does not", () => {
+  assert.equal(
+    clientCheckNote(["code=UNAVAILABLE", "code=RESOURCE_EXHAUSTED", "kind=LEAKMARKER", "code=SO 404"]),
+    "code=UNAVAILABLE;code=RESOURCE_EXHAUSTED",
+  );
+});
+
+test("code-shaped identifiers do not pass the client note or the adjudication status", () => {
+  const shapes = [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "sec-48213",
+    "SO9",
+    "corpus.example",
+    "127.0.0.1",
+    "corpus.example:5432",
+    "abcdefghijklmnopqrstuvwxyz012345",
+  ];
+  for (const shape of shapes) {
+    assert.equal(clientCheckNote([
+      `claim_ids=${shape}`, `code=${shape}`, `kind=${shape}`, `status=${shape}`, shape,
+    ]), null, shape);
+    const sent = publicScenarioAdjudication({
+      status: shape,
+      candidateCount: 0,
+      selected: [],
+      rejected: [shape, `${shape}:${shape}`],
+      gaps: [],
+      providerAttempts: 0,
+      dossier: [],
+      retrievedOutsideDossier: [],
+      dispositions: [],
+      unavailableNominations: 0,
+      recovery: { status: shape, candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [shape] },
+    });
+    const blob = JSON.stringify(sent);
+    assert.equal(blob.includes(shape), false, shape);
+    assert.equal(sent.status, "other");
+  }
+  assert.equal(clientCheckNote(["claim_ids=claim-1,claim-2", "claim_ids=the_member_said"]), "claim_ids=claim-1,claim-2");
+  for (const shape of [
+    "localhost:5432", "10.0.0.12:5432", "::ffff:10.0.0.1",
+    "uuid:550e8400-e29b-41d4-a716-446655440000", "none,48213",
+    "dbhost:5", "dbhost:654321", "sec48213", "section_48213", "so_9", "s.o.296a",
+    "sec_48213", "section-48213", "48213", "so-9", "s.o.9", "fe80::1",
+    "claim-1,550e8400-e29b-41d4-a716-446655440000",
+  ]) {
+    assert.equal(clientCheckNote([
+      `repair=${shape}`, `appeal=${shape}`, `primary_refusal=${shape}`,
+      `recovery_refusal=${shape}`, `disposition=${shape}`,
+    ]), null, shape);
+    if (!/^\d{1,4}$/.test(shape)) {
+      assert.equal(clientCheckNote([`recovery_candidates=${shape}`]), null, shape);
+    }
+  }
+  assert.equal(clientCheckNote(["repair=accepted", "appeal=not_attempted"]), "repair=accepted;appeal=not_attempted");
+  const outside = "standing_orders:QX OUTSIDE DOSSIER";
+  const outsideRaw = {
+    status: "v40_quoted_source_adjudication",
+    candidateCount: 1,
+    selected: [],
+    rejected: [],
+    gaps: ["first private gap", "second private gap"],
+    providerAttempts: 1,
+    dossier: [],
+    retrievedOutsideDossier: [outside],
+    dispositions: [],
+    unavailableNominations: 0,
+    recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
+  };
+  const once = publicScenarioAdjudication(outsideRaw);
+  const twice = publicScenarioAdjudication(once);
+  assert.equal(JSON.stringify(once).includes("QX OUTSIDE"), false);
+  assert.equal(once.outsideDossierCount, 1);
+  assert.deepEqual(twice.gaps, once.gaps);
+  assert.equal(JSON.stringify(twice).includes("unresolved_facets=2:"), false);
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    selectorSummary: {
+      candidateCount: 0, minObligationCoverage: 0, allObligationsComplete: false,
+      obligationDetails: [], prePruneLabels: [], selectedLabels: [], scenarioAdjudication: outsideRaw,
+    },
+  });
+  assert.equal(snapshot.includes("QX OUTSIDE"), false);
+  assert.match(snapshot, /Outside dossier: 1/);
 });

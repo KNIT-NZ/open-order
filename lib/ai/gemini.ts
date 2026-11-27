@@ -5,6 +5,42 @@ import { AiProviderError } from "./errors";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
+/** Explicit allow-list. The default primary is gemini-3.6-flash; flash-lite is the quota fallback. */
+export const GEMINI_FREE_TIER_ALLOWLIST = ["gemini-3.6-flash", "gemini-3.5-flash-lite"] as const;
+
+const MODEL_ID = /^gemini-[a-z0-9][a-z0-9._-]{0,60}$/i;
+
+export function geminiAllowList(): string[] {
+  const raw = process.env.GEMINI_FREE_TIER_MODELS ?? GEMINI_FREE_TIER_ALLOWLIST.join(",");
+  const allowed = new Set<string>(GEMINI_FREE_TIER_ALLOWLIST);
+  return raw.split(",").map((model) => model.trim()).filter((model) => allowed.has(model) && MODEL_ID.test(model));
+}
+
+/** Tester mode stays on the pinned model. Otherwise the configured model, or flash, is primary. */
+export function geminiFreeTierChain(): string[] {
+  if (process.env.OPEN_ORDER_INFERENCE_MODE?.trim() === "zero-billed-test") {
+    return [GEMINI_MODEL];
+  }
+  const allow = geminiAllowList();
+  const allowSet = new Set(allow.length > 0 ? allow : GEMINI_FREE_TIER_ALLOWLIST);
+  const preferred = process.env.GEMINI_MODEL?.trim();
+  const primary = preferred && allowSet.has(preferred) ? preferred : "gemini-3.6-flash";
+  const chain = allowSet.has(primary) ? [primary] : [];
+  for (const model of allowSet) if (!chain.includes(model)) chain.push(model);
+  return chain.length > 0 ? chain : ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
+}
+
+/** See ProviderAttempt in lib/ai/types.ts. `other` is every failure that is not 429, 5xx, or timeout. */
+export type ProviderAttemptOutcome = "ok" | "429" | "5xx" | "timeout" | "other";
+
+export function providerAttemptOutcome(error: unknown, signal?: AbortSignal): ProviderAttemptOutcome {
+  if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) return "timeout";
+  const classified = error instanceof AiProviderError ? error : classifyError(error);
+  if (classified.kind === "rate_limited" || classified.statusCode === 429) return "429";
+  if (classified.statusCode !== null && classified.statusCode >= 500 && classified.statusCode <= 599) return "5xx";
+  return "other";
+}
+
 // Disable application-managed retries for the zero-billed tester mode.
 // An SDK-level retry audit is still required before live tester authorisation.
 const GEMINI_MAX_RETRIES =
@@ -195,63 +231,105 @@ function classifyError(error: unknown): AiProviderError {
     kind: "unknown", provider: "gemini", retryable: false, rawMessage, cause: error });
 }
 
-async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+export async function runGeminiChain<T>(
+  operation: (model: string) => Promise<T>,
+  hooks?: {
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: () => void;
+    signal?: AbortSignal;
+    onAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+    onAttemptStart?: (model: string) => void;
+  },
+): Promise<T> {
+  const pause = hooks?.sleep ?? sleep;
+  const chain = geminiFreeTierChain();
   let lastError: AiProviderError | null = null;
-
-  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      const classified = classifyError(error);
-      lastError = classified;
-
-      const shouldRetry = classified.retryable && attempt < GEMINI_MAX_RETRIES;
-
-      if (!shouldRetry) {
+  for (const model of chain) {
+    if (hooks?.signal?.aborted) {
+      hooks.onAttemptStart?.(model);
+      hooks.onAttempt?.({ model, outcome: "timeout" });
+      throw new DOMException("The answer deadline elapsed.", "AbortError");
+    }
+    const attempts = GEMINI_MAX_RETRIES > 0 ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (hooks?.signal?.aborted) {
+        hooks.onAttemptStart?.(model);
+        hooks.onAttempt?.({ model, outcome: "timeout" });
+        throw new DOMException("The answer deadline elapsed.", "AbortError");
+      }
+      hooks?.onAttemptStart?.(model);
+      try {
+        const value = await operation(model);
+        hooks?.onAttempt?.({ model, outcome: "ok" });
+        return value;
+      } catch (error) {
+        const outcome = providerAttemptOutcome(error, hooks?.signal);
+        hooks?.onAttempt?.({ model, outcome });
+        if (outcome === "timeout") throw error;
+        const classified = classifyError(error);
+        lastError = classified;
+        if (classified.kind === "configuration") throw classified;
+        const rateLimited = outcome === "429";
+        if (classified.retryable && attempt + 1 < attempts) {
+          hooks?.onRetry?.();
+          await pause(computeBackoffMs(attempt));
+          continue;
+        }
+        // 429/5xx move on after the same-model retry. A 400, JSON parse, or schema
+        // mismatch falls through once. 401, 403 and 404 throw this model's error.
+        const structuredFallback = outcome === "other" && (classified.statusCode === 400 || classified.kind === "parse");
+        if (rateLimited || classified.retryable || structuredFallback) break;
         throw classified;
       }
-
-      await sleep(computeBackoffMs(attempt));
     }
   }
-
-  throw (
-    lastError ??
-    new AiProviderError({
-      message: "The AI provider failed after retries.",
-      kind: "unknown",
-      retryable: false,
-    })
-  );
+  throw lastError ?? new AiProviderError({
+    message: "The AI provider failed after retries.",
+    kind: "unknown",
+    retryable: false,
+    provider: "gemini",
+  });
 }
 
 export async function generateJson<T>({
   systemInstruction,
   prompt,
   temperature = 0.2,
+  onProviderRetry,
+  onProviderAttempt,
+  onProviderAttemptStart,
+  signal,
+  validate,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
+  onProviderRetry?: () => void;
+  onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  onProviderAttemptStart?: (model: string) => void;
+  signal?: AbortSignal;
+  validate?: (value: unknown) => void;
 }): Promise<T> {
-  return withRetry(async () => {
+  return runGeminiChain(async (model) => {
     const gemini = await getClient();
 
     const response = await gemini.models.generateContent({
-      model: GEMINI_MODEL,
+      model,
       contents: prompt,
       config: {
         systemInstruction,
         temperature,
         responseMimeType: "application/json",
+        abortSignal: signal,
       },
     });
 
     const text = response.text ?? "";
     const jsonText = extractLikelyJson(text);
 
+    let parsed: T;
     try {
-      return JSON.parse(jsonText) as T;
+      parsed = JSON.parse(jsonText) as T;
     } catch (error) {
       throw new AiProviderError({
         message: "Failed to parse AI JSON response.",
@@ -262,7 +340,21 @@ export async function generateJson<T>({
         }`,
       });
     }
-  });
+    if (validate) {
+      try {
+        validate(parsed);
+      } catch (error) {
+        throw new AiProviderError({
+          message: "The model response did not match the required structure.",
+          kind: "parse",
+          retryable: false,
+          rawMessage: error instanceof Error ? error.message : String(error),
+          cause: error,
+        });
+      }
+    }
+    return parsed;
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, onAttemptStart: onProviderAttemptStart, signal });
 }
 
 export async function streamText({
@@ -270,30 +362,38 @@ export async function streamText({
   prompt,
   temperature = 0.2,
   onChunk,
+  onProviderRetry,
+  onProviderAttempt,
+  onProviderAttemptStart,
+  signal,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
   onChunk?: (text: string) => void;
+  onProviderRetry?: () => void;
+  onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  onProviderAttemptStart?: (model: string) => void;
+  signal?: AbortSignal;
 }): Promise<string> {
-  return withRetry(async () => {
+  return runGeminiChain(async (model) => {
     const gemini = await getClient();
 
     // The answer route has no onChunk consumer: avoid an unnecessary streaming
     // transport while retaining true streaming for callers that request it.
     if (!onChunk) {
       const response = await gemini.models.generateContent({
-        model: GEMINI_MODEL,
+        model,
         contents: prompt,
-        config: { systemInstruction, temperature },
+        config: { systemInstruction, temperature, abortSignal: signal },
       });
       return response.text ?? "";
     }
 
     const response = await gemini.models.generateContentStream({
-      model: GEMINI_MODEL,
+      model,
       contents: prompt,
-      config: { systemInstruction, temperature },
+      config: { systemInstruction, temperature, abortSignal: signal },
     });
 
     let fullText = "";
@@ -307,5 +407,5 @@ export async function streamText({
     }
 
     return fullText;
-  });
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, onAttemptStart: onProviderAttemptStart, signal });
 }

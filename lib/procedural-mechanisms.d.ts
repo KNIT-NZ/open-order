@@ -1,0 +1,116 @@
+export const FALLBACK_REASONS: readonly string[];
+export const STREAM_ERROR_REASONS: readonly string[];
+export const SEARCH_FOCUS_MAX_CHARS: number;
+export function stem(token: string): string;
+export function contentTokens(text: string): string[];
+export function normaliseNumberWords(text: string): string;
+export function routeFromPlanner(situationKind: string | undefined): "incident_adjudication" | "semantic_selector";
+export function mustAdjudicateFromPlanner(kind: string | undefined, hasLegacy: boolean): boolean;
+export function relationsFromPlanner(input: { intent?: string; situation?: { decisionQuestion?: string; action?: string } | null }): string[];
+export function authorisingRuleQueries(situation?: { action?: string; decisionQuestion?: string } | null): string[];
+export function stageReopeningQueries(situation?: { relations?: string[] } | null): string[];
+export function proceedingConsequenceQueries(situation?: { relations?: string[] } | null): string[];
+export function errorCorrectionQueries(situation?: { relations?: string[] } | null): string[];
+export function presidingOfficerAppealQuery(situation?: { relations?: string[] } | null): string | null;
+export function actorClassQualificationQuery(actor: string): string | null;
+export function splitActAndObject(action: string): { act: string[]; object: string[] };
+export function suffixStem(word: string): string;
+export function actAttestation(quote: string, action?: string, verb?: string, objectText?: string): "clean" | "unconfirmed";
+export function quoteAttestsActAndObject(quote: string, action?: string, verb?: string, objectText?: string): boolean;
+export function parseSettlement(answerText: string): {
+  text: string;
+  settlement: "supported" | "partial" | "not_answered" | null;
+  uncertainty: Array<{ class: string; facet: string }>;
+};
+export function canonicalCitationLabel(label: string): string;
+export function operatorCitations(text: string): Array<{ kind: string; key: string }>;
+export function isDeclaredDefinitionUnit(section: { heading?: string | null; path?: string[] }): boolean;
+export function followOperatorChain<T extends { sectionId?: string; citationLabel?: string; documentCorpus?: string; sectionContent?: string; heading?: string | null; path?: string[] }>(input: {
+  admitted?: T[];
+  pool?: T[];
+}): { candidates: T[]; truncated: boolean };
+export function deriveAnswerState(state: {
+  abstained?: boolean;
+  settlement?: string | null;
+  uncertainty?: Array<{ class?: string; facet?: string }>;
+  partial?: string[];
+  answerEdits?: string[];
+  pruned?: boolean;
+  rewritten?: boolean;
+  repairAccepted?: boolean;
+  fallbackReason?: string;
+  fallbackCode?: string;
+}): "supported" | "partial" | "not_answered";
+export function procedureHomonymMismatch(question: string, heading: string): string | null;
+export function forumIdentityOutcome(setting: string, path: string[]): "match" | "reject" | "uncertain";
+export function forumIdentityMismatch(setting: string, path: string[]): string | null;
+export function tallyForumOutcomes(
+  records: Array<{ sectionId?: string; citationLabel?: string; heading?: string | null; path?: string[] }>,
+  setting?: string,
+): { identity: number; ambiguous: number };
+export function expressCrossReferences(text: string): string[];
+export function isApplicabilityRejection(reason: string): boolean;
+export function rejectionKeysFor(record: { sectionId?: string; citationLabel?: string; documentCorpus?: string; corpus?: string }): string[];
+export function dispositionBlocksRecovery(row: { status?: string; reason?: string }): boolean;
+export function collectRejectionKeys(input: {
+  dispositions?: Array<{ status?: string; reason?: string; sectionId?: string; citationLabel?: string; corpus?: string; documentCorpus?: string }>;
+  recoveryDispositions?: Array<{ status?: string; reason?: string; sectionId?: string; citationLabel?: string; corpus?: string; documentCorpus?: string }>;
+  selectorRejections?: Array<{ sectionId?: string; citationLabel?: string; documentCorpus?: string; corpus?: string }>;
+}): Set<string>;
+export function recoverySuppressed(diagnostic: { status?: string; recovery?: { status?: string } } | null | undefined): boolean;
+export function isRejectedCandidate(candidate: { sectionId?: string; citationLabel?: string; documentCorpus?: string }, rejectedKeys: Set<string>): boolean;
+export function selectOverlookedCandidates<T extends { sectionId?: string; citationLabel?: string; documentCorpus?: string; sectionContent?: string }>(input: {
+  pool?: T[];
+  admittedIds?: string[];
+  rejectedKeys: Set<string>;
+  action?: string;
+  verb?: string;
+  objectText?: string;
+}): T[];
+export function filterDraftNamedAuthorities<T extends { citationLabel?: string }>(named: T[], admitted: Array<{ citationLabel?: string }>): T[];
+export function authoritiesReferencedByAnswer<T extends { citationLabel?: string }>(answerText: string, authorities: T[]): T[];
+export function resolveServedModel(answerModel: string | null | undefined, lastAttemptedModel: string | null | undefined): string | null;
+export function negativePowerWitnessScore(input: { actor?: string; act?: string; source?: string }): number;
+export function powerGrantedToDifferentBody(askedBody: string, source: string): boolean;
+export function dutyVersusDiscretion(text: string): "duty" | "discretion" | "either" | "unspecified";
+export function exceptionNamesAuthorisingBody(clause: string): boolean;
+export function usableSourceAnchor(anchor: string | null | undefined): string | null;
+export function isStructuredTableRow(line: string): boolean;
+export function isStructuredTableSection(content: string): boolean;
+export function tableVocabularyCovers(query: string, heading: string | null, path: string[], content: string): boolean;
+export function insufficiencyFacets(answerText: string): string[];
+export function obligationPartialFacets(details: Array<{ coverage?: number; complete?: boolean }> | undefined): string[];
+export function citationLabelsIn(text: string): string[];
+export function dropUnreferencedCitationEntries(answerText: string): { text: string; dropped: string[] };
+export function labelBareRulings(text: string, authorities?: Array<{ citationLabel?: string; documentCorpus?: string }>): string;
+export function describesStandingOrdersAsStatute(text: string): boolean;
+export function overHedgesSettledDuty(answerText: string, sources: Array<{ sectionContent?: string }>): boolean;
+export function conditionalSubIssueGaps(answerText: string): string[];
+export function actorClassDrift(claim: string, source: string): boolean;
+export function deriveDegraded(outcome: { fallbackReason: string; partial?: string[]; abstained?: boolean }): boolean;
+export function deriveAnswerOutcome(state: Record<string, unknown>): {
+  route: "incident_adjudication" | "semantic_selector";
+  providerRetries: number;
+  adjudicationRecovery: boolean;
+  evidenceRecovery: boolean;
+  repairAttempted: boolean;
+  repairAccepted: boolean;
+  appealAttempted: boolean;
+  appealAccepted: boolean;
+  fallbackReason: string;
+  partial: string[];
+  abstained: boolean;
+  allObligationsComplete: boolean;
+  obligationCoverage: number[];
+  degraded: boolean;
+};
+export function freezeFirstDraft(draft: { answerText?: string; claimVerdicts?: Array<{ id?: string; supported?: boolean; reason?: string }>; citations?: string[] }): {
+  answerText: string;
+  claimVerdicts: Array<{ id: string; supported: boolean; reason: string }>;
+  citations: string[];
+};
+export function reasonFromProviderKind(kind: string | undefined): string;
+export function learnSynonymsFromHeadings(headings: string[]): Map<string, string>;
+export function conceptsMatchingLabels(concepts: Array<{ aliases?: string[]; slots?: Array<{ headings?: string[] }> }>, labels: string[]): unknown[];
+export function normaliseSearchFocus(value: unknown): string | null;
+export function isBoundedSearchFocus(value: string): boolean;

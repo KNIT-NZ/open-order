@@ -28,8 +28,15 @@ export type AiFailureDiagnostic = {
   elapsedMs: number;
 };
 
-const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
-const TRANSIENT_CODES = new Set([
+export const DIAGNOSTIC_KINDS = [
+  "provider_transient",
+  "provider_nonretryable",
+  "validation_format",
+  "application_or_unknown",
+] as const;
+
+export const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
+export const TRANSIENT_CODES = new Set([
   "RESOURCE_EXHAUSTED",
   "UNAVAILABLE",
   "DEADLINE_EXCEEDED",
@@ -41,7 +48,7 @@ const TRANSIENT_CODES = new Set([
   "SERVICE_UNAVAILABLE",
   "OVERLOADED",
 ]);
-const NONRETRYABLE_CODES = new Set([
+export const NONRETRYABLE_CODES = new Set([
   "INVALID_ARGUMENT",
   "PERMISSION_DENIED",
   "UNAUTHENTICATED",
@@ -101,9 +108,11 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
         statusNumber(record.code);
     }
     if (code === null) {
-      code = safeCode(record.code) ?? safeCode(record.kind) ??
+      // A provider kind is not a code. An unknown outer code must not hide a known inner one.
+      const raw = safeCode(record.code) ??
         (isObject(record.error) ?
           (safeCode(record.error.code) ?? safeCode(record.error.status)) : null);
+      if (raw && (TRANSIENT_CODES.has(raw) || NONRETRYABLE_CODES.has(raw))) code = raw;
     }
     next = record.cause;
   }

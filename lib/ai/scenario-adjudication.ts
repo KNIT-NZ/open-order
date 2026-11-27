@@ -1,3 +1,12 @@
+import { CLOSED_CLASS } from "@/lib/closed-class.js";
+import { dossierDomainStops } from "@/lib/domain-vocabulary-data.js";
+import {
+  forumIdentityMismatch,
+  forumIdentityOutcome,
+  procedureHomonymMismatch,
+  quoteAttestsActAndObject,
+} from "@/lib/procedural-mechanisms";
+
 /**
  * Open Order v40: source-adjudication contracts, candidate diversity and evidence gates.
  * No authority IDs, benchmark answers or preferred rulings are embedded here.
@@ -29,22 +38,16 @@ export type V40Situation = {
   materialFacts: string[];
   evidenceQueries: string[];
 };
-/**
- * A recording or broadcast question requires an authorisation source, not
- * merely a source allowing the device used to make a recording. These are
- * topic-level retrieval queries, not embedded authorities or benchmark answers.
- */
-export function v401MaterialEvidenceQueries(question: string): string[] {
-  const recording = /\b(?:live[\s-]?stream\w*|(?:take|takes|taking|make|makes|making)\s+(?:an?\s+)?(?:photo|picture|image)|film(?:ing)?|broadcast\w*|photograph\w*|video(?:ing)?|(?:make|take|capture)\s+(?:an?\s+)?(?:video\s+|sound\s+|audio\s+)?recording(?:s)?|record(?:ing)?\s+(?:a\s+|the\s+|his\s+|her\s+|their\s+|own\s+)?(?:speech|debate|proceedings))\b/i.test(question);
-  const parliamentary = /\b(?:mp|mps|member|members|chamber|house|parliament|speech|debate|committee)\b/i.test(question);
-  return recording && parliamentary
-    ? ["coverage of proceedings", "making recordings"]
-    : [];
+/** Retrieve the authorising rule for a structured regulated act. */
+export function v401MaterialEvidenceQueries(action?: string | null): string[] {
+  const text = String(action ?? "").replace(/\s+/g, " ").trim();
+  if (text.length < 3 || text.length > 90) return [];
+  return [text];
 }
 
-function v401MediaWitnessMatches(question: string, quote: string): boolean {
-  if (v401MaterialEvidenceQueries(question).length === 0) return true;
-  return /\b(?:record(?:ing|ings|ed|s)?|broadcast\w*|image|images|filming|film|photograph\w*|video|live[\s-]?stream\w*)\b/i.test(quote);
+function v401MediaWitnessMatches(action: string | undefined, quote: string): boolean {
+  if (!action) return true;
+  return quoteAttestsActAndObject(quote, action);
 }
 
 export function v401AcceptIndependentRepair(input: {
@@ -82,6 +85,7 @@ export type V40Adjudication = {
   remainingUncertainties: string[];
   explanation: string;
 };
+export type RejectedGoverningNomination = { id: string; inDossier: boolean };
 export type V40Review<T extends V40Authority> = {
   authorities: T[];
   rejected: string[];
@@ -90,18 +94,22 @@ export type V40Review<T extends V40Authority> = {
   reason: string;
   dispositions: V402Disposition[];
   unavailableNominations: number;
+  /** Soft gates. act_attestation_unconfirmed admits the source and caps the answer. */
+  qualifications: string[];
+  /** Identifiers only. No adjudicator prose, quotes, or question text. */
+  rejectedGoverning: RejectedGoverningNomination[];
 };
 
-const COMMON = new Set([
-  "a", "an", "the", "of", "to", "and", "in", "or", "on", "at", "for", "by", "is", "are", "be", "do", "does", "can", "could", "would", "should", "with", "as", "it", "their", "them", "that", "this", "there", "what", "which", "when", "where", "who", "how", "from", "during", "after", "before", "about", "under", "into", "members", "member", "parliament", "parliamentary", "speaker", "house", "rules", "ruling", "order", "procedure", "proceedings",
-]);
 function words(input: string): Set<string> {
+  const domainStops = new Set<string>(dossierDomainStops);
+  const stopped = (word: string) => CLOSED_CLASS.has(word) || domainStops.has(word);
   return new Set(input.toLowerCase().normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .map((word) => word.replace(/(?:ing|ed|es|s)$/,""))
-    .filter((word) => word.length >= 3 && !COMMON.has(word)));
+    .filter((word) => word.length > 0 && !stopped(word))
+    .map((word) => word.replace(/(?:ing|ed|es|s)$/, ""))
+    .filter((word) => word.length >= 3 && !stopped(word)));
 }
 function intersection(a: Set<string>, b: Set<string>): number {
   let count = 0;
@@ -173,22 +181,11 @@ export function buildV40Dossier<T extends V40Authority>(input: {
   return [...result.values()].slice(0,max);
 }
 
-export function v40SourceScopeMismatch(question: string, source: V40Authority): string | null {
-  const q = question.toLowerCase();
-  const path = (source.path ?? []).join(" ").toLowerCase();
-  const heading = (source.heading ?? "").toLowerCase();
-  // Generic FORUM and ACTIVITY exclusions, not authority-number exceptions.
-  const chamberActivity = /\b(chamber|house debate|in the house|speech|speaking|mp tells the house|another mp)\b/.test(q);
-  const committeeActivity = /\b(select committee|committee hearing|committee evidence)\b/.test(q);
-  if (chamberActivity && !committeeActivity && /\bselect committees\b/.test(path))
-    return "select-committee source for chamber question";
-  if (/\b(speech|speaking|address the house|in a debate|during debate)\b/.test(q) &&
-      !/\b(petition|petitions)\b/.test(q) &&
-      /\bpetitions\b/.test(path))
-    return "petition procedure for speech question";
-  if (/\bdivision\b/.test(q) && /\b(vote|voting|voters|mps|members)\b/.test(q) &&
-      /\bdivid(?:e|ing) (?:a |the )?bill\b/.test(heading))
-    return "dividing a bill is not a vote division";
+export function v40SourceScopeMismatch(question: string, source: V40Authority, setting?: string): string | null {
+  const homonym = procedureHomonymMismatch(question, source.heading ?? "");
+  if (homonym) return homonym;
+  const forum = forumIdentityMismatch(setting || "", source.path ?? []);
+  if (forum) return forum;
   return null;
 }
 
@@ -205,6 +202,8 @@ export function validateV40Proposal<T extends V40Authority>(input: {
   candidates: T[];
   proposal: V40Adjudication;
   limit?: number;
+  setting?: string;
+  action?: string;
 }): V40Review<T> {
   const limit = Math.max(1, Math.min(4, input.limit ?? 4));
   const byLabel = new Map<string, T>();
@@ -221,9 +220,21 @@ export function validateV40Proposal<T extends V40Authority>(input: {
   const rejected: string[] = [];
   const accepted: string[] = [];
   const authorities: T[] = [];
+  const qualifications: string[] = [];
+  const rejectedGoverning: RejectedGoverningNomination[] = [];
   let primaryAdmitted = false;
   let unavailableNominations = 0;
   const seen = new Set<string>();
+  const noteRejectedGoverning = (item: V40ProposedWitness, source: T | undefined) => {
+    if (item.role !== "governing") return;
+    const sectionId = source?.sectionId ?? "";
+    const label = (source?.citationLabel || item.citationLabel || "").trim();
+    const id = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,64}$/.test(sectionId)
+      ? sectionId
+      : (/^(?:SO\s+\d+[A-Za-z]*|\d+\/\d+)$/i.test(label) ? label : "");
+    if (!id || rejectedGoverning.some((row) => row.id === id)) return;
+    rejectedGoverning.push({ id, inDossier: Boolean(source) });
+  };
   for (const item of input.proposal.selected.slice(0, 12)) {
     const source = byLabel.get(item.citationLabel);
     if (!source) { unavailableNominations += 1; rejected.push("unknown-source:unavailable-or-duplicate"); continue; }
@@ -235,7 +246,10 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     seen.add(item.citationLabel);
     const mark = (status: V402Disposition["status"], reason: string) => {
       for (const row of rows) { row.status = status; row.reason = reason; row.role = item.role; }
-      if (status === "rejected") rejected.push(`${source.citationLabel}:${reason}`);
+      if (status === "rejected") {
+        rejected.push(`${source.citationLabel}:${reason}`);
+        noteRejectedGoverning(item, source);
+      }
     };
     if (ambiguous.has(item.citationLabel)) { mark("rejected", "ambiguous-source-identity"); continue; }
     if (authorities.length >= limit) { mark("not_reviewed_limit", "admission_limit"); continue; }
@@ -244,22 +258,35 @@ export function validateV40Proposal<T extends V40Authority>(input: {
         !item.actionMatches && "action", !item.stageMatches && "stage"].filter(Boolean).join(",");
       mark("rejected", `scope-not-established:${failed}`); continue;
     }
-    const mismatch = v40SourceScopeMismatch(input.question, source);
+    const mismatch = v40SourceScopeMismatch(input.question, source, input.setting);
     if (mismatch) { mark("rejected", mismatch); continue; }
     const quote = normalizeWhitespace(item.exactQuote);
-    if (item.role === "governing" && !v401MediaWitnessMatches(input.question, quote)) {
-      mark("rejected", "recording-permission-not-attested"); continue;
-    }
     if (quote.length < 24 || !normalizeWhitespace(source.sectionContent).includes(quote)) {
       mark("rejected", "unverified-verbatim-witness"); continue;
     }
     if (!["governing", "qualification", "implementation"].includes(item.role)) {
       mark("rejected", "invalid-source-role"); continue;
     }
+    // A lexical act miss is not a defective authority. Admit it and qualify.
+    // An unresolved body name is the same kind of soft miss: admit, qualify, never a hard reject.
+    const actUnconfirmed = item.role === "governing" && !v401MediaWitnessMatches(input.action, quote);
+    const forumUncertain = forumIdentityOutcome(input.setting || "", source.path ?? []) === "uncertain";
     authorities.push(source);
     accepted.push(source.citationLabel);
-    mark("admitted", "verified_source_witness");
+    if (actUnconfirmed && !qualifications.includes("act_attestation_unconfirmed")) {
+      qualifications.push("act_attestation_unconfirmed");
+    }
+    if (forumUncertain && !qualifications.includes("forum_identity_unconfirmed")) {
+      qualifications.push("forum_identity_unconfirmed");
+    }
+    if (actUnconfirmed) mark("admitted", "act_attestation_unconfirmed");
+    else if (forumUncertain) mark("admitted", "forum_identity_unconfirmed");
+    else mark("admitted", "verified_source_witness");
     if (item.role === "governing") primaryAdmitted = true;
+  }
+  for (const item of input.proposal.selected) {
+    if (item.role !== "governing" || byLabel.has(item.citationLabel)) continue;
+    noteRejectedGoverning(item, undefined);
   }
   if (!primaryAdmitted) {
     for (const row of dispositions) if (row.status === "admitted") {
@@ -267,10 +294,10 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     }
     return { authorities: [], accepted: [], rejected: [...rejected, "missing-primary-governing-witness"],
       gaps: input.proposal.remainingUncertainties.slice(0, 5), reason: "v40_no_governing_witness",
-      dispositions, unavailableNominations };
+      dispositions, unavailableNominations, qualifications, rejectedGoverning };
   }
   return { authorities, accepted, rejected, gaps: input.proposal.remainingUncertainties.slice(0, 5),
-    reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations };
+    reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations, qualifications, rejectedGoverning };
 }
 
 /** A second review may reconsider omitted or previously non-governing sources,
@@ -289,40 +316,113 @@ export function v402RecoveryCandidates<T extends V40Authority>(input: {
   });
 }
 
+export const V402_REPAIR_REASONS = [
+  "missing_bottom_line",
+  "invalid_citations",
+  "invalid_authority_mentions",
+  "qualification_veto",
+  "not_responsive_or_missing_verdict",
+  "unaddressed_parts",
+  "no_claims",
+  "duplicate_claim_ids",
+  "verdict_count_mismatch",
+  "duplicate_verdict_ids",
+  "unexpected_verdict_id",
+  "missing_claim_verdict",
+  "unsupported_claim",
+] as const;
+
+/** Route preliminary refusals include this reason as well as the gate set. */
+export const EMPTY_REPAIR_REASON = "empty_repair";
+
 /** Diagnostic projection of the existing repair gate, without relaxing it. */
 export function v402RepairRefusals(input: Parameters<typeof v401AcceptIndependentRepair>[0]): string[] {
   const reasons: string[] = [];
-  if (!input.hasBottomLine) reasons.push("missing_bottom_line");
-  if (!input.citationValid) reasons.push("invalid_citations");
-  if (!input.mentionValid) reasons.push("invalid_authority_mentions");
-  if (input.sourceQualificationVetoes !== 0) reasons.push("qualification_veto");
-  if (!input.responsive) reasons.push("not_responsive_or_missing_verdict");
-  if (input.unaddressedParts.length) reasons.push("unaddressed_parts");
+  const push = (reason: typeof V402_REPAIR_REASONS[number]) => { reasons.push(reason); };
+  if (!input.hasBottomLine) push("missing_bottom_line");
+  if (!input.citationValid) push("invalid_citations");
+  if (!input.mentionValid) push("invalid_authority_mentions");
+  if (input.sourceQualificationVetoes !== 0) push("qualification_veto");
+  if (!input.responsive) push("not_responsive_or_missing_verdict");
+  if (input.unaddressedParts.length) push("unaddressed_parts");
   const ids = new Set(input.claimIds);
   const verdictIds = new Set(input.validatedClaims.map((claim) => claim.id));
-  if (!ids.size) reasons.push("no_claims");
-  if (ids.size !== input.claimIds.length) reasons.push("duplicate_claim_ids");
-  if (input.validatedClaims.length !== input.claimIds.length) reasons.push("verdict_count_mismatch");
-  if (verdictIds.size !== input.validatedClaims.length) reasons.push("duplicate_verdict_ids");
-  if (input.validatedClaims.some((claim) => !ids.has(claim.id))) reasons.push("unexpected_verdict_id");
-  if ([...ids].some((id) => !verdictIds.has(id))) reasons.push("missing_claim_verdict");
-  if (input.validatedClaims.some((claim) => !claim.supported)) reasons.push("unsupported_claim");
+  if (!ids.size) push("no_claims");
+  if (ids.size !== input.claimIds.length) push("duplicate_claim_ids");
+  if (input.validatedClaims.length !== input.claimIds.length) push("verdict_count_mismatch");
+  if (verdictIds.size !== input.validatedClaims.length) push("duplicate_verdict_ids");
+  if (input.validatedClaims.some((claim) => !ids.has(claim.id))) push("unexpected_verdict_id");
+  if ([...ids].some((id) => !verdictIds.has(id))) push("missing_claim_verdict");
+  if (input.validatedClaims.some((claim) => !claim.supported)) push("unsupported_claim");
   return reasons;
 }
 
+/** Overlooked text is admitted only when an external judge returns a proposal that passes the same witness checks. */
+export async function admitJudgedOverlooked<T extends V40Authority>(input: {
+  question: string;
+  setting?: string;
+  action?: string;
+  candidates: T[];
+  judge: () => Promise<V40Adjudication>;
+}): Promise<{ authorities: T[]; unavailable: boolean; qualifications: string[] }> {
+  if (input.candidates.length === 0) return { authorities: [], unavailable: false, qualifications: [] };
+  try {
+    const proposal = await input.judge();
+    const review = validateV40Proposal({
+      question: input.question,
+      setting: input.setting,
+      action: input.action,
+      candidates: input.candidates,
+      proposal,
+    });
+    return { authorities: review.authorities, unavailable: false, qualifications: review.qualifications };
+  } catch {
+    return { authorities: [], unavailable: true, qualifications: [] };
+  }
+}
+
+export type AdjudicationRouteReason =
+  | "no_legacy_pack"
+  | "planner_procedure"
+  | "incident_corroborated"
+  | "incident_uncorroborated"
+  | "narrative_corroborated"
+  | "kind_absent";
+
+type RoutingSituation = {
+  materialFacts?: string[] | null;
+  affectedPerson?: string | null;
+} | null | undefined;
+
+/** The planner recorded an occurrence. No question-opening list and no framing-word test. */
+export function plannerRecordsEvent(situation: RoutingSituation): boolean {
+  const facts = situation?.materialFacts;
+  const affected = String(situation?.affectedPerson ?? "").trim();
+  return affected.length > 0 || (Array.isArray(facts) && facts.some((fact) => String(fact ?? "").trim().length > 0));
+}
+
+/**
+ * Quoted-source adjudication requires a structured event from the planner.
+ * kind=incident alone stays on the selector. Adjudication remains the secondary path.
+ */
+export function adjudicationRouting(_question: string, kind: string | undefined, hasLegacy: boolean,
+  situation?: RoutingSituation): {
+  adjudicate: boolean;
+  reason: AdjudicationRouteReason;
+} {
+  if (!hasLegacy) return { adjudicate: true, reason: "no_legacy_pack" };
+  if (kind === "procedure") return { adjudicate: false, reason: "planner_procedure" };
+  const recorded = plannerRecordsEvent(situation);
+  if (kind === "incident") {
+    return recorded
+      ? { adjudicate: true, reason: "incident_corroborated" }
+      : { adjudicate: false, reason: "incident_uncorroborated" };
+  }
+  if (recorded) return { adjudicate: true, reason: "narrative_corroborated" };
+  return { adjudicate: false, reason: "kind_absent" };
+}
+
 export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,
-  hasLegacy: boolean): boolean {
-  if(!hasLegacy)return true;
-  // On established procedural GEN questions, retain v39.1's tested selector.
-  // The planner's incident classification is advisory: corroborate it with an
-  // expressed event, actor or physical setting in the original question.
-  const q=question.toLowerCase();
-  const actorOrSetting = /\b(?:mp|mps|member|members|gallery|chamber|speaker|whanau|whānau)\b/.test(q);
-  const event = actorOrSetting && /\b(?:wear\w*|say\w*|tell\w*|bring\w*|shout\w*|stand\w*|start\w*|begin\w*|swear\w*|trie\w*|try\w*|stays?|turn\w*|speak\w*|during|when|after|before|while|as|want\w*|display\w*|object\w*|record\w*|live\w*|vote\w*|can|may|could|what)\b/.test(q);
-  if (kind === "procedure") return false;
-  if (kind === "incident") return event;
-  // Backwards-compatible contingency if the planner omits the optional
-  // situation DTO: distinguish narrative incident openers from the procedural
-  // interrogatives used by the already-frozen GEN20 regression.
-  return event && /^(?:an?\s|several\s|members?\s|during\s|in the middle\s|as a\s|the speaker\s|wh[aā]nau\s)/.test(q);
+  hasLegacy: boolean, situation?: RoutingSituation): boolean {
+  return adjudicationRouting(question, kind, hasLegacy, situation).adjudicate;
 }

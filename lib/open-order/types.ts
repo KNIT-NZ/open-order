@@ -111,10 +111,12 @@ export type AiDiagnosticDiscovery = {
   slotKey: string | null;
   bridgeSourceQuery?: string | null;
   bridgeSourceCitationLabel?: string | null;
+  bridgeMatched?: boolean;
 };
 
 export type AiDiagnosticRetrieval = {
   query: string;
+  matchedRow?: boolean;
   corpus: string | null;
   provenance?: AiQueryProvenance;
   discovery?: AiDiagnosticDiscovery;
@@ -162,7 +164,9 @@ export type AiSelectorSummary = {
   minObligationCoverage: number;
   allObligationsComplete: boolean;
   obligationDetails: Array<{ coverage: number; complete: boolean }>;
-  prePruneLabels: string[];
+  prePruneLabels?: string[];
+  prePruneCount?: number;
+  legacySelectedCount?: number;
   selectedLabels: string[];
 };
 
@@ -212,6 +216,7 @@ export type AiDiagnostics = {
   error: string | null;
   inferredConcepts: string[];
   expandedQueries: string[];
+  expandedQueryCount?: number;
   blueprintSlots: string[];
   requiredSlots: string[];
   optionalSlots: string[];

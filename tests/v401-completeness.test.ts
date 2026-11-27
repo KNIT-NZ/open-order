@@ -40,25 +40,29 @@ test("v40.1: malformed CORE planner fields still fail closed", () => {
   assert.equal(searchPlanSchema.safeParse({...base,intent:"unauthorised"}).success,false);
 });
 
-test("v40.1: recording queries exclude voting records", () => {
-  assert.deepEqual(v401MaterialEvidenceQueries("An MP livestreams their speech"),
-    ["coverage of proceedings","making recordings"]);
-  assert.deepEqual(v401MaterialEvidenceQueries("Members record abstentions in a vote"),[]);
+test("v40.1: a regulated act retrieves its own authorising rule", () => {
+  assert.deepEqual(v401MaterialEvidenceQueries("emit a beacon"), ["emit a beacon"]);
+  assert.deepEqual(v401MaterialEvidenceQueries(""), []);
 });
 
-test("v40.1: device use alone cannot authorise recording", () => {
-  const body="The use of electronic devices in the Chamber is permitted if they do not disrupt the House.";
-  const candidate={sectionId:"e",citationLabel:"19/5",documentCorpus:"speakers_rulings",
-    heading:"Telephones and electronic devices",path:["Behaviour in Chamber"],sectionContent:body};
+test("v40.1: a different act is admitted only with an act qualification", () => {
+  // This used to hard-reject on a lexical verb miss (act-not-attested). A wording
+  // mismatch is now a qualified admission. Unverifiable quotes still reject.
+  const body="Carrying a device is permitted when it does not disrupt the forum.";
+  const candidate={sectionId:"e",citationLabel:"QX 1",documentCorpus:"speakers_rulings",
+    heading:"Devices",path:["Forum conduct"],sectionContent:body};
   const result=validateV40Proposal({
-    question:"An MP livestreams their speech using a phone. Is that allowed?",
+    question:"May the actor emit a beacon from a carried device?",
+    action:"emit a beacon",
     candidates:[candidate],proposal:{selected:[{
-      citationLabel:"19/5",role:"governing",exactQuote:body,
+      citationLabel:"QX 1",role:"governing",exactQuote:body,
       actorMatches:true,settingMatches:true,actionMatches:true,stageMatches:true,
       rationale:"claimed authority"}],remainingUncertainties:[],explanation:""},
   });
-  assert.deepEqual(result.authorities,[]);
-  assert.ok(result.rejected.some((line)=>line.includes("recording-permission-not-attested")));
+  assert.equal(result.authorities.length, 1);
+  assert.equal(result.reason, "v40_quoted_source_adjudication");
+  assert.deepEqual(result.qualifications, ["act_attestation_unconfirmed"]);
+  assert.equal(result.rejected.some((line)=>line.includes("act-not-attested")), false);
 });
 
 test("v40.1: repair requires complete independent, responsive claim approval", () => {

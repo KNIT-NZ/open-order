@@ -6,6 +6,7 @@
  * operative rule can veto a categorical claim about the same actor and action.
  * Does not infer what a cross-referenced provision says or add authorities.
  */
+import { exceptionNamesAuthorisingBody } from "@/lib/procedural-mechanisms";
 import { sourceLabel } from "./claim-appeal";
 
 export type QualificationClaim = {
@@ -110,7 +111,7 @@ function acknowledgesArm(claim: string, arm: {kind: string; text: string}): bool
   // Require a substantive distinctive phrase or two source-specific words;
   // generic 'house'/'leave' cannot erase an unrelated exception.
   if (words.length && words.filter((w) => claimWords.has(w)).length >= Math.min(2, words.length)) return true;
-  if (armNormal.includes("house expressly authoris") && /\bhouse\b/i.test(claimNormal) && /\bauthoris/i.test(claimNormal)) return true;
+  if (exceptionNamesAuthorisingBody(`${arm.kind} ${arm.text}`) && exceptionNamesAuthorisingBody(claim)) return true;
   return false;
 }
 

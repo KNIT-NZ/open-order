@@ -27,7 +27,9 @@
     "db:ingest-standing-orders-html": "node --env-file=.env.local --import tsx scripts/ingest-standing-orders-html.ts",
     "db:chunk-sections": "node --env-file=.env.local --import tsx scripts/chunk-sections.ts",
     "db:count-chunks": "node --env-file=.env.local --import tsx scripts/count-chunks.ts",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "gen:committee-names": "node --env-file=.env.local --import tsx scripts/gen-committee-names.ts",
+    "gen:corpus-proceedings": "node --env-file=.env.local --import tsx scripts/gen-corpus-proceedings.ts"
   },
   "dependencies": {
     "@google/genai": "^1.48.0",

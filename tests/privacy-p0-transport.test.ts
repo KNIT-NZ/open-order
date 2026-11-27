@@ -13,6 +13,19 @@ test("private search accepts transient query and preserves pagination/filtering"
   assert.equal(result?.get("limit"), "10");
   assert.equal(result?.get("offset"), "20");
 });
+test("focus never fails the search and keeps labels with dashes and marks", async () => {
+  const accepted = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "so-12" })));
+  assert.equal(accepted?.get("focus"), "so-12");
+  const marked = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "SO 12 – § &" })));
+  assert.equal(marked?.get("q"), "SO 12");
+  assert.equal(marked?.get("focus"), "SO 12 – § &");
+  const hostile = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "../secret" })));
+  assert.equal(hostile?.get("q"), "SO 12");
+  assert.equal(hostile?.get("focus"), null);
+  const long = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: `so-${"1".repeat(200)}` })));
+  assert.equal(long?.get("q"), "SO 12");
+  assert.ok((long?.get("focus") ?? "").length <= 120);
+});
 test("private search rejects malformed, oversized and unknown-field inputs", async () => {
   for (const body of ["{", "null", "[]", JSON.stringify({ q: canary, debug: { query: canary } }), JSON.stringify({ q: {} }), JSON.stringify({ q: "x".repeat(4097) }), "x".repeat(SEARCH_BODY_MAX_BYTES + 1)]) {
     assert.equal(await readPrivateSearchParams(request(body)), null);

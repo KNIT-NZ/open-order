@@ -130,13 +130,6 @@ export function useOpenOrderAssistant() {
                 stageLabel: payload.label ?? current.stageLabel,
               }));
             }
-          } else if (eventName === "plan") {
-            const nextPlan = data as AiPlan;
-            setPlan(nextPlan);
-            setDiagnostics((current) => ({
-              ...current,
-              plan: nextPlan,
-            }));
           } else if (eventName === "authorities") {
             const payload = data as { authorities?: AiAuthority[] };
             const nextAuthorities =

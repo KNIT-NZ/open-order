@@ -5,6 +5,7 @@ import { boundedElapsed, operationalRelease, type OperationalOutcome } from "@/l
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { readPrivateSearchParams } from "@/lib/open-order/private-search-transport";
 import { searchParamsSchema } from "@/lib/search";
+import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   buildSingularizedPhrase,
@@ -145,7 +146,7 @@ async function executeSearch(params: URLSearchParams, observeCount: (count: numb
       documentTitle: row.documentTitle,
       documentCorpus: row.documentCorpus,
       sourceUrl: row.sourceUrl,
-      sourceAnchor: row.sourceAnchor,
+      sourceAnchor: usableSourceAnchor(row.sourceAnchor),
       rank: row.rank,
       sectionRank: row.sectionRank,
       pathRank: row.pathRank,

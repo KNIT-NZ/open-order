@@ -36,6 +36,11 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
         systemInstruction: request.systemInstruction,
         prompt: request.prompt,
         temperature: request.temperature,
+        onProviderRetry: request.onProviderRetry,
+        onProviderAttempt: request.onProviderAttempt,
+        onProviderAttemptStart: request.onProviderAttemptStart,
+        signal: request.signal,
+        validate: request.validate,
       }),
     streamText: (request: AiStreamTextRequest) =>
       gemini.streamText({
@@ -43,6 +48,10 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
         prompt: request.prompt,
         temperature: request.temperature,
         onChunk: request.onChunk,
+        onProviderRetry: request.onProviderRetry,
+        onProviderAttempt: request.onProviderAttempt,
+        onProviderAttemptStart: request.onProviderAttemptStart,
+        signal: request.signal,
       }),
   },
   "openai-compatible": {

@@ -25,6 +25,16 @@ export const searchPlanSchema = z.object({
     proceduralMoment: z.string().max(180),
     decisionQuestion: z.string().max(260),
     materialFacts: z.array(z.string().max(240)).max(5),
+    subQuestions: z.array(z.string().max(240)).max(4).optional().catch(undefined),
+    verb: z.string().max(80).optional().catch(undefined),
+    object: z.string().max(120).optional().catch(undefined),
+    relations: z.array(z.enum([
+      "stage_reopening",
+      "proceeding_consequence",
+      "error_correction",
+      "presiding_appeal",
+      "regulated_act",
+    ])).max(4).optional().catch(undefined),
     evidenceQueries: z.array(z.string().min(2).max(90)).max(2).nullish()
       .transform((value) => value ?? []),
   }).nullish().catch(undefined).transform((value) => value ?? undefined),

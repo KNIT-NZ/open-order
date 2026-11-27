@@ -49,11 +49,28 @@ export type V517SelectionResult = {
   obligationDetails: V517ObligationDetail[];
   candidateCount: number;
   evidenceAdmission: string;
+  rejectedAuthorities?: Array<{
+    sectionId: string;
+    citationLabel: string;
+    documentCorpus: string;
+    reason: string;
+  }>;
 };
 
+export function deriveObligations(question: string, plannerRelations: string[] | undefined, parts?: string[]): Array<{ relations: string[] }>;
 export function selectV517AuthorityPack(input: {
   question: string;
   searches: V517SearchExecution[];
   searchProceduralAuthorities: V517SearchFunction;
   maxAuthorities?: number;
+  plannerRelations?: string[];
+  situation?: {
+    kind?: string;
+    actor?: string;
+    setting?: string;
+    action?: string;
+    decisionQuestion?: string;
+    materialFacts?: string[];
+    subQuestions?: string[];
+  };
 }): Promise<V517SelectionResult>;

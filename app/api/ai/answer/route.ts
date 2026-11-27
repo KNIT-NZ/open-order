@@ -1,13 +1,46 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { clientCheckNote } from "@/lib/open-order/client-check-note";
+import { clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
+import { CLAIM_ID_MAX_LENGTH, COUNT_DIGITS, FORUM_COUNT_WIDTH, boundedCount } from "@/lib/open-order/emitted-widths";
 import { publicScenarioAdjudication } from "@/lib/open-order/public-diagnostics";
+import { publicRetrievals } from "@/lib/open-order/public-search";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
+import {
+  ANSWER_STREAM_DEADLINE_MS,
+  ANSWER_STREAM_HEARTBEAT_MS,
+  openGovernedAnswerStream,
+} from "@/lib/open-order/answer-stream";
+import {
+  actorClassQualificationQuery,
+  authoritiesReferencedByAnswer,
+  authorisingRuleQueries,
+  citationLabelsIn,
+  collectRejectionKeys,
+  deriveAnswerOutcome,
+  deriveAnswerState,
+  dropUnreferencedCitationEntries,
+  errorCorrectionQueries,
+  followOperatorChain,
+  freezeFirstDraft,
+  labelBareRulings,
+  parseSettlement,
+  obligationPartialFacets,
+  forumIdentityOutcome,
+  presidingOfficerAppealQuery,
+  proceedingConsequenceQueries,
+  recoverySuppressed,
+  relationsFromPlanner,
+  reasonFromProviderKind,
+  resolveServedModel,
+  selectOverlookedCandidates,
+  stageReopeningQueries,
+  tallyForumOutcomes,
+} from "@/lib/procedural-mechanisms";
 import {
   failureDiagnostic,
   publicFailureReason,
@@ -33,8 +66,8 @@ import {
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
-  buildV40Dossier, validateV40Proposal, v40MustAdjudicate,
-  v40SourceScopeMismatch, v401MaterialEvidenceQueries,
+  adjudicationRouting, admitJudgedOverlooked, buildV40Dossier, validateV40Proposal,
+  v40SourceScopeMismatch,
   v401AcceptIndependentRepair, v402RecoveryCandidates, v402RepairRefusals,
   type V402Disposition, type V40Situation,
 } from "@/lib/ai/scenario-adjudication";
@@ -47,6 +80,7 @@ import {
   buildAuthorityProfile,
   buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
+  withholdingStage,
   buildMissingSlotRecoveryRequests,
   buildProceduralQueryPlan,
   describeMissingAuthoritySlots,
@@ -116,17 +150,38 @@ const claimAppealSchema = z.object({
 
 type AuthorityPayload = ReturnType<typeof buildAuthorityPayload>[number];
 
+// Plan assumption: the platform honours this literal. Next.js requires a
+// static literal here; the stream deadline is derived from the same number
+// in lib/open-order/answer-stream.js (ANSWER_ROUTE_MAX_DURATION_SECONDS).
+export const maxDuration = 300;
+
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+type AnswerRouteDeps = {
+  generateJson?: typeof generateJson;
+  streamText?: typeof streamText;
+  searchProceduralAuthorities?: typeof searchProceduralAuthorities;
+  selectV517ProductionAuthorities?: typeof selectV517ProductionAuthorities;
+  loadHeadings?: () => Promise<string[]>;
+};
+
 export async function POST(request: NextRequest) {
+  return runAnswerRoute(request);
+}
+
+export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps = {}) {
+  const generate = deps.generateJson ?? generateJson;
+  const streamAnswer = deps.streamText ?? streamText;
+  const searchAuthorities = deps.searchProceduralAuthorities ?? searchProceduralAuthorities;
+  const selectAuthorities = deps.selectV517ProductionAuthorities ?? selectV517ProductionAuthorities;
   let body: unknown;
 
   try {
     body = await request.json();
   } catch {
-    return new Response(sseEvent("error", { message: "Invalid JSON body" }), {
+    return new Response(sseEvent("error", { message: "Invalid JSON body", reason: "invalid_request", retryable: false, kind: "validation" }), {
       status: 400,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -142,6 +197,9 @@ export async function POST(request: NextRequest) {
     return new Response(
       sseEvent("error", {
         message: "Invalid request body",
+        reason: "invalid_request",
+        retryable: false,
+        kind: "validation",
         details: parsed.error.flatten(),
       }),
       {
@@ -156,11 +214,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { question, corpus = null } = parsed.data;
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const startedAt = Date.now();
+  const startedAt = Date.now();
       const requestId = randomUUID();
       // Vercel supplies the public deployment commit when available.
       const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -181,30 +235,163 @@ export async function POST(request: NextRequest) {
         stageCount: Math.min(stageTimeline.length, 1000),
         lastStage: stageTimeline.length ? operationalStage(stageTimeline[stageTimeline.length - 1]?.key) : "none",
         releaseSha: operationalRelease(process.env.VERCEL_GIT_COMMIT_SHA) }));
-      const send = (event: string, data: unknown) => {
+      const outcomeState = {
+        route: "semantic_selector" as "incident_adjudication" | "semantic_selector",
+        providerRetries: 0,
+        adjudicationRecovery: false,
+        evidenceRecovery: false,
+        repairAttempted: false,
+        repairAccepted: false,
+        appealAttempted: false,
+        appealAccepted: false,
+        fallbackCode: "none",
+        partial: [] as string[],
+        abstained: false,
+        allObligationsComplete: true,
+        obligationCoverage: [] as number[],
+        settlement: null as "supported" | "partial" | "not_answered" | null,
+        uncertainty: [] as Array<{ class: string; facet: string }>,
+        recoveredAuthorities: [] as string[],
+        pruned: false,
+        rewritten: false,
+      };
+      let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
+      let answerEdits: string[] = [];
+      // `other` is a failed attempt that was not a 429, a 5xx, or a timeout.
+      const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
+      const stageModels: Array<{ task: string; model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
+      let openAttemptIndex: number | null = null;
+      let lastAttemptedModel: string | null = null;
+      let answerModel: string | null = null;
+      let activeSignal: AbortSignal | undefined;
+        const noteRetry = () => { outcomeState.providerRetries += 1; };
+        const noteCheckedWithholding = () => {
+          if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+          if (outcomeState.uncertainty.length < 6 && !outcomeState.uncertainty.some((item) => item.facet === "claim withheld after checking")) {
+            outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "claim withheld after checking" });
+          }
+        };
+        const noteEvidenceGap = (facet: string) => {
+          if (!outcomeState.partial.includes("evidence_gap")) outcomeState.partial.push("evidence_gap");
+          if (outcomeState.uncertainty.length < 6 && !outcomeState.uncertainty.some((item) => item.facet === facet)) {
+            outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet });
+          }
+        };
+      const beginAttempt = (model: string) => {
+        lastAttemptedModel = model;
+        providerAttempts.push({ model, outcome: "timeout" });
+        openAttemptIndex = providerAttempts.length - 1;
+      };
+      const recordAttempt = (task: string, attempt: { model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }) => {
+        if (openAttemptIndex !== null && providerAttempts[openAttemptIndex]?.model === attempt.model) {
+          providerAttempts[openAttemptIndex] = { model: attempt.model, outcome: attempt.outcome };
+          openAttemptIndex = null;
+        } else {
+          providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
+        }
+        lastAttemptedModel = attempt.model;
+        if (task === "query.plan" || task === "answer.generate" || task === "answer.validate") {
+          stageModels.push({ task, model: attempt.model, outcome: attempt.outcome });
+        }
+        if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
+      };
+      // Only models that actually served a stage. A failed attempt does not count.
+      const mixedModels = () => new Set(stageModels.filter((attempt) => attempt.outcome === "ok").map((attempt) => attempt.model)).size > 1;
+      // Last model whose attempt started. This does not mean the attempt succeeded;
+      // read providerAttempts for each outcome.
+      const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
+      const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
+        && process.env.VERCEL_ENV !== "production";
+      const decorate = (event: string, data: unknown) => {
         if (event === "stage" && data && typeof data === "object") {
           const stage = data as { key?: unknown; label?: unknown };
           if (typeof stage.key === "string" && typeof stage.label === "string" && stageTimeline.length < 32) {
             stageTimeline.push({ key: stage.key, label: stage.label, atMs: Math.max(0, Date.now() - startedAt) });
           }
         }
-        if ((event === "done" || event === "error") && data && typeof data === "object") {
-          data = {
-            ...data,
-            trace: {
-              schemaVersion: 2,
-              requestId,
-              buildCommit,
-              stageTimeline,
-              incidentRepair,
-            },
+        if (!(data && typeof data === "object")) return data;
+        const record = data as Record<string, unknown>;
+        const trace = {
+          schemaVersion: 2,
+          requestId,
+          buildCommit,
+          stageTimeline,
+          incidentRepair,
+        };
+        if (event === "error") {
+          const reason = typeof record.reason === "string"
+            ? record.reason
+            : reasonFromProviderKind(typeof record.kind === "string" ? record.kind : undefined);
+          return {
+            message: record.message,
+            retryable: record.retryable === true,
+            kind: record.kind ?? "unknown",
+            reason,
+            servedModel: servedModel(),
+            mixedModels: mixedModels(),
+            stageModels: stageModels.slice(),
+            providerAttempts,
+            trace,
           };
         }
-        controller.enqueue(encoder.encode(sseEvent(event, data)));
+        if (event === "done") {
+          const outcome = deriveAnswerOutcome({ ...outcomeState, fallbackReason: outcomeState.fallbackCode });
+          const prose = typeof record.fallbackReason === "string" ? record.fallbackReason : null;
+          return {
+            ...record,
+            route: outcome.route,
+            providerRetries: outcome.providerRetries,
+            adjudicationRecovery: outcome.adjudicationRecovery,
+            evidenceRecovery: outcome.evidenceRecovery,
+            repairAttempted: outcome.repairAttempted,
+            repairAccepted: outcome.repairAccepted,
+            appealAttempted: outcome.appealAttempted,
+            appealAccepted: outcome.appealAccepted,
+            fallbackReason: prose,
+            fallbackCode: outcome.fallbackReason,
+            partial: outcome.partial,
+            abstained: outcome.abstained,
+            allObligationsComplete: outcome.allObligationsComplete,
+            obligationCoverage: outcome.obligationCoverage,
+            degraded: outcome.degraded,
+            answerState: deriveAnswerState({
+              ...outcomeState,
+              fallbackReason: outcomeState.fallbackCode,
+              answerEdits,
+            }),
+            uncertainty: outcomeState.uncertainty,
+            recoveredAuthorities: outcomeState.recoveredAuthorities,
+            servedModel: servedModel(),
+            mixedModels: mixedModels(),
+            stageModels: stageModels.slice(),
+            providerAttempts,
+            answerEdits,
+            ...(exposeFirstDraft && firstDraftRecord ? { firstDraft: firstDraftRecord } : {}),
+            trace,
+          };
+        }
+        return data;
       };
 
+      let send = (_event: string, _data?: unknown) => { void _event; void _data; };
       const run = async () => {
         const started = startedAt;
+        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
+          generate<T>({
+            ...request,
+            signal: activeSignal,
+            onProviderRetry: noteRetry,
+            onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+            onProviderAttemptStart: beginAttempt,
+          });
+        const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+          streamAnswer({
+            ...request,
+            signal: activeSignal,
+            onProviderRetry: noteRetry,
+            onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+            onProviderAttemptStart: beginAttempt,
+          });
 
         try {
           send("stage", {
@@ -212,14 +399,27 @@ export async function POST(request: NextRequest) {
             label: "Planning retrieval",
           });
 
-          const rawPlan = await generateJson<unknown>({
+          let headingLabels: string[] = [];
+          if (deps.loadHeadings) {
+            headingLabels = await deps.loadHeadings();
+          } else {
+            try {
+              const { corpusHeadingLabels } = await import("@/lib/corpus-headings");
+              headingLabels = await corpusHeadingLabels();
+            } catch {
+              headingLabels = [];
+            }
+          }
+          const rawPlan = await callJson<unknown>({
             task: "query.plan",
             systemInstruction: SEARCH_PLANNER_SYSTEM_PROMPT,
             prompt: buildSearchPlannerPrompt({
               question,
               corpus,
+              headingLabels,
             }),
             temperature: 0.1,
+            validate: (value) => { searchPlanSchema.parse(value); },
           });
 
           const plan = searchPlanSchema.parse(rawPlan);
@@ -228,18 +428,24 @@ export async function POST(request: NextRequest) {
           const effectiveCorpus = corpus ?? null;
           const inferredConcepts = inferConcepts(question, plan.searchQueries);
 
-          send("plan", plan);
-
           send("stage", {
             key: "retrieving",
             label: "Retrieving authorities",
           });
 
-          // A bounded, question-level recording facet is distinct from the
-          // incidental permission to use a phone, camera or other device.
+          // Permission to use equipment or be present is not authorisation for a
+          // separately regulated act. Other expansions are relation-driven.
+          const relationQueries = [
+            ...authorisingRuleQueries(plan.situation),
+            ...stageReopeningQueries(plan.situation),
+            ...proceedingConsequenceQueries(plan.situation),
+            ...errorCorrectionQueries(plan.situation),
+            ...[presidingOfficerAppealQuery(plan.situation), actorClassQualificationQuery(plan.situation?.actor ?? "")]
+              .filter((query): query is string => Boolean(query)),
+          ];
           const scenarioFacets = [
             ...(plan.situation?.kind === "incident" ? plan.situation.evidenceQueries : []),
-            ...(plan.situation?.kind === "procedure" ? [] : v401MaterialEvidenceQueries(question)),
+            ...relationQueries,
           ];
           const additionalScenarioQueries = scenarioFacets.filter((value, index, all) =>
               !plan.searchQueries.some((prior) => prior.toLowerCase() === value.toLowerCase()) &&
@@ -256,7 +462,7 @@ export async function POST(request: NextRequest) {
           const searches: SearchExecution[] = [];
 
           for (const dimension of queryPlan) {
-            const searchResponse = await searchProceduralAuthorities({
+            const searchResponse = await searchAuthorities({
               q: dimension.query,
               corpus: effectiveCorpus,
               limit: 10,
@@ -275,7 +481,7 @@ export async function POST(request: NextRequest) {
           // never pretend they were included merely because the planner named them.
           for (const query of additionalScenarioQueries) {
             if (searches.some((search) => search.query.toLowerCase() === query.toLowerCase())) continue;
-            const searchResponse = await searchProceduralAuthorities({
+            const searchResponse = await searchAuthorities({
               q: query, corpus: effectiveCorpus, limit: 10, offset: 0,
             });
             searches.push({
@@ -316,7 +522,7 @@ export async function POST(request: NextRequest) {
               const searchKey = `${bridge.corpus ?? "auto"}::${bridge.query.toLowerCase()}`;
               if (existingBridgeSearchKeys.has(searchKey)) continue;
 
-              const searchResponse = await searchProceduralAuthorities({
+              const searchResponse = await searchAuthorities({
                 q: bridge.query,
                 corpus: bridge.corpus,
                 limit: 10,
@@ -376,7 +582,7 @@ export async function POST(request: NextRequest) {
               const searchKey = `${recovery.corpus ?? "auto"}::${recovery.query.toLowerCase()}`;
               if (existingSearchKeys.has(searchKey)) continue;
 
-              const searchResponse = await searchProceduralAuthorities({
+              const searchResponse = await searchAuthorities({
                 q: recovery.query,
                 corpus: recovery.corpus,
                 limit: 10,
@@ -412,19 +618,69 @@ export async function POST(request: NextRequest) {
           // concept/slot selector remains in place for bridge/recovery planning
           // and diagnostics, but it no longer determines the answer authority set.
           send("stage", { key: "selecting", label: "Qualifying procedural evidence" });
-          const v517Selection = await selectV517ProductionAuthorities({
+          const plannerRelations = relationsFromPlanner({ intent: plan.intent, situation: plan.situation });
+          const v517Selection = await selectAuthorities({
             searches,
             question,
-            searchProceduralAuthorities,
+            searchProceduralAuthorities: searchAuthorities,
+            plannerRelations,
+            situation: plan.situation,
           });
 
           // V40: preserve the established selector for procedure-first queries;
           // for natural incidents, adjudicate actual source-body evidence across
           // different actors/forums/stages. A model citation is never trusted
           // without a retrieved source and a verbatim supporting quotation.
-          const v40IncidentGate = v40MustAdjudicate(
-            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0,
+          outcomeState.allObligationsComplete = v517Selection.allObligationsComplete;
+          outcomeState.obligationCoverage = v517Selection.obligationDetails.map((detail) => detail.coverage);
+          outcomeState.partial.push(...obligationPartialFacets(v517Selection.obligationDetails));
+          const adjudicationRoute = adjudicationRouting(
+            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0, plan.situation,
           );
+          const v40IncidentGate = adjudicationRoute.adjudicate;
+          outcomeState.route = v40IncidentGate ? "incident_adjudication" : "semantic_selector";
+          let actUnconfirmed = false;
+          let forumUnconfirmed = false;
+          const actLabels = new Set<string>();
+          const forumLabels = new Set<string>();
+          const remember = (target: Set<string>, labels: string[]) => {
+            for (const label of labels) {
+              const text = String(label ?? "").trim();
+              if (text) target.add(text);
+            }
+          };
+          const noteActQualification = (labels: string[]) => {
+            remember(actLabels, labels);
+            if (actLabels.size === 0) return;
+            actUnconfirmed = true;
+            if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "act_attestation_unconfirmed" });
+            }
+          };
+          const noteForumQualification = (labels: string[]) => {
+            remember(forumLabels, labels);
+            if (forumLabels.size === 0) return;
+            forumUnconfirmed = true;
+            if (!outcomeState.uncertainty.some((item) => item.facet === "forum_identity_unconfirmed")) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "forum_identity_unconfirmed" });
+            }
+          };
+          const hiddenLabel = (label: string) => {
+            const text = String(label ?? "");
+            const has = (set: Set<string>) => set.has(text) || [...set].some((item) => item.toLowerCase() === text.toLowerCase());
+            return has(actLabels) || has(forumLabels);
+          };
+          // Filter first. Survivors are confirmed, so the flag is false. The client lists this array as authorities.
+          const listedAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
+            list
+              .filter((item) => !hiddenLabel(String(item.citationLabel ?? "")))
+              .map((item) => ({ ...item, unconfirmed: false }));
+          const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
+            const authorities = input.authorities ?? [];
+            const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
+            const confirmed = authorities.filter((item) => !hiddenLabel(item.citationLabel));
+            return buildFallbackAnswer({ ...input, authorities: confirmed, unconfirmedAuthorities: unconfirmed });
+          };
           let v40AuthoritySet = [...v517Selection.finalAuthorities];
           let v40Diagnostic: {
             status: string; candidateCount: number; selected: string[];
@@ -432,11 +688,17 @@ export async function POST(request: NextRequest) {
             dossier: string[]; retrievedOutsideDossier: string[];
             dispositions: V402Disposition[]; unavailableNominations: number;
             recovery: { status: string; candidates: string[]; dispositions: V402Disposition[]; unavailableNominations: number; selected: string[]; rejected: string[] };
+            qualifications: string[];
+            rejectedGoverning: Array<{ id: string; inDossier: boolean }>;
           } = {
             status: "not_invoked", candidateCount: 0, selected: [], rejected: [], gaps: [], providerAttempts: 0,
             dossier: [], retrievedOutsideDossier: [], dispositions: [], unavailableNominations: 0,
+            qualifications: [],
+            rejectedGoverning: [],
             recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
           };
+          let recoveryRan = false;
+          let overlookedRecords: Array<{ sectionId?: string; citationLabel?: string; heading?: string | null; path?: string[] }> = [];
           if (v40IncidentGate) {
             const dossier = buildV40Dossier({
               question, searches, legacySelected: v40AuthoritySet,
@@ -454,7 +716,7 @@ export async function POST(request: NextRequest) {
               try {
                 const v40Provider = await runClaimValidationWithRetry({
                   requestStartedAt: started,
-                  invoke: () => generateJson<unknown>({
+                  invoke: () => callJson<unknown>({
                     // Evidence adjudication is a strict validation operation.
                     task: "answer.validate",
                     systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
@@ -463,6 +725,7 @@ export async function POST(request: NextRequest) {
                       candidates: dossier, legacySelected: v40AuthoritySet,
                     }),
                     temperature: 0,
+                    validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
                   }),
                   onRetry: () => send("stage", {
                     key: "selecting", label: "Retrying source adjudication after a transient provider error",
@@ -471,8 +734,12 @@ export async function POST(request: NextRequest) {
                 const v40Parsed = v40SourceAdjudicationSchema.parse(v40Provider.value);
                 const v40Review = validateV40Proposal({
                   question, candidates: dossier, proposal: v40Parsed,
+                  setting: plan.situation?.setting, action: plan.situation?.action,
                 });
                 v40AuthoritySet = v40Review.authorities;
+                noteActQualification(v40Review.dispositions
+                  .filter((row) => row.reason === "act_attestation_unconfirmed")
+                  .map((row) => row.citationLabel));
                 v40Diagnostic = {
                   ...v40Diagnostic,
                   status: v40Review.reason,
@@ -483,20 +750,25 @@ export async function POST(request: NextRequest) {
                   providerAttempts: v40Provider.attempts,
                   dispositions: v40Review.dispositions,
                   unavailableNominations: v40Review.unavailableNominations,
+                  qualifications: v40Review.qualifications,
+                  rejectedGoverning: v40Review.rejectedGoverning,
                 };
                 if (v40Review.reason === "v40_no_governing_witness") {
                   const candidates = v402RecoveryCandidates({ question, candidates: dossier, review: v40Review });
                   v40Diagnostic.recovery.candidates = candidates.map((source) => `${source.documentCorpus}:${source.citationLabel}`);
                   v40Diagnostic.recovery.status = candidates.length === 0 ? "no_eligible_sources" : "time_budget_exhausted";
+                  // The deadline status is set before recovery runs. Only entering this block counts as recovery.
                   if (candidates.length > 0 && Date.now() - started < 20_000) {
-                    send("stage", { key: "selecting", label: "Independently reviewing eligible governing evidence" });
+                    recoveryRan = true;
+                    send("stage", { key: "selecting", label: "Reviewing eligible governing evidence again" });
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
-                      const rawRecovery = await generateJson<unknown>({
+                      const rawRecovery = await callJson<unknown>({
                         task: "answer.validate", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
                         prompt: buildV40SourceAdjudicationPrompt({ question,
                           situation: plan.situation as V40Situation | undefined,
                           candidates, legacySelected: [] }), temperature: 0,
+                        validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
                       });
                       v40Diagnostic.recovery.status = "invalid_structured_result";
                       const proposal = v40SourceAdjudicationSchema.parse(rawRecovery);
@@ -504,12 +776,18 @@ export async function POST(request: NextRequest) {
                       // recovery witness. Restore full original bodies after checking.
                       const review = validateV40Proposal({ question,
                         candidates: candidates.map((source) => ({ ...source, sectionContent: source.sectionContent.slice(0, 1350) })),
-                        proposal });
+                        proposal, setting: plan.situation?.setting, action: plan.situation?.action });
                       v40Diagnostic.recovery.dispositions = review.dispositions;
                       v40Diagnostic.recovery.unavailableNominations = review.unavailableNominations;
                       v40Diagnostic.recovery.selected = review.accepted;
                       v40Diagnostic.recovery.rejected = review.rejected;
                       v40Diagnostic.recovery.status = review.reason;
+                      noteActQualification(review.dispositions
+                        .filter((row) => row.reason === "act_attestation_unconfirmed")
+                        .map((row) => row.citationLabel));
+                      v40Diagnostic.qualifications = [...new Set([...v40Diagnostic.qualifications, ...review.qualifications])];
+                      v40Diagnostic.rejectedGoverning = [...v40Diagnostic.rejectedGoverning, ...review.rejectedGoverning]
+                        .filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index);
                       if (review.authorities.length > 0) {
                         const fullById = new Map(candidates.map((source) => [source.sectionId, source]));
                         const restored = review.authorities.flatMap((source) => {
@@ -518,6 +796,7 @@ export async function POST(request: NextRequest) {
                         });
                         if (restored.length === review.authorities.length) {
                           v40AuthoritySet = restored;
+                          outcomeState.adjudicationRecovery = true;
                           v40Diagnostic.status = "v402_independent_governing_recovery";
                           v40Diagnostic.selected = review.accepted;
                           v40Diagnostic.gaps = review.gaps;
@@ -537,10 +816,12 @@ export async function POST(request: NextRequest) {
                 const failure = failureDiagnostic(adjudicationError, "claim_validation", 1, Date.now() - started);
                 v40Diagnostic.status = `adjudication_unavailable:${failure.kind}`;
                 v40Diagnostic.selected = v40AuthoritySet.map((authority) => authority.citationLabel);
+                noteEvidenceGap("adjudication unavailable");
               }
             } else {
               v40AuthoritySet = [];
               v40Diagnostic.status = "no_retrieved_source_bodies";
+              noteEvidenceGap("no retrieved source body");
             }
           }
           selected = {
@@ -550,7 +831,7 @@ export async function POST(request: NextRequest) {
 
           const legacyEvidenceGaps = describeMissingAuthoritySlots({
             question,
-            plannerQueries: plan.searchQueries,
+            plannerQueries: [],
             missingRequiredSlots: selected.missingRequiredSlots,
           });
           // The legacy slot blueprint controls recovery and diagnostics, not the
@@ -560,7 +841,91 @@ export async function POST(request: NextRequest) {
             ? []
             : legacyEvidenceGaps;
 
-          const finalAuthorities = selected.finalAuthorities;
+          const rejectionKeys = collectRejectionKeys({
+            dispositions: v40Diagnostic.dispositions,
+            recoveryDispositions: v40Diagnostic.recovery?.dispositions,
+            selectorRejections: v517Selection.rejectedAuthorities,
+          });
+          const askedAct = [plan.situation?.action, plan.situation?.verb, plan.situation?.object]
+            .some((value) => String(value ?? "").trim().length > 0);
+          if (!recoverySuppressed(v40Diagnostic) && askedAct) {
+            const retrieved = searches.flatMap((search) => search.results);
+            const chain = followOperatorChain({
+              admitted: selected.finalAuthorities,
+              pool: retrieved,
+            });
+            if (chain.truncated) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "cross-reference chain truncated" });
+              if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+            }
+            const recoveryPool = selected.finalAuthorities.length === 0 ? retrieved : chain.candidates;
+            overlookedRecords = recoveryPool;
+            const eligible = selectOverlookedCandidates({
+              pool: recoveryPool,
+              admittedIds: selected.finalAuthorities.map((item) => item.sectionId),
+              rejectedKeys: rejectionKeys,
+              action: plan.situation?.action,
+              verb: plan.situation?.verb,
+              objectText: plan.situation?.object,
+            });
+            const overlooked = eligible.slice(0, 4);
+            if (eligible.length > overlooked.length && !outcomeState.uncertainty.some((item) => item.facet === "cross-reference chain truncated")) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "cross-reference chain truncated" });
+              if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+            }
+            const judged = await admitJudgedOverlooked({
+              question,
+              setting: plan.situation?.setting,
+              action: plan.situation?.action,
+              candidates: overlooked,
+              judge: async () => {
+                if (activeSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+                const raw = await callJson<unknown>({
+                  task: "answer.validate",
+                  systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
+                  prompt: buildV40SourceAdjudicationPrompt({
+                    question,
+                    situation: plan.situation as V40Situation | undefined,
+                    candidates: overlooked,
+                    legacySelected: [],
+                  }),
+                  temperature: 0,
+                  validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
+                });
+                return v40SourceAdjudicationSchema.parse(raw);
+              },
+            });
+            if (judged.unavailable) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "overlooked_adjudication_unavailable" });
+              if (!outcomeState.partial.includes("evidence_gap")) outcomeState.partial.push("evidence_gap");
+            } else if (judged.authorities.length > 0) {
+              selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...judged.authorities] };
+              outcomeState.evidenceRecovery = true;
+              outcomeState.recoveredAuthorities = judged.authorities.map((item) => item.citationLabel);
+              if (judged.qualifications.includes("act_attestation_unconfirmed")) {
+                noteActQualification(judged.authorities.map((item) => item.citationLabel));
+              }
+            }
+          }
+          const forumSetting = plan.situation?.setting ?? "";
+          const forumKept = [];
+          let selectorForumWithheld = 0;
+          for (const authority of selected.finalAuthorities) {
+            const outcome = forumIdentityOutcome(forumSetting, authority.path ?? []);
+            if (outcome === "reject") {
+              if (!v40IncidentGate) selectorForumWithheld += 1;
+              continue;
+            }
+            if (outcome === "uncertain") noteForumQualification([authority.citationLabel]);
+            forumKept.push(authority);
+          }
+          selected = { ...selected, finalAuthorities: forumKept };
+          const finalAuthorities = forumKept;
+          const forumCodes = [
+            ...forumCountCodes("selector_forum", tallyForumOutcomes(searches.flatMap((search) => search.results), forumSetting)),
+            ...forumCountCodes("overlooked_forum", tallyForumOutcomes(overlookedRecords, forumSetting)),
+            ...clientCheckNote([`selector_forum_withheld=forum-identity:${boundedCount(selectorForumWithheld, FORUM_COUNT_WIDTH)}`])?.split(";") ?? [],
+          ];
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
 
@@ -572,8 +937,11 @@ export async function POST(request: NextRequest) {
               ? finalAuthorityCorpora[0]
               : null;
 
+          const shownAuthorities = listedAuthorities(authorityPayload);
+          const shownLabels = new Set(shownAuthorities.map((authority) => authority.citationLabel.toLowerCase()));
+          const shownResults = finalAuthorities.filter((authority) => shownLabels.has(authority.citationLabel.toLowerCase()));
           send("authorities", {
-            authorities: authorityPayload,
+            authorities: shownAuthorities,
           });
 
           const diagnosticConcepts = [
@@ -594,17 +962,23 @@ export async function POST(request: NextRequest) {
               minObligationCoverage: v517Selection.minObligationCoverage,
               allObligationsComplete: v517Selection.allObligationsComplete,
               obligationDetails: v517Selection.obligationDetails,
-              prePruneLabels: v517Selection.prePruneLabels,
-              selectedLabels: finalAuthorities.map((authority) => authority.citationLabel),
-              legacySelectedLabels: v517Selection.selectedLabels,
+              prePruneCount: v517Selection.prePruneLabels.length,
+              selectedLabels: shownResults.map((authority) => authority.citationLabel),
+              legacySelectedCount: v517Selection.selectedLabels.length,
               // These coverage scores belong to the lexical v5.18 selector,
               // not the incident adjudicator. Do not misstate them as v40 scores.
               evidenceAdmission: v40IncidentGate
                 ? v40Diagnostic.status : v517Selection.evidenceAdmission,
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
-              // Rejected labels, their reasons and adjudicator free text stay server-side.
+              // Counts and reason codes only. Labels stay off the streamed object.
               scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
+              forumCodes,
             },
+            planner: {
+              hasMaterialFacts: (plan.situation?.materialFacts ?? []).some((item) => String(item ?? "").trim().length > 0),
+              hasAffectedPerson: String(plan.situation?.affectedPerson ?? "").trim().length > 0,
+            },
+            routingReason: adjudicationRoute.reason,
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,
             blueprintSlots: selected.blueprintSlots,
@@ -613,10 +987,11 @@ export async function POST(request: NextRequest) {
             satisfiedSlots: selected.satisfiedSlots,
             missingRequiredSlots: selected.missingRequiredSlots,
             blueprintSatisfied: selected.blueprintSatisfied,
-            expandedQueries,
+            expandedQueries: [],
+            expandedQueryCount: expandedQueries.length,
             recoveryAttempts,
             evidenceGaps,
-            retrievals: searches.map((search) => {
+            retrievals: publicRetrievals(searches.map((search) => {
               const discovery = selected.discoveredDimensions.find(
                 (dimension) =>
                   dimension.query.toLowerCase() === search.query.toLowerCase() &&
@@ -646,10 +1021,10 @@ export async function POST(request: NextRequest) {
                   matchSignals: result.matchSignals,
                 })),
               };
-            }),
+            })),
             // The final selection diagnostic must describe the semantic pack
             // actually supplied to drafting, not the earlier legacy ranking.
-            finalAuthoritySelection: finalAuthorities.map((result) => ({
+            finalAuthoritySelection: shownResults.map((result) => ({
               query: v40IncidentGate
                 ? "scenario_source_adjudication" : "semantic_authority_pack",
               citationLabel: result.citationLabel,
@@ -669,17 +1044,21 @@ export async function POST(request: NextRequest) {
             selectedSlotMatches: selected.selectedSlotMatches,
           });
 
-          if (finalAuthorities.length === 0) {
+            if (finalAuthorities.length === 0) {
+            outcomeState.fallbackCode = "no_authority_selected";
+            outcomeState.abstained = true;
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
-            const fallbackAnswer = buildFallbackAnswer({
+            const withheldStage = withholdingStage({ adjudicated: v40IncidentGate, recoveryRan });
+            const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
               effectiveCorpus,
               fallbackReason: noAuthorityReason,
               failureClass: "selection",
+              withheldStage,
               retrievedEvidenceCount: searches.reduce((count, search) => count + search.results.length, 0),
             });
 
@@ -696,13 +1075,11 @@ export async function POST(request: NextRequest) {
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: fallbackAnswer,
-              authorities: authorityPayload,
+              authorities: listedAuthorities(authorityPayload),
               fallbackReason: noAuthorityReason,
             });
 
-            controller.close();
             return;
           }
 
@@ -715,7 +1092,7 @@ export async function POST(request: NextRequest) {
           const aiOperationStartedAt = Date.now();
           let claimValidationAttempts = 0;
           try {
-            const draftedAnswer = await streamText({
+            const draftedAnswer = await callText({
               task: "answer.generate",
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
@@ -744,14 +1121,23 @@ export async function POST(request: NextRequest) {
                 authorities: authorityPayload,
               }),
             );
+            const draftedSettlement = parseSettlement(finalAnswer);
+            finalAnswer = draftedSettlement.text;
+            outcomeState.settlement = draftedSettlement.settlement;
+            for (const item of draftedSettlement.uncertainty) outcomeState.uncertainty.push(item);
+            if (draftedSettlement.settlement !== "supported" && !outcomeState.partial.includes("partial")) {
+              outcomeState.partial.push("partial");
+            }
             let rewriteNote: string | null = null;
             let pruneNote: string | null = null;
             let claimValidationNote: string | null = null;
 
             if (!finalAnswer.trim()) {
+              outcomeState.fallbackCode = "empty_draft";
+              outcomeState.abstained = true;
               const fallbackReason = "The AI draft was empty.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -772,19 +1158,17 @@ export async function POST(request: NextRequest) {
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
-              controller.close();
               return;
             }
 
             send("stage", {
               key: "validating",
-              label: "Validating grounded claims",
+              label: "Checking claims against cited sources",
             });
             activeAiOperation = "post_validation";
 
@@ -793,16 +1177,20 @@ export async function POST(request: NextRequest) {
               authorities: authorityPayload,
             });
 
-            finalAnswer = normalizeAnswerFormatting(initialPrune.prunedText);
+            finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(initialPrune.prunedText));
             if (initialPrune.removedLines.length > 0) {
-              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+              pruneNote = clientCheckNote([`pruned_lines=${boundedCount(initialPrune.removedLines.length, COUNT_DIGITS)}`]);
+              outcomeState.pruned = true;
+              noteCheckedWithholding();
             }
 
             if (!finalAnswer.trim()) {
+              outcomeState.fallbackCode = "prune_emptied_draft";
+              outcomeState.abstained = true;
               const fallbackReason =
-                "The AI draft could not be validated after pruning unsupported content.";
+                "The AI draft could not be checked against its sources after pruning unsupported content.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -823,13 +1211,11 @@ export async function POST(request: NextRequest) {
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
-              controller.close();
               return;
             }
 
@@ -839,12 +1225,15 @@ export async function POST(request: NextRequest) {
             });
 
             if (!citationValidation.ok) {
+              outcomeState.fallbackCode = "invalid_citations";
+              outcomeState.abstained = true;
+              // Count only: the unretrieved labels stay off the client payload.
               const fallbackReason = "The AI draft cited authorities that were not retrieved.";
               claimValidationNote = clientCheckNote([
-                `invalid_citations=${citationValidation.invalidCitations.length}`,
+                `invalid_citations=${boundedCount(citationValidation.invalidCitations.length, COUNT_DIGITS)}`,
               ]);
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -865,15 +1254,13 @@ export async function POST(request: NextRequest) {
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
                 claimValidationNote,
                 invalidCitations: [],
               });
 
-              controller.close();
               return;
             }
 
@@ -895,14 +1282,17 @@ export async function POST(request: NextRequest) {
                 authorities: authorityPayload,
               });
 
-              finalAnswer = normalizeAnswerFormatting(secondPrune.prunedText);
+              finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
 
               rewriteNote = clientCheckNote([
-                `rewritten_mentions=${rewrite.removedMentions.length}`,
+                `rewritten_mentions=${boundedCount(rewrite.removedMentions.length, COUNT_DIGITS)}`,
                 secondPrune.removedLines.length > 0
-                  ? `pruned_lines=${secondPrune.removedLines.length}`
+                  ? `pruned_lines=${boundedCount(secondPrune.removedLines.length, COUNT_DIGITS)}`
                   : null,
               ]);
+              if (rewrite.removedMentions.length > 0) outcomeState.rewritten = true;
+              if (secondPrune.removedLines.length > 0) outcomeState.pruned = true;
+              if (rewrite.removedMentions.length > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
 
               const recheckMentions = validateAnswerAuthorityMentions({
                 answerText: finalAnswer,
@@ -915,13 +1305,15 @@ export async function POST(request: NextRequest) {
               });
 
               if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
+                outcomeState.fallbackCode = "ungrounded_mentions";
+                outcomeState.abstained = true;
                 const fallbackReason = "The AI draft mentioned or cited authorities that could not be grounded.";
                 claimValidationNote = clientCheckNote([
-                  recheckMentions.ok ? null : `ungrounded_mentions=${recheckMentions.invalidAuthorityMentions.length}`,
-                  recheckCitations.ok ? null : `invalid_citations=${recheckCitations.invalidCitations.length}`,
+                  recheckMentions.ok ? null : `ungrounded_mentions=${boundedCount(recheckMentions.invalidAuthorityMentions.length, COUNT_DIGITS)}`,
+                  recheckCitations.ok ? null : `invalid_citations=${boundedCount(recheckCitations.invalidCitations.length, COUNT_DIGITS)}`,
                 ]);
 
-                const fallbackAnswer = buildFallbackAnswer({
+                const fallbackAnswer = groundedFallback({
                   question,
                   planIntent: plan.intent,
                   authorities: finalAuthorities,
@@ -942,14 +1334,12 @@ export async function POST(request: NextRequest) {
                   question,
                   corpus: effectiveCorpus,
                   latencyMs: Date.now() - started,
-                  plan,
                   answerText: fallbackAnswer,
-                  authorities: authorityPayload,
+                  authorities: listedAuthorities(authorityPayload),
                   fallbackReason,
                   claimValidationNote,
                 });
 
-                controller.close();
                 return;
               }
             }
@@ -957,10 +1347,12 @@ export async function POST(request: NextRequest) {
             let answerClaims = extractAnswerClaims(finalAnswer);
 
             if (answerClaims.length === 0) {
+              outcomeState.fallbackCode = "no_grounded_claims";
+              outcomeState.abstained = true;
               const fallbackReason =
                 "The AI draft contained no substantive grounded claims after deterministic validation.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -981,13 +1373,11 @@ export async function POST(request: NextRequest) {
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
               });
 
-              controller.close();
               return;
             }
 
@@ -996,7 +1386,7 @@ export async function POST(request: NextRequest) {
             activeAiOperation = "claim_validation";
             const validationResult = await runClaimValidationWithRetry({
               requestStartedAt: started,
-              invoke: () => generateJson<unknown>({
+              invoke: () => callJson<unknown>({
                 task: "answer.validate",
                 systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                 prompt: buildAnswerClaimValidationPrompt({
@@ -1006,11 +1396,12 @@ export async function POST(request: NextRequest) {
                   answerText: finalAnswer,
                 }),
                 temperature: 0,
+                validate: (value) => { claimValidationSchema.parse(value); },
               }),
               onRetry: () => {
                 send("stage", {
                   key: "validating",
-                  label: "Retrying grounded-claim validation after a transient AI-service error",
+                  label: "Retrying the claim check after a transient AI-service error",
                 });
               },
             });
@@ -1021,7 +1412,7 @@ export async function POST(request: NextRequest) {
             if (claimValidationAttempts > 1) {
               claimValidationNote = clientCheckNote([
                 claimValidationNote,
-                `claim_check_attempts=${claimValidationAttempts}`,
+                `claim_check_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
               ]);
             }
             // V40.1: one bounded repair of an incident answer that omitted the
@@ -1036,10 +1427,11 @@ export async function POST(request: NextRequest) {
             let v401RepairDiagnostic = "not_needed";
             let repairPhase = "generation";
             if (v401NeedsRepair) {
+              outcomeState.repairAttempted = true;
               v401RepairDiagnostic = "not_admitted";
               send("stage", {key:"validating", label:"Repairing the missing incident decision"});
               try {
-                const proposedRepair = await streamText({
+                const proposedRepair = await callText({
                   task: "answer.generate",
                   systemInstruction: ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
                   prompt: buildV401IncidentRepairPrompt({
@@ -1092,7 +1484,7 @@ export async function POST(request: NextRequest) {
                   repairPhase = "independent_validation";
                   const repairedReview = await runClaimValidationWithRetry({
                     requestStartedAt: started,
-                    invoke: () => generateJson<unknown>({
+                    invoke: () => callJson<unknown>({
                       task: "answer.validate",
                       systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                       prompt: buildAnswerClaimValidationPrompt({
@@ -1100,9 +1492,10 @@ export async function POST(request: NextRequest) {
                         question, answerText: repairedAnswer,
                       }),
                       temperature: 0,
+                      validate: (value) => { claimValidationSchema.parse(value); },
                     }),
                     onRetry: () => send("stage", {
-                      key:"validating", label:"Retrying independent incident-repair validation",
+                      key:"validating", label:"Retrying the incident-repair check",
                     }),
                   });
                   claimValidationAttempts += repairedReview.attempts;
@@ -1121,14 +1514,22 @@ export async function POST(request: NextRequest) {
                   const refusals = v402RepairRefusals(repairAdmission);
                   v401RepairDiagnostic = refusals.length ? `refused:${refusals.join(",")}` : "independent_gate_refused";
                   if (v401AcceptIndependentRepair(repairAdmission)) {
+                    firstDraftRecord = freezeFirstDraft({
+                      answerText: finalAnswer,
+                      claimVerdicts: claimValidation.claims,
+                      citations: citationLabelsIn(finalAnswer),
+                    });
+                    outcomeState.repairAccepted = true;
+                    outcomeState.settlement = null;
+                    noteCheckedWithholding();
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
                     claimValidation = reviewedRepair;
-                    v401RepairDiagnostic = "accepted_independently_validated";
+                    v401RepairDiagnostic = "accepted_after_recheck";
                     claimValidationNote = clientCheckNote([
                       claimValidationNote,
                       "repair=accepted",
-                      `repair_attempts=${claimValidationAttempts}`,
+                      `repair_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
                     ]);
                   }
                 }
@@ -1140,8 +1541,8 @@ export async function POST(request: NextRequest) {
               }
               incidentRepair = v401RepairDiagnostic;
               send("stage", {key:"validating", label:
-                v401RepairDiagnostic === "accepted_independently_validated"
-                  ? "Incident decision repaired and independently validated"
+                v401RepairDiagnostic === "accepted_after_recheck"
+                  ? "Incident answer repaired and checked again against sources"
                   : "Incident repair not admitted; preserving safety verdict"});
             }
             const validationById = new Map(
@@ -1151,9 +1552,11 @@ export async function POST(request: NextRequest) {
                 claimValidation.responsiveness?.answersUserQuestion !== true ||
                 !answerSectionHasContent(finalAnswer, "Bottom line:") ||
                 (claimValidation.responsiveness?.unaddressedParts.length ?? 0) > 0)) {
+              outcomeState.fallbackCode = "not_responsive";
+              outcomeState.abstained = true;
               const fallbackReason =
                 "The cited draft did not demonstrably answer the question asked.";
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question, planIntent: plan.intent, authorities: finalAuthorities,
                 effectiveCorpus, fallbackReason,
               });
@@ -1163,14 +1566,13 @@ export async function POST(request: NextRequest) {
               send("answer_delta", {text: fallbackAnswer});
               send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
-                latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
-                authorities: authorityPayload, fallbackReason,
+                latencyMs: Date.now() - started, answerText: fallbackAnswer,
+                authorities: listedAuthorities(authorityPayload), fallbackReason,
                 claimValidationNote: clientCheckNote([
                   "responsiveness=withheld",
                   `incident_repair=${v401RepairDiagnostic}`,
                 ]),
               });
-              controller.close();
               return;
             }
 
@@ -1207,9 +1609,9 @@ export async function POST(request: NextRequest) {
                 qualificationVetoIds,
               }).slice(0, 2);
               if (disputed.length > 0) {
-                send("stage", { key: "validating", label: "Independently reviewing disputed source entailment" });
+                send("stage", { key: "validating", label: "Checking disputed source support again" });
                 try {
-                  const rawAppeal = await generateJson<unknown>({
+                  const rawAppeal = await callJson<unknown>({
                     task: "answer.validate",
                     systemInstruction: ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
                     prompt: buildAnswerClaimAppealPrompt({
@@ -1222,6 +1624,7 @@ export async function POST(request: NextRequest) {
                       authorities: finalAuthorities,
                     }),
                     temperature: 0,
+                    validate: (value) => { claimAppealSchema.parse(value); },
                   });
                   const reviewed = claimAppealSchema.parse(rawAppeal);
                   for (const claim of disputed) {
@@ -1234,11 +1637,13 @@ export async function POST(request: NextRequest) {
                     });
                     if (attestation.accepted) acceptedAppeals.add(claim.id);
                   }
-                  appealDiagnostic = `appeal_attempted=${disputed.length};appeal_corroborated=${acceptedAppeals.size}`;
+                  outcomeState.appealAttempted = true;
+                  outcomeState.appealAccepted = acceptedAppeals.size > 0;
+                  appealDiagnostic = `appeal_attempted=${boundedCount(disputed.length, COUNT_DIGITS)};appeal_corroborated=${boundedCount(acceptedAppeals.size, COUNT_DIGITS)}`;
                 } catch {
                   // Reviewer errors, malformed JSON, missing or fake quotations
                   // are not a reason to waive the original rejection.
-                  appealDiagnostic = "appeal_unavailable=1";
+                  appealDiagnostic = `appeal_unavailable=${boundedCount(1, COUNT_DIGITS)}`;
                 }
               }
             }
@@ -1265,12 +1670,14 @@ export async function POST(request: NextRequest) {
 
               const claimIds = semanticPrune.removedClaims
                 .map((claim) => claim.id)
-                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id));
+                .filter((id) => id.length >= 1 && id.length <= CLAIM_ID_MAX_LENGTH && /^[a-z0-9_.:-]+$/i.test(id));
               claimValidationNote = clientCheckNote([
-                `pruned_unsupported_claims=${semanticPrune.removedClaims.length}`,
+                `pruned_unsupported_claims=${boundedCount(semanticPrune.removedClaims.length, COUNT_DIGITS)}`,
                 claimIds.length > 0 ? `claim_ids=${claimIds.join(",")}` : null,
                 appealDiagnostic,
               ]);
+              outcomeState.pruned = true;
+              noteCheckedWithholding();
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
               if (appealDiagnostic) claimValidationNote = clientCheckNote([appealDiagnostic]);
@@ -1301,7 +1708,7 @@ export async function POST(request: NextRequest) {
               send("stage", {key:"validating",label:"Reconstructing a grounded Bottom line"});
               reconstructionDiagnostic = "attempted_rejected";
               try {
-                const rawRecovery = await generateJson<unknown>({
+                const rawRecovery = await callJson<unknown>({
                   task: "answer.validate",
                   systemInstruction: ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
                   prompt: buildBottomLineRecoveryPrompt({
@@ -1318,6 +1725,7 @@ export async function POST(request: NextRequest) {
                       })),
                   }),
                   temperature: 0,
+                  validate: (value) => { bottomLineRecoverySchema.parse(value); },
                 });
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
                 const line = recovery.bottomLine.trim();
@@ -1338,7 +1746,7 @@ export async function POST(request: NextRequest) {
                     authorities: finalAuthorities,
                   }).length === 0;
                   if (candidateClaims.length === 1 && citationOK && mentionOK && qualificationOK) {
-                    const rawReview = await generateJson<unknown>({
+                    const rawReview = await callJson<unknown>({
                       task: "answer.validate",
                       systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                       prompt: buildAnswerClaimValidationPrompt({
@@ -1346,6 +1754,7 @@ export async function POST(request: NextRequest) {
                         authorities: finalAuthorities,
                       }),
                       temperature: 0,
+                      validate: (value) => { claimValidationSchema.parse(value); },
                     });
                     const decisions = claimValidationSchema.parse(rawReview);
                     // Require one complete and unambiguous fresh judgement.
@@ -1364,7 +1773,10 @@ export async function POST(request: NextRequest) {
                         authorities: authorityPayload,
                       });
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
-                      reconstructionDiagnostic = "accepted_independently_validated";
+                      reconstructionDiagnostic = "accepted_after_recheck";
+                      outcomeState.repairAccepted = true;
+                      outcomeState.settlement = null;
+                      noteCheckedWithholding();
                     }
                   }
                 }
@@ -1384,25 +1796,27 @@ export async function POST(request: NextRequest) {
               !finalMentionValidation.ok
             ) {
               const rejectedIds = unsupportedClaimIds
-                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id))
+                .filter((id) => new RegExp(`^[a-z0-9_.:-]{1,${CLAIM_ID_MAX_LENGTH}}$`, "i").test(id))
                 .slice(0, 8);
               const ooV29FailureTrace = clientCheckNote([
                 "v29_semantic_fallback",
                 `bottom_line_before=${ooV29BottomLineBeforeSemanticPrune}`,
                 `bottom_line_after=${hasBottomLine}`,
-                `draft_claims=${answerClaims.length}`,
-                `rejected_claims=${unsupportedClaimIds.length}`,
-                `remaining_claims=${remainingClaims.length}`,
+                `draft_claims=${boundedCount(answerClaims.length, COUNT_DIGITS)}`,
+                `rejected_claims=${boundedCount(unsupportedClaimIds.length, COUNT_DIGITS)}`,
+                `remaining_claims=${boundedCount(remainingClaims.length, COUNT_DIGITS)}`,
                 `citations_valid=${finalCitationValidation.ok}`,
                 `mentions_valid=${finalMentionValidation.ok}`,
                 rejectedIds.length > 0 ? `claim_ids=${rejectedIds.join(",")}` : "claim_ids=none",
                 appealDiagnostic ?? "appeal=not_attempted",
               ]);
+              outcomeState.fallbackCode = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
+              outcomeState.abstained = true;
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
                 : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1412,7 +1826,7 @@ export async function POST(request: NextRequest) {
 
               send("stage", {
                 key: "validating",
-                label: "Semantic validation rejected the draft; returning fallback",
+                label: "Claim check rejected the draft; returning fallback",
               });
 
               send("answer_delta", { text: fallbackAnswer });
@@ -1423,15 +1837,13 @@ export async function POST(request: NextRequest) {
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
                 // v29: existing debug-snapshot field, only for this failure path.
                 claimValidationNote: ooV29FailureTrace,
               });
 
-              controller.close();
               return;
             }
 
@@ -1446,9 +1858,43 @@ export async function POST(request: NextRequest) {
                 !(claimValidationNote ?? "").includes("claim_check_attempts=")) {
               claimValidationNote = clientCheckNote([
                 claimValidationNote,
-                `claim_check_attempts=${claimValidationAttempts}`,
+                `claim_check_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
               ]);
             }
+            const trailingSettlement = parseSettlement(finalAnswer);
+            finalAnswer = trailingSettlement.text;
+            const settlementRank = { supported: 1, partial: 2, not_answered: 3 } as const;
+            if ((settlementRank[trailingSettlement.settlement ?? "supported"] ?? 0) > (settlementRank[outcomeState.settlement ?? "supported"] ?? 0)
+                && trailingSettlement.settlement) {
+              outcomeState.settlement = trailingSettlement.settlement;
+            }
+            for (const item of trailingSettlement.uncertainty) {
+              if (!outcomeState.uncertainty.some((row) => row.class === item.class && row.facet === item.facet)) {
+                outcomeState.uncertainty.push(item);
+              }
+            }
+            finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
+            const cited = dropUnreferencedCitationEntries(finalAnswer);
+            finalAnswer = cited.text;
+            const qualificationLines: string[] = [];
+            if (actUnconfirmed) {
+              const named = [...actLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
+              qualificationLines.push(`${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`);
+            }
+            if (forumUnconfirmed) {
+              const named = [...forumLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
+              qualificationLines.push(`${named} has not been confirmed to be the body the question is about. Check that it applies before relying on it.`);
+            }
+            if (qualificationLines.length > 0) {
+              finalAnswer = `${finalAnswer}\n\nQualification:\n${qualificationLines.join("\n")}`;
+            }
+            answerEdits = cited.dropped;
+            if (answerEdits.length > 0) noteCheckedWithholding();
+            if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
+            if (claimValidationAttempts > 1) {
+              outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
+            }
+            const citedAuthorities = listedAuthorities(authoritiesReferencedByAnswer(finalAnswer, authorityPayload));
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {
@@ -1457,9 +1903,8 @@ export async function POST(request: NextRequest) {
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: finalAnswer,
-              authorities: authorityPayload,
+              authorities: citedAuthorities,
               rewriteNote,
               pruneNote,
               claimValidationNote,
@@ -1468,7 +1913,6 @@ export async function POST(request: NextRequest) {
               missingRequiredSlots: selected.missingRequiredSlots,
             });
 
-            controller.close();
             return;
           } catch (operationError) {
             // v38.1: the original try includes drafting AND validation. Never
@@ -1479,9 +1923,11 @@ export async function POST(request: NextRequest) {
               claimValidationAttempts || 1,
               Date.now() - aiOperationStartedAt,
             );
-            const fallbackReason = publicFailureReason(operationFailure);
             const isDraftFailure = activeAiOperation === "drafting";
-            const fallbackAnswer = buildFallbackAnswer({
+            outcomeState.fallbackCode = isDraftFailure ? "drafting_unavailable" : "validation_unavailable";
+            outcomeState.abstained = true;
+            const fallbackReason = publicFailureReason(operationFailure);
+            const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
@@ -1503,9 +1949,8 @@ export async function POST(request: NextRequest) {
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: fallbackAnswer,
-              authorities: authorityPayload,
+              authorities: listedAuthorities(authorityPayload),
               fallbackReason,
               claimValidationNote: clientCheckNote([
                 `operation=${operationFailure.phase}`,
@@ -1514,12 +1959,11 @@ export async function POST(request: NextRequest) {
                 `code=${operationFailure.code ?? "none"}`,
                 `provider=${operationFailure.provider ?? "none"}`,
                 `retryable=${operationFailure.retryable}`,
-                `attempts=${operationFailure.attempts}`,
+                `attempts=${boundedCount(operationFailure.attempts, COUNT_DIGITS)}`,
               ]),
               operationFailure,
             });
 
-            controller.close();
             return;
           }
         } catch (error) {
@@ -1542,13 +1986,24 @@ export async function POST(request: NextRequest) {
                 ? (error as { kind: string }).kind
                 : "unknown",
           });
-          controller.close();
         }
       };
 
-      void run();
-    },
-  });
+      const stream = openGovernedAnswerStream({
+        deadlineMs: ANSWER_STREAM_DEADLINE_MS,
+        heartbeatMs: ANSWER_STREAM_HEARTBEAT_MS,
+        bindSend(rawSend) {
+          send = (event, data) => {
+            if (event === "done" || event === "error") markOperationalTerminal(event);
+            rawSend(event, decorate(event, data));
+          };
+          return send;
+        },
+        work: async (_send, signal) => {
+          activeSignal = signal;
+          await run();
+        },
+      });
 
   return new Response(stream, {
     headers: {

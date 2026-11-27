@@ -157,12 +157,8 @@ export function AssistantPanel({
                       : "Auto"}
                   </span>
                 </div>
-                <div className={styles.aiPlanQueries}>
-                  {assistant.plan.searchQueries.map((item) => (
-                    <span key={item} className={styles.aiPlanChip}>
-                      {item}
-                    </span>
-                  ))}
+                <div className={styles.aiPlanMeta}>
+                  <span>Queries: {assistant.plan.searchQueries.length}</span>
                 </div>
               </div>
             ) : null}
@@ -183,7 +179,7 @@ export function AssistantPanel({
                   </span>
                   <span>
                     Expanded queries:{" "}
-                    {assistant.diagnostics.expandedQueries.length}
+                    {assistant.diagnostics.expandedQueryCount ?? assistant.diagnostics.expandedQueries.length}
                   </span>
                   <span>
                     Final authorities:{" "}
@@ -210,21 +206,11 @@ export function AssistantPanel({
                   </div>
                 ) : null}
 
-                {assistant.diagnostics.expandedQueries.length > 0 ? (
-                  <div className={styles.aiPlanQueries}>
-                    {assistant.diagnostics.expandedQueries.map((item) => (
-                      <span key={item} className={styles.aiPlanChip}>
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
                 <div className={styles.aiAuthoritiesList}>
                   {assistant.diagnostics.retrievals.map(
                     (retrieval, retrievalIndex) => (
                       <div
-                        key={`${retrieval.query}-${retrievalIndex}`}
+                        key={`retrieval-${retrievalIndex}`}
                         className={styles.aiAuthorityCard}
                       >
                         <div className={styles.aiAuthorityContent}>
@@ -233,7 +219,7 @@ export function AssistantPanel({
                               Query {retrievalIndex + 1}
                             </span>
                             <span className={styles.aiAuthorityHeading}>
-                              {retrieval.query}
+                              {retrieval.matchedRow || retrieval.resultCount > 0 ? "matched a row" : "no row"}
                             </span>
                           </div>
 

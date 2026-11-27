@@ -1,3 +1,5 @@
+import { normaliseSearchFocus } from "@/lib/procedural-mechanisms";
+
 // Content is processed in memory, never logged here.
 export const SEARCH_BODY_MAX_BYTES = 16_384;
 export const SEARCH_QUERY_MAX_CHARS = 4_096;
@@ -27,9 +29,13 @@ export async function readPrivateSearchParams(request: Request): Promise<URLSear
     const input: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
     const record = input as Record<string, unknown>;
-    if (Object.keys(record).some((key) => !["q", "corpus", "limit", "offset"].includes(key))) return null;
+    if (Object.keys(record).some((key) => !["q", "corpus", "limit", "offset", "focus"].includes(key))) return null;
     if (typeof record.q !== "string" || record.q.length > SEARCH_QUERY_MAX_CHARS) return null;
     const params = new URLSearchParams({ q: record.q });
+    if (record.focus !== undefined) {
+      const focus = normaliseSearchFocus(record.focus);
+      if (focus) params.set("focus", focus);
+    }
     for (const key of ["corpus", "limit", "offset"] as const) {
       const value = record[key];
       if (value === undefined) continue;
