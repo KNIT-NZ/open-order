@@ -136,7 +136,11 @@ test("free-tier chain is Gemini only unless a non-Gemini fallback is opted in", 
       return "answered";
     }, { sleep: async () => undefined, onAttempt: (attempt) => attempts.push(attempt) });
     assert.equal(answered, "answered");
-    assert.deepEqual(attempts.map((attempt) => attempt.outcome), ["429", "ok"]);
+    assert.equal(attempts[0]?.model, "gemini-3.6-flash");
+    assert.equal(attempts[0]?.outcome, "429");
+    assert.equal(attempts.at(-1)?.model, "gemini-3.5-flash-lite");
+    assert.equal(attempts.at(-1)?.outcome, "ok");
+    assert.ok(attempts.slice(0, -1).every((attempt) => attempt.outcome === "429"));
     assert.equal(servedModelFromAttempts(attempts), "gemini-3.5-flash-lite");
   } finally {
     process.env.OPEN_ORDER_INFERENCE_MODE = previous.mode;
