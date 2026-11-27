@@ -1,7 +1,8 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { clientCheckNote, forumCountCodes, publicScenarioAdjudication } from "@/lib/open-order/client-check-note";
+import { clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
+import { publicScenarioAdjudication } from "@/lib/open-order/public-diagnostics";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
@@ -969,6 +970,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               evidenceAdmission: v40IncidentGate
                 ? v40Diagnostic.status : v517Selection.evidenceAdmission,
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
+              // Rejected labels, their reasons and adjudicator free text stay server-side.
               scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
               forumCodes,
             },

@@ -1,10 +1,12 @@
-import { adjudicationNote, clientCheckNote } from "@/lib/open-order/client-check-note";
 import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import type {
   AiDiagnosticTopResult,
   AiDiagnostics,
+  AiSourceDisposition,
   SearchResult,
 } from "./types";
+import { clientCheckNote } from "./client-check-note";
+import { publicScenarioAdjudication } from "./public-diagnostics";
 
 export function corpusLabel(corpus: string): string {
   switch (corpus) {
@@ -375,6 +377,14 @@ export function formatMatchSignals(
   return parts.length > 0 ? parts.join(", ") : "none";
 }
 
+// The route's fixed-format prune count passes as written; any other text goes
+// through the code filter.
+const ROUTE_PRUNE_NOTE = /^Pruned unsupported lines: \d{1,4}$/;
+function publicPruneNote(note: string | null | undefined): string | null {
+  if (typeof note === "string" && ROUTE_PRUNE_NOTE.test(note)) return note;
+  return clientCheckNote([note]);
+}
+
 export function formatAiDebugSnapshot(input: AiDiagnostics): string {
   const searchQueries = input.plan?.searchQueries?.length
     ? input.plan.searchQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")
@@ -544,14 +554,29 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ].join("\n")
     : "Semantic selection summary: Not received";
 
-  const adjudication = selector?.scenarioAdjudication;
+  // Print only the public form: counts and reason codes for refusals, no adjudicator free text.
+  const adjudication = selector?.scenarioAdjudication
+    ? publicScenarioAdjudication(selector.scenarioAdjudication) : undefined;
+  const admittedRows = (rows: AiSourceDisposition[]) =>
+    rows.map((row) => `  ${row.corpus}:${row.citationLabel} — admitted; ${row.role ?? "no role"}; ${row.reason}`);
   const adjudicationSummary = adjudication ? [
     `Status: ${/^[a-z0-9_:-]+$/i.test(adjudication.status) ? adjudication.status : "other"}`,
     `Dossier count: ${adjudication.candidateCount}; primary review attempts: ${adjudication.providerAttempts}`,
+    `Dossier: ${adjudication.dossier?.join(", ") || "None reported"}`,
+    `Retrieved outside dossier (bounded): ${adjudication.retrievedOutsideDossier?.join(", ") || "None reported"}`,
+    `Final accepted: ${adjudication.selected.join(", ") || "None"}`,
+    `Primary refusals: ${adjudication.rejected.join("; ") || "None"}`,
     `Unknown nominations: ${adjudication.unavailableNominations ?? "Not reported"}`,
-    `Adjudication codes: ${adjudicationNote(adjudication) ?? "None"}`,
-    `Recovery: ${/^[a-z0-9_:-]+$/i.test(adjudication.recovery?.status ?? "") ? adjudication.recovery?.status : "other"}`,
-    `Recovery unknown nominations: ${adjudication.recovery?.unavailableNominations ?? "Not reported"}`,
+    `Primary dispositions: ${adjudication.dispositionCounts?.join("; ") || "None reported"}`,
+    ...admittedRows(adjudication.dispositions),
+    `Recovery: ${adjudication.recovery.status}`,
+    `Recovery candidates: ${adjudication.recovery.candidates.join(", ") || "None"}`,
+    `Recovery accepted: ${adjudication.recovery.selected.join(", ") || "None"}`,
+    `Recovery refusals: ${adjudication.recovery.rejected.join("; ") || "None"}`,
+    `Recovery unknown nominations: ${adjudication.recovery.unavailableNominations ?? "Not reported"}`,
+    `Recovery dispositions: ${adjudication.recovery.dispositionCounts?.join("; ") || "None reported"}`,
+    ...admittedRows(adjudication.recovery.dispositions),
+    `Unresolved facets: ${adjudication.gaps.join("; ") || "None reported"}`,
   ].join("\n") : "Scenario adjudication: Not received";
 
   const trace = input.pipelineTrace;
@@ -573,7 +598,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
     ? [
         `Outcome: ${validation.degraded ? "Degraded/fallback" : "Completed without declared degradation"}`,
         `Fallback reason: ${validation.fallbackReason ?? "None"}`,
-        `Deterministic pruning: ${clientCheckNote([validation.pruneNote]) ?? "None reported"}`,
+        `Deterministic pruning: ${publicPruneNote(validation.pruneNote) ?? "None reported"}`,
         `Authority mention rewrite: ${clientCheckNote([validation.rewriteNote]) ?? "None reported"}`,
         `Semantic claim validation: ${clientCheckNote([validation.claimValidationNote]) ?? "No unsupported claims reported"}`,
         `Invalid citations: ${validation.invalidCitations.length}`,

@@ -10,7 +10,7 @@ import {
   type V40ProposedWitness,
 } from "../lib/ai/scenario-adjudication";
 import { withCorpusCommitteeNames } from "../lib/committee-names-context";
-import { publicScenarioAdjudication } from "../lib/open-order/client-check-note";
+import { publicScenarioAdjudication } from "../lib/open-order/public-diagnostics";
 import { buildFallbackAnswer, withholdingStage } from "../lib/procedural-reasoning";
 import { actAttestation, forumIdentityMismatch, quoteAttestsActAndObject, suffixStem } from "../lib/procedural-mechanisms";
 
