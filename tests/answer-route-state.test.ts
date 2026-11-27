@@ -4,7 +4,19 @@ import { NextRequest } from "next/server";
 import { AiProviderError } from "../lib/ai/errors";
 import type { AiGenerateJsonRequest, AiStreamTextRequest } from "../lib/ai/types";
 import type { ProceduralSearchResponse, ProceduralSearchResult } from "../lib/procedural-search";
-import { runAnswerRoute } from "../app/api/ai/answer/route";
+
+// The route module constructs the corpus pool on import. CI has no database.
+// A loopback URL satisfies that check; the stubs below never open a connection.
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
+}
+
+type RunAnswerRoute = typeof import("../app/api/ai/answer/route").runAnswerRoute;
+let runAnswerRoute: RunAnswerRoute | undefined;
+async function loadAnswerRoute(): Promise<RunAnswerRoute> {
+  runAnswerRoute ??= (await import("../app/api/ai/answer/route")).runAnswerRoute;
+  return runAnswerRoute;
+}
 
 const QUOTE = "The House may suspend the sitting when the Speaker so decides.";
 const PRUNED_LABEL = "SO 404";
@@ -191,7 +203,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
     hasMore: false,
     results: pack,
   });
-  const response = await runAnswerRoute(
+  const response = await (await loadAnswerRoute())(
     new NextRequest("http://localhost/api/ai/answer", {
       method: "POST",
       body: JSON.stringify({ question: "May the House suspend the sitting?" }),
