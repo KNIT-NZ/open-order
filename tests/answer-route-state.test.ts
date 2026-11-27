@@ -390,6 +390,7 @@ test("rewriting an unretrieved mention caps the done answer at partial", async (
   const done = doneOf(await ask("rewrite"));
   assert.equal(done.answerState, "partial");
   assert.match(String(done.rewriteNote), /rewritten_mentions=1/);
+  assert.ok((done.answerEdits as string[]).includes("removed_mentions=1"));
 });
 
 test("an accepted incident repair caps the done answer at partial", async () => {

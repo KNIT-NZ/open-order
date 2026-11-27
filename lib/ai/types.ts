@@ -1,7 +1,10 @@
 export type AiTask =
   | "query.plan"
+  | "scenario.adjudication"
+  | "source.recovery"
   | "answer.generate"
-  | "answer.validate";
+  | "answer.validate"
+  | "answer.repair";
 
 export type AiLane = "development" | "staging" | "production";
 

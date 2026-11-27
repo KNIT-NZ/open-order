@@ -1,7 +1,7 @@
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
-import { conceptsMatchingLabels, usableSourceAnchor } from "@/lib/procedural-mechanisms";
+import { citationTokenMatchesLabel, citationTokensInBrackets, conceptsMatchingLabels, usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import {
   CONCEPT_REGISTRY,
   type AuthorityExclusionSpec,
@@ -1860,9 +1860,12 @@ export function validateAnswerAuthorityMentions(input: {
     ),
   ];
 
-  const invalid = matches.filter((m) => {
-    const normalized = normalizeAuthorityMention(m);
-    return !allowed.has(normalized);
+  const invalid = matches.filter((mention) => {
+    const normalized = normalizeAuthorityMention(mention);
+    if (allowed.has(normalized)) return false;
+    const at = prose.toLowerCase().indexOf(mention.toLowerCase());
+    if (at >= 0 && markedAsUnretrievedCrossReference(prose, at, mention.length)) return false;
+    return true;
   });
 
   if (invalid.length > 0) {
@@ -1872,31 +1875,52 @@ export function validateAnswerAuthorityMentions(input: {
   return { ok: true };
 }
 
+function markedAsUnretrievedCrossReference(text: string, index: number, length: number): boolean {
+  const after = text.slice(index + length);
+  return /^\s*(?:\(\d+[a-z]*\))?\s*\(referred to in\b[^)]*;\s*not retrieved\)/i.test(after);
+}
+
+function mentionPattern(): RegExp {
+  return /\b(?:standing order|so)\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+(?:\s*\(\d+[a-z]*\))?/gi;
+}
+
+function sourceContainsMention(source: string, mention: string): boolean {
+  const number = mention.replace(/^(?:standing orders?|so)\s+/i, "").replace(/\s+/g, "").toLowerCase();
+  if (!number) return false;
+  const escaped = number.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\(/g, "\\s*\\(");
+  return new RegExp(`\\b(?:standing orders?|so)\\s*${escaped}(?![0-9])|\\b${escaped}(?![0-9])`, "i").test(source);
+}
+
+function referredToForm(mention: string, label: string): string {
+  const standingOrder = mention.match(/^(?:standing order|so)\s+(\d+[a-z]*)\s*(\(\d+[a-z]*\))?/i);
+  if (standingOrder) {
+    const subsection = standingOrder[2] ? standingOrder[2].replace(/\s+/g, "") : "";
+    return `Standing Order ${standingOrder[1]}${subsection} (referred to in ${label}; not retrieved)`;
+  }
+  const cleaned = mention.replace(/\s+/g, " ").trim();
+  return `${cleaned} (referred to in ${label}; not retrieved)`;
+}
+
 export function rewriteForbiddenAuthorityMentions(input: {
   answerText: string;
-  authorities: Array<{ citationLabel: string }>;
+  authorities: Array<{ citationLabel: string; sectionContent?: string }>;
 }): {
   rewrittenText: string;
   removedMentions: string[];
 } {
   const allowed = new Set(
-    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
+    input.authorities.map((authority) => normalizeAuthorityMention(authority.citationLabel)),
   );
-
-  const pattern = /\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi;
   const removed: string[] = [];
-
-  const rewritten = input.answerText.replace(pattern, (match) => {
-    const normalized = normalizeAuthorityMention(match);
-
-    if (allowed.has(normalized)) {
-      return match;
-    }
-
-    removed.push(match);
-    return "the retrieved authority";
+  const rewritten = input.answerText.replace(mentionPattern(), (mention) => {
+    const normalized = normalizeAuthorityMention(mention);
+    if (allowed.has(normalized)) return mention;
+    removed.push(mention);
+    const source = input.authorities.find((authority) =>
+      authority.sectionContent && sourceContainsMention(authority.sectionContent, mention));
+    if (source) return referredToForm(mention, source.citationLabel);
+    return "a provision that was not retrieved";
   });
-
   return {
     rewrittenText: rewritten,
     removedMentions: [...new Set(removed)],
@@ -1968,12 +1992,26 @@ function isLikelyBestAuthorityLine(line: string): boolean {
   return /^\-\s*\[[^\]]+\]/.test(line.trim()) || /^\-\s*\S+/.test(line.trim());
 }
 
+export type ClaimRemovalCode =
+  | "no_citation"
+  | "citation_not_admitted"
+  | "unsupported_by_passage"
+  | "omitted_source_qualification";
+
+export function claimRemovalCode(line: string, allowedLabels: Set<string>): ClaimRemovalCode {
+  const citations = extractInlineCitations(line);
+  if (citations.length === 0) return "no_citation";
+  if (citations.some((citation) => !isCitationAllowed(citation, allowedLabels))) return "citation_not_admitted";
+  return "no_citation";
+}
+
 export function pruneValidatedAnswerContent(input: {
   answerText: string;
   authorities: Array<{ citationLabel: string }>;
 }): {
   prunedText: string;
   removedLines: string[];
+  removalCodes: ClaimRemovalCode[];
 } {
   const allowedLabels = new Set(
     input.authorities.map((authority) => authority.citationLabel),
@@ -1982,6 +2020,7 @@ export function pruneValidatedAnswerContent(input: {
   const lines = normalizeAnswerFormatting(input.answerText).split("\n");
   const kept: string[] = [];
   const removedLines: string[] = [];
+  const removalCodes: ClaimRemovalCode[] = [];
   let currentSection: string | null = null;
 
   for (const rawLine of lines) {
@@ -2013,6 +2052,7 @@ export function pruneValidatedAnswerContent(input: {
         kept.push(line);
       } else {
         removedLines.push(line);
+        removalCodes.push(claimRemovalCode(trimmed, allowedLabels));
       }
       continue;
     }
@@ -2028,7 +2068,68 @@ export function pruneValidatedAnswerContent(input: {
   return {
     prunedText,
     removedLines,
+    removalCodes,
   };
+}
+
+/** A count only. The removed mention text stays out of the response. */
+export function mentionRewriteEdit(count: number): string | null {
+  if (!Number.isInteger(count) || count < 1 || count > 99) return null;
+  return `removed_mentions=${count}`;
+}
+
+const ACT_QUALIFICATION = "has not been confirmed to govern the specific act asked about.";
+const FORUM_QUALIFICATION = "has not been confirmed to be the body the question is about.";
+
+function lineCitesLabel(line: string, label: string): boolean {
+  return citationTokensInBrackets(line).some((token) => citationTokenMatchesLabel(token, label));
+}
+
+/** Put a real uncertainty on the claim it qualifies. Do not brand a settled provision. */
+export function attachClaimQualifications(answerText: string, input: {
+  actLabels?: string[];
+  forumLabels?: string[];
+}): string {
+  const actLabels = [...new Set((input.actLabels ?? []).map((label) => label.trim()).filter(Boolean))];
+  const forumLabels = [...new Set((input.forumLabels ?? []).map((label) => label.trim()).filter(Boolean))];
+  if (actLabels.length === 0 && forumLabels.length === 0) return answerText;
+  const substantive = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
+  const lines = String(answerText ?? "").split("\n");
+  let section: string | null = null;
+  const claimIndexes: number[] = [];
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:") {
+      section = trimmed;
+      return;
+    }
+    if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
+  });
+  const hedgesFor = (label: string, sentence: string): number[] => {
+    const citing = claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
+    if (citing.length > 0) return citing;
+    const bottom = claimIndexes.find((index) => {
+      const prior = lines.slice(0, index).reverse().find((line) => line.trim().endsWith(":"));
+      return prior === "Bottom line:";
+    });
+    return [bottom ?? claimIndexes[0]].filter((index): index is number => index !== undefined && !lines[index].includes(sentence));
+  };
+  const append = (indexes: number[], sentence: string) => {
+    for (const index of indexes) {
+      if (lines[index].includes(sentence)) continue;
+      lines[index] = `${lines[index]} ${sentence}`;
+    }
+  };
+  for (const label of actLabels) append(hedgesFor(label, `[${label}] ${ACT_QUALIFICATION}`), `[${label}] ${ACT_QUALIFICATION}`);
+  for (const label of forumLabels) append(hedgesFor(label, `[${label}] ${FORUM_QUALIFICATION}`), `[${label}] ${FORUM_QUALIFICATION}`);
+  if (claimIndexes.length === 0) {
+    const trailing = [
+      ...actLabels.map((label) => `[${label}] ${ACT_QUALIFICATION}`),
+      ...forumLabels.map((label) => `[${label}] ${FORUM_QUALIFICATION}`),
+    ].filter((sentence) => !answerText.includes(sentence));
+    if (trailing.length > 0) lines.push("", ...trailing);
+  }
+  return lines.join("\n");
 }
 
 export type AnswerClaim = {
@@ -2141,9 +2242,11 @@ function classifyOption(result: ProceduralSearchResult): string {
 export function withholdingStage(input: {
   adjudicated: boolean;
   recoveryRan: boolean;
+  recoveryStatus?: string;
 }): "selection" | "adjudication" | "recovery" {
   if (!input.adjudicated) return "selection";
-  return input.recoveryRan ? "recovery" : "adjudication";
+  if (input.recoveryRan || input.recoveryStatus === "v40_no_governing_witness") return "recovery";
+  return "adjudication";
 }
 
 export function buildFallbackAnswer(input: {
@@ -2187,7 +2290,7 @@ export function buildFallbackAnswer(input: {
         : foundButRejected
           ? "Retrieval found possible authorities, but none passed source-grounded selection; no procedural conclusion can be made from this result."
           : best.length > 0
-            ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
+            ? `Relevant authorities were retrieved, but they do not support a fuller procedural conclusion from this result set ${citations.join(" ")}.`
             : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
 
   const whatThisMeans = foundButRejected
@@ -2196,25 +2299,18 @@ export function buildFallbackAnswer(input: {
       ? `Treat the authorities below as inspection points rather than as a synthesised answer ${citations[0]}.`
       : "A narrower search or additional authority is needed before giving procedural advice.";
 
-  const options = best.length > 0
-    ? best.map(classifyOption)
-    : [unconfirmedOnly
-      ? "No retrieved source was confirmed to govern the act asked about."
-      : foundButRejected
-        ? "No source-grounded authority passed final selection."
-        : "No clearly relevant authority was retrieved."];
+  const options = best.length > 0 ? best.map(classifyOption) : [];
 
   const inspect =
     best.length > 0
       ? best
           .map((authority) => {
-            const profile = buildAuthorityProfile(authority);
             const why =
               authority.heading?.trim() ||
               authority.path[authority.path.length - 1] ||
               "Relevant authority";
 
-            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
+            return `- [${authority.citationLabel}] ${why}`;
           })
           .join("\n")
       : unconfirmedOnly
@@ -2238,18 +2334,16 @@ export function buildFallbackAnswer(input: {
     "",
     "What this means:",
     whatThisMeans,
-    "",
-    "Your options:",
-    ...options.map((option) => `- ${option}`),
+    ...(options.length > 0 ? ["", "Your options:", ...options.map((option) => `- ${option}`)] : []),
     "",
     "Risks or constraints:",
     `- A substantive answer was withheld because ${
       input.failureClass === "drafting_unavailable" ? "answer generation did not complete" :
       input.failureClass === "validation_unavailable" ? "the claim check did not complete" :
-      input.failureClass === "provider" ? "drafting failed" :
-      input.failureClass === "selection" ? "authority selection was inconclusive" :
-      "validation failed"
-    }: ${input.fallbackReason}`,
+      input.failureClass === "provider" ? "an answer could not be completed" :
+      input.failureClass === "selection" ? "no source was confirmed to govern this question" :
+      "the drafted answer could not be grounded in the retrieved sources"
+    }.`,
     "",
     "Best authorities to inspect or cite:",
     inspect,

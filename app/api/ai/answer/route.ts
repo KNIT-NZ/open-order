@@ -10,6 +10,7 @@ import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
+import type { AiTask } from "@/lib/ai/types";
 import {
   ANSWER_STREAM_DEADLINE_MS,
   ANSWER_STREAM_HEARTBEAT_MS,
@@ -75,6 +76,8 @@ import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
+  attachClaimQualifications,
+  mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
   buildAuthorityProfile,
@@ -257,6 +260,19 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
       let answerEdits: string[] = [];
+      let mentionRewrites = 0;
+      const claimRemovalCounts: Record<string, number> = {};
+      const noteClaimRemovals = (codes: readonly string[]) => {
+        for (const code of codes) {
+          if (!/^[a-z0-9_]{1,40}$/.test(code)) continue;
+          claimRemovalCounts[code] = (claimRemovalCounts[code] ?? 0) + 1;
+        }
+      };
+      let adjudicationTrace: {
+        nominationCount: number;
+        unavailableNominations: number;
+        dossierOutcomes: string[];
+      } = { nominationCount: 0, unavailableNominations: 0, dossierOutcomes: [] };
       // `other` is a failed attempt that was not a 429, a 5xx, or a timeout.
       const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
       const stageModels: Array<{ task: string; model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
@@ -290,7 +306,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
         }
         lastAttemptedModel = attempt.model;
-        if (task === "query.plan" || task === "answer.generate" || task === "answer.validate") {
+        if (task === "query.plan" || task === "scenario.adjudication" || task === "source.recovery"
+          || task === "answer.generate" || task === "answer.validate" || task === "answer.repair") {
           stageModels.push({ task, model: attempt.model, outcome: attempt.outcome });
         }
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
@@ -311,12 +328,25 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         }
         if (!(data && typeof data === "object")) return data;
         const record = data as Record<string, unknown>;
+        const shown = event === "done" && Array.isArray(record.authorities)
+          ? record.authorities as Array<{ unconfirmed?: boolean }>
+          : [];
         const trace = {
           schemaVersion: 2,
           requestId,
           buildCommit,
           stageTimeline,
           incidentRepair,
+          claimRemovalCounts: { ...claimRemovalCounts },
+          adjudication: {
+            nominationCount: adjudicationTrace.nominationCount,
+            unavailableNominations: adjudicationTrace.unavailableNominations,
+            dossierOutcomes: adjudicationTrace.dossierOutcomes.slice(),
+          },
+          shownAuthorities: {
+            count: shown.length,
+            unconfirmed: shown.filter((item) => item?.unconfirmed === true).length,
+          },
         };
         if (event === "error") {
           const reason = typeof record.reason === "string"
@@ -377,7 +407,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       let citationList = (_answerText: string): Array<{ citationLabel?: string; unconfirmed?: boolean }> => [];
       const run = async () => {
         const started = startedAt;
-        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
+        const callJson = <T,>(request: { task: AiTask; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
           generate<T>({
             ...request,
             signal: activeSignal,
@@ -385,7 +415,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
             onProviderAttemptStart: beginAttempt,
           });
-        const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+        const callText = (request: { task: AiTask; systemInstruction: string; prompt: string; temperature?: number }) =>
           streamAnswer({
             ...request,
             signal: activeSignal,
@@ -640,8 +670,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           );
           const v40IncidentGate = adjudicationRoute.adjudicate;
           outcomeState.route = v40IncidentGate ? "incident_adjudication" : "semantic_selector";
-          let actUnconfirmed = false;
-          let forumUnconfirmed = false;
           const actLabels = new Set<string>();
           const forumLabels = new Set<string>();
           const remember = (target: Set<string>, labels: string[]) => {
@@ -653,7 +681,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const noteActQualification = (labels: string[]) => {
             remember(actLabels, labels);
             if (actLabels.size === 0) return;
-            actUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
               outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "act_attestation_unconfirmed" });
             }
@@ -661,7 +688,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const noteForumQualification = (labels: string[]) => {
             remember(forumLabels, labels);
             if (forumLabels.size === 0) return;
-            forumUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "forum_identity_unconfirmed")) {
               outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "forum_identity_unconfirmed" });
             }
@@ -719,8 +745,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const v40Provider = await runClaimValidationWithRetry({
                   requestStartedAt: started,
                   invoke: () => callJson<unknown>({
-                    // Evidence adjudication is a strict validation operation.
-                    task: "answer.validate",
+                    task: "scenario.adjudication",
                     systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
                     prompt: buildV40SourceAdjudicationPrompt({
                       question, situation: plan.situation as V40Situation | undefined,
@@ -766,7 +791,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
                       const rawRecovery = await callJson<unknown>({
-                        task: "answer.validate", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
+                        task: "source.recovery", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
                         prompt: buildV40SourceAdjudicationPrompt({ question,
                           situation: plan.situation as V40Situation | undefined,
                           candidates, legacySelected: [] }), temperature: 0,
@@ -826,6 +851,19 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               noteEvidenceGap("no retrieved source body");
             }
           }
+          {
+            const knownStatus = new Set(["not_nominated", "rejected", "admitted", "withheld_no_primary", "not_reviewed_limit"]);
+            const rows = v40Diagnostic.dispositions ?? [];
+            adjudicationTrace = {
+              nominationCount: rows.filter((row) => row.status !== "not_nominated").length,
+              unavailableNominations: Number(v40Diagnostic.unavailableNominations) || 0,
+              dossierOutcomes: rows.map((row) => {
+                const status = knownStatus.has(row.status) ? row.status : "other";
+                const reason = /^[a-z0-9_:,-]{1,80}$/i.test(String(row.reason ?? "")) ? String(row.reason) : "other_reason";
+                return `${status}:${reason}`;
+              }),
+            };
+          }
           selected = {
             ...selected,
             finalAuthorities: v40AuthoritySet,
@@ -883,7 +921,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               judge: async () => {
                 if (activeSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
                 const raw = await callJson<unknown>({
-                  task: "answer.validate",
+                  task: "scenario.adjudication",
                   systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
                   prompt: buildV40SourceAdjudicationPrompt({
                     question,
@@ -1055,7 +1093,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
-            const withheldStage = withholdingStage({ adjudicated: v40IncidentGate, recoveryRan });
+            const withheldStage = withholdingStage({
+              adjudicated: v40IncidentGate,
+              recoveryRan,
+              recoveryStatus: v40Diagnostic.recovery.status,
+            });
             const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
@@ -1183,6 +1225,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             });
 
             finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(initialPrune.prunedText));
+            noteClaimRemovals(initialPrune.removalCodes);
             if (initialPrune.removedLines.length > 0) {
               pruneNote = clientCheckNote([`pruned_lines=${boundedCount(initialPrune.removedLines.length, COUNT_DIGITS)}`]);
               outcomeState.pruned = true;
@@ -1277,10 +1320,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (!authorityMentionValidation.ok) {
               const rewrite = rewriteForbiddenAuthorityMentions({
                 answerText: finalAnswer,
-                authorities: authorityPayload,
+                authorities: finalAuthorities.map((authority) => ({
+                  citationLabel: authority.citationLabel,
+                  sectionContent: authority.sectionContent,
+                })),
               });
 
               finalAnswer = normalizeAnswerFormatting(rewrite.rewrittenText);
+              mentionRewrites += rewrite.removedMentions.length;
+              const mentionEdit = mentionRewriteEdit(mentionRewrites);
+              if (mentionEdit) answerEdits = [mentionEdit];
 
               const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
@@ -1288,6 +1337,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               });
 
               finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
+              noteClaimRemovals(secondPrune.removalCodes);
 
               rewriteNote = clientCheckNote([
                 `rewritten_mentions=${boundedCount(rewrite.removedMentions.length, COUNT_DIGITS)}`,
@@ -1437,7 +1487,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send("stage", {key:"validating", label:"Repairing the missing incident decision"});
               try {
                 const proposedRepair = await callText({
-                  task: "answer.generate",
+                  task: "answer.repair",
                   systemInstruction: ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
                   prompt: buildV401IncidentRepairPrompt({
                     question, currentAnswer: finalAnswer,
@@ -1464,6 +1514,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 repairedAnswer = removeEmptyAnswerSections(
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
+                noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = validateAnswerCitations({
                   answerText: repairedAnswer, authorities: authorityPayload,
@@ -1683,6 +1734,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               ]);
               outcomeState.pruned = true;
               noteCheckedWithholding();
+              noteClaimRemovals(semanticPrune.removedClaims.map((claim) =>
+                qualificationVetoIds.has(claim.id) ? "omitted_source_qualification" : "unsupported_by_passage"));
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
               if (appealDiagnostic) claimValidationNote = clientCheckNote([appealDiagnostic]);
@@ -1714,7 +1767,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               reconstructionDiagnostic = "attempted_rejected";
               try {
                 const rawRecovery = await callJson<unknown>({
-                  task: "answer.validate",
+                  task: "answer.repair",
                   systemInstruction: ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
                   prompt: buildBottomLineRecoveryPrompt({
                     question,
@@ -1881,19 +1934,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
-            const qualificationLines: string[] = [];
-            if (actUnconfirmed) {
-              const named = [...actLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
-              qualificationLines.push(`${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`);
-            }
-            if (forumUnconfirmed) {
-              const named = [...forumLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
-              qualificationLines.push(`${named} has not been confirmed to be the body the question is about. Check that it applies before relying on it.`);
-            }
-            if (qualificationLines.length > 0) {
-              finalAnswer = `${finalAnswer}\n\nQualification:\n${qualificationLines.join("\n")}`;
-            }
-            answerEdits = cited.dropped;
+            finalAnswer = attachClaimQualifications(finalAnswer, {
+              actLabels: [...actLabels],
+              forumLabels: [...forumLabels],
+            });
+            const mentionEdit = mentionRewriteEdit(mentionRewrites);
+            answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];
             if (answerEdits.length > 0) noteCheckedWithholding();
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
             if (claimValidationAttempts > 1) {
