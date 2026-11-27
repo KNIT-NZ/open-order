@@ -1,3 +1,5 @@
+/** The only non-generated generic vocabulary besides determiners and "committee(s)". */
+export const COMMITTEE_REFERENCE_WORDS: readonly string[];
 export function foldCommitteeText(text: string): string;
 export function extractCommitteeTokens(text: string): string[];
 export function committeeNameTokens(text: string): string[];
