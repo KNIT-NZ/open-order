@@ -21,8 +21,17 @@ test("each pack section can be scored against its own path", () => {
   }
   assert.equal(counts.match + counts.uncertain + counts.reject, pack.sections.length);
   const expectedPath = new URL("./fixtures/self-match-expected.json", import.meta.url);
-  if (!existsSync(expectedPath)) return;
+  assert.equal(existsSync(expectedPath), true, "self-match fixture is required");
   const expected = JSON.parse(readFileSync(expectedPath, "utf8")) as ExpectedRow[];
-  const misses = expected.filter((row) => actual.get(row.id) !== row.outcome);
+  assert.equal(expected.length, pack.sections.length, "self-match fixture must cover every section");
+  const seen = new Set<string>();
+  for (const row of expected) {
+    assert.equal(seen.has(row.id), false, row.id);
+    seen.add(row.id);
+    assert.equal(actual.has(row.id), true, row.id);
+  }
+  for (const id of actual.keys()) assert.equal(seen.has(id), true, id);
+  const misses = expected.filter((row) => actual.get(row.id) !== row.outcome)
+    .map((row) => ({ id: row.id, expected: row.outcome, actual: actual.get(row.id) }));
   assert.deepEqual(misses, []);
 });

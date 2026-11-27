@@ -1,10 +1,13 @@
-export type AiErrorKind =
-  | "configuration"
-  | "rate_limited"
-  | "unavailable"
-  | "upstream"
-  | "parse"
-  | "unknown";
+export const AI_ERROR_KINDS = [
+  "configuration",
+  "rate_limited",
+  "unavailable",
+  "upstream",
+  "parse",
+  "unknown",
+] as const;
+
+export type AiErrorKind = typeof AI_ERROR_KINDS[number];
 
 export class AiProviderError extends Error {
   kind: AiErrorKind;
