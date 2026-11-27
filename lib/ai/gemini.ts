@@ -5,22 +5,39 @@ import { AiProviderError } from "./errors";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
-const FREE_TIER_MODEL_PATTERN = /^gemini-[a-z0-9][a-z0-9._-]{0,60}$/i;
+/** Explicit allow-list. The default primary is gemini-3.6-flash; flash-lite is the quota fallback. */
+export const GEMINI_FREE_TIER_ALLOWLIST = ["gemini-3.6-flash", "gemini-3.5-flash-lite"] as const;
 
-/** Ordered free-tier models with separate quotas. Tester mode stays on the pinned model. */
+const MODEL_ID = /^gemini-[a-z0-9][a-z0-9._-]{0,60}$/i;
+
+export function geminiAllowList(): string[] {
+  const raw = process.env.GEMINI_FREE_TIER_MODELS ?? GEMINI_FREE_TIER_ALLOWLIST.join(",");
+  const allowed = new Set<string>(GEMINI_FREE_TIER_ALLOWLIST);
+  return raw.split(",").map((model) => model.trim()).filter((model) => allowed.has(model) && MODEL_ID.test(model));
+}
+
+/** Tester mode stays on the pinned model. Otherwise the configured model, or flash, is primary. */
 export function geminiFreeTierChain(): string[] {
   if (process.env.OPEN_ORDER_INFERENCE_MODE?.trim() === "zero-billed-test") {
     return [GEMINI_MODEL];
   }
-  const listed = (process.env.GEMINI_FREE_TIER_MODELS ?? "gemini-3.5-flash-lite,gemini-3.6-flash")
-    .split(",")
-    .map((model) => model.trim())
-    .filter((model) => FREE_TIER_MODEL_PATTERN.test(model));
-  const chain: string[] = [];
+  const allow = geminiAllowList();
+  const allowSet = new Set(allow.length > 0 ? allow : GEMINI_FREE_TIER_ALLOWLIST);
   const preferred = process.env.GEMINI_MODEL?.trim();
-  if (preferred && FREE_TIER_MODEL_PATTERN.test(preferred)) chain.push(preferred);
-  for (const model of listed) if (!chain.includes(model)) chain.push(model);
-  return chain.length > 0 ? chain : ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
+  const primary = preferred && allowSet.has(preferred) ? preferred : "gemini-3.6-flash";
+  const chain = allowSet.has(primary) ? [primary] : [];
+  for (const model of allowSet) if (!chain.includes(model)) chain.push(model);
+  return chain.length > 0 ? chain : ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
+}
+
+export type ProviderAttemptOutcome = "ok" | "429" | "5xx" | "timeout" | "other";
+
+export function providerAttemptOutcome(error: unknown, signal?: AbortSignal): ProviderAttemptOutcome {
+  if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) return "timeout";
+  const classified = error instanceof AiProviderError ? error : classifyError(error);
+  if (classified.kind === "rate_limited" || classified.statusCode === 429) return "429";
+  if (classified.statusCode !== null && classified.statusCode >= 500 && classified.statusCode <= 599) return "5xx";
+  return "other";
 }
 
 // Disable application-managed retries for the zero-billed tester mode.
@@ -215,20 +232,38 @@ function classifyError(error: unknown): AiProviderError {
 
 export async function runGeminiChain<T>(
   operation: (model: string) => Promise<T>,
-  hooks?: { sleep?: (ms: number) => Promise<void>; onRetry?: () => void },
+  hooks?: {
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: () => void;
+    signal?: AbortSignal;
+    onAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  },
 ): Promise<T> {
   const pause = hooks?.sleep ?? sleep;
   const chain = geminiFreeTierChain();
   let lastError: AiProviderError | null = null;
   for (const model of chain) {
+    if (hooks?.signal?.aborted) {
+      hooks.onAttempt?.({ model, outcome: "timeout" });
+      throw new DOMException("The answer deadline elapsed.", "AbortError");
+    }
     const attempts = GEMINI_MAX_RETRIES > 0 ? 2 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (hooks?.signal?.aborted) {
+        hooks.onAttempt?.({ model, outcome: "timeout" });
+        throw new DOMException("The answer deadline elapsed.", "AbortError");
+      }
       try {
-        return await operation(model);
+        const value = await operation(model);
+        hooks?.onAttempt?.({ model, outcome: "ok" });
+        return value;
       } catch (error) {
+        const outcome = providerAttemptOutcome(error, hooks?.signal);
+        hooks?.onAttempt?.({ model, outcome });
+        if (outcome === "timeout") throw error;
         const classified = classifyError(error);
         lastError = classified;
-        const rateLimited = classified.kind === "rate_limited" || classified.statusCode === 429;
+        const rateLimited = outcome === "429";
         if (classified.retryable && attempt + 1 < attempts) {
           hooks?.onRetry?.();
           await pause(computeBackoffMs(attempt));
@@ -252,11 +287,15 @@ export async function generateJson<T>({
   prompt,
   temperature = 0.2,
   onProviderRetry,
+  onProviderAttempt,
+  signal,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
   onProviderRetry?: () => void;
+  onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  signal?: AbortSignal;
 }): Promise<T> {
   return runGeminiChain(async (model) => {
     const gemini = await getClient();
@@ -268,6 +307,7 @@ export async function generateJson<T>({
         systemInstruction,
         temperature,
         responseMimeType: "application/json",
+        abortSignal: signal,
       },
     });
 
@@ -286,7 +326,7 @@ export async function generateJson<T>({
         }`,
       });
     }
-  }, { onRetry: onProviderRetry });
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, signal });
 }
 
 export async function streamText({
@@ -295,12 +335,16 @@ export async function streamText({
   temperature = 0.2,
   onChunk,
   onProviderRetry,
+  onProviderAttempt,
+  signal,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
   onChunk?: (text: string) => void;
   onProviderRetry?: () => void;
+  onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  signal?: AbortSignal;
 }): Promise<string> {
   return runGeminiChain(async (model) => {
     const gemini = await getClient();
@@ -311,7 +355,7 @@ export async function streamText({
       const response = await gemini.models.generateContent({
         model,
         contents: prompt,
-        config: { systemInstruction, temperature },
+        config: { systemInstruction, temperature, abortSignal: signal },
       });
       return response.text ?? "";
     }
@@ -319,7 +363,7 @@ export async function streamText({
     const response = await gemini.models.generateContentStream({
       model,
       contents: prompt,
-      config: { systemInstruction, temperature },
+      config: { systemInstruction, temperature, abortSignal: signal },
     });
 
     let fullText = "";
@@ -333,5 +377,5 @@ export async function streamText({
     }
 
     return fullText;
-  }, { onRetry: onProviderRetry });
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, signal });
 }

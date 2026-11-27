@@ -13,14 +13,18 @@ test("private search accepts transient query and preserves pagination/filtering"
   assert.equal(result?.get("limit"), "10");
   assert.equal(result?.get("offset"), "20");
 });
-test("private search accepts a bounded citation focus and rejects malformed focus", async () => {
+test("focus never fails the search and keeps labels with dashes and marks", async () => {
   const accepted = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "so-12" })));
   assert.equal(accepted?.get("focus"), "so-12");
-  const label = await readPrivateSearchParams(request(JSON.stringify({ q: "49/5", focus: "Speakers' ruling 49/5" })));
-  assert.equal(label?.get("focus"), "Speakers' ruling 49/5");
-  for (const focus of ["", "  so-12", "../so-12", "<script>", "x".repeat(121), "so-12\nso-13", "so--12"]) {
-    assert.equal(await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus }))), null, focus);
-  }
+  const marked = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "SO 12 – § &" })));
+  assert.equal(marked?.get("q"), "SO 12");
+  assert.equal(marked?.get("focus"), "SO 12 – § &");
+  const hostile = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: "../secret" })));
+  assert.equal(hostile?.get("q"), "SO 12");
+  assert.equal(hostile?.get("focus"), null);
+  const long = await readPrivateSearchParams(request(JSON.stringify({ q: "SO 12", focus: `so-${"1".repeat(200)}` })));
+  assert.equal(long?.get("q"), "SO 12");
+  assert.ok((long?.get("focus") ?? "").length <= 120);
 });
 test("private search rejects malformed, oversized and unknown-field inputs", async () => {
   for (const body of ["{", "null", "[]", JSON.stringify({ q: canary, debug: { query: canary } }), JSON.stringify({ q: {} }), JSON.stringify({ q: "x".repeat(4097) }), "x".repeat(SEARCH_BODY_MAX_BYTES + 1)]) {

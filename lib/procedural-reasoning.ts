@@ -1,7 +1,7 @@
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
-import { conceptsMatchingLabels } from "@/lib/procedural-mechanisms";
+import { conceptsMatchingLabels, usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import {
   CONCEPT_REGISTRY,
   type AuthorityExclusionSpec,
@@ -156,9 +156,9 @@ export function buildSourceHref(
   const content = normalizeWhitespace(result.sectionContent);
   const textStart = firstWords(content, 10) || null;
   const baseUrl = result.sourceUrl.split("#")[0];
-  const usableAnchor = result.sourceAnchor && !/^none$/i.test(result.sourceAnchor.trim())
-    ? result.sourceAnchor.trim() : null;
-  const anchor = usableAnchor ? encodeURI(usableAnchor) : null;
+  if (/\.docx$/i.test(baseUrl)) return baseUrl;
+  const anchorValue = usableSourceAnchor(result.sourceAnchor);
+  const anchor = anchorValue ? encodeURI(anchorValue) : null;
 
   if (textStart && anchor) {
     return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;
@@ -186,7 +186,7 @@ export function buildAuthorityPayload(results: ProceduralSearchResult[]) {
     documentTitle: result.documentTitle,
     documentCorpus: result.documentCorpus,
     sourceUrl: result.sourceUrl,
-    sourceAnchor: result.sourceAnchor,
+    sourceAnchor: usableSourceAnchor(result.sourceAnchor),
     sourceHref: buildSourceHref(result),
     rank: result.rank,
   }));

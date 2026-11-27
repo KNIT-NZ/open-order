@@ -1,4 +1,4 @@
-import { isBoundedSearchFocus } from "@/lib/procedural-mechanisms";
+import { normaliseSearchFocus } from "@/lib/procedural-mechanisms";
 
 // Content is processed in memory, never logged here.
 export const SEARCH_BODY_MAX_BYTES = 16_384;
@@ -31,9 +31,11 @@ export async function readPrivateSearchParams(request: Request): Promise<URLSear
     const record = input as Record<string, unknown>;
     if (Object.keys(record).some((key) => !["q", "corpus", "limit", "offset", "focus"].includes(key))) return null;
     if (typeof record.q !== "string" || record.q.length > SEARCH_QUERY_MAX_CHARS) return null;
-    if (record.focus !== undefined && (typeof record.focus !== "string" || !isBoundedSearchFocus(record.focus))) return null;
     const params = new URLSearchParams({ q: record.q });
-    if (typeof record.focus === "string") params.set("focus", record.focus);
+    if (record.focus !== undefined) {
+      const focus = normaliseSearchFocus(record.focus);
+      if (focus) params.set("focus", focus);
+    }
     for (const key of ["corpus", "limit", "offset"] as const) {
       const value = record[key];
       if (value === undefined) continue;

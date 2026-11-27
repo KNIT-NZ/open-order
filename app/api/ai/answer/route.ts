@@ -7,37 +7,35 @@ import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
 import {
+  ANSWER_ROUTE_MAX_DURATION_SECONDS,
   ANSWER_STREAM_DEADLINE_MS,
   ANSWER_STREAM_HEARTBEAT_MS,
-  superviseAnswerStream,
+  openGovernedAnswerStream,
 } from "@/lib/open-order/answer-stream";
 import {
-  actorClassDrift,
   actorClassQualificationQuery,
+  authoritiesReferencedByAnswer,
   authorisingRuleQueries,
   citationLabelsIn,
+  collectRejectionKeys,
   contentTokens,
-  conditionalSubIssueGaps,
   deriveAnswerOutcome,
-  describesStandingOrdersAsStatute,
   dropUnreferencedCitationEntries,
   errorCorrectionQueries,
   expressCrossReferences,
   freezeFirstDraft,
-  insufficiencyFacets,
-  isApplicabilityRejection,
   labelBareRulings,
+  parseSettlement,
   mustAdjudicateFromPlanner,
   obligationPartialFacets,
-  overHedgesSettledDuty,
   presidingOfficerAppealQuery,
   proceedingConsequenceQueries,
-  quoteAttestsActAndObject,
+  recoverySuppressed,
   relationsFromPlanner,
   reasonFromProviderKind,
   routeFromPlanner,
+  selectOverlookedCandidates,
   stageReopeningQueries,
-  usableSourceAnchor,
 } from "@/lib/procedural-mechanisms";
 import {
   failureDiagnostic,
@@ -64,7 +62,7 @@ import {
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
-  buildV40Dossier, validateV40Proposal,
+  adjudicateOverlooked, buildV40Dossier, validateV40Proposal,
   v40SourceScopeMismatch,
   v401AcceptIndependentRepair, v402RecoveryCandidates, v402RepairRefusals,
   type V402Disposition, type V40Situation,
@@ -147,9 +145,9 @@ const claimAppealSchema = z.object({
 
 type AuthorityPayload = ReturnType<typeof buildAuthorityPayload>[number];
 
-// Stay under the platform function budget. The supervisor deadline is shorter
-// than this limit so a hung provider still emits a terminal SSE event.
-export const maxDuration = 300;
+// Plan assumption: the platform honours this route segment maxDuration.
+// The SSE deadline is that budget minus ANSWER_STREAM_SAFETY_MARGIN_MS.
+export const maxDuration = ANSWER_ROUTE_MAX_DURATION_SECONDS;
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -161,7 +159,7 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return new Response(sseEvent("error", { message: "Invalid JSON body", reason: "invalid_request", retryable: false, kind: "configuration" }), {
+    return new Response(sseEvent("error", { message: "Invalid JSON body", reason: "invalid_request", retryable: false, kind: "validation" }), {
       status: 400,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -179,7 +177,7 @@ export async function POST(request: NextRequest) {
         message: "Invalid request body",
         reason: "invalid_request",
         retryable: false,
-        kind: "configuration",
+        kind: "validation",
         details: parsed.error.flatten(),
       }),
       {
@@ -194,11 +192,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { question, corpus = null } = parsed.data;
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const startedAt = Date.now();
+  const startedAt = Date.now();
       const requestId = randomUUID();
       // Vercel supplies the public deployment commit when available.
       const buildCommit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -228,55 +222,104 @@ export async function POST(request: NextRequest) {
         repairAccepted: false,
         appealAttempted: false,
         appealAccepted: false,
-        fallbackReason: "none",
+        fallbackCode: "none",
         partial: [] as string[],
         abstained: false,
         allObligationsComplete: true,
         obligationCoverage: [] as number[],
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
+      let answerEdits: string[] = [];
+      const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
+      let lastAttemptedModel: string | null = null;
+      let answerModel: string | null = null;
+      let activeSignal: AbortSignal | undefined;
       const noteRetry = () => { outcomeState.providerRetries += 1; };
-      const closeStream = () => { try { closeStream(); } catch { /* already closed */ } };
-      let outbound = (event: string, data: unknown) => {
-        try { controller.enqueue(encoder.encode(sseEvent(event, data))); } catch { /* closed */ }
+      const recordAttempt = (task: string, attempt: { model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }) => {
+        providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
+        lastAttemptedModel = attempt.model;
+        if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
       };
-      const send = (event: string, data: unknown) => {
+      const servedModel = () => answerModel ?? lastAttemptedModel;
+      const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
+        && process.env.VERCEL_ENV !== "production";
+      const decorate = (event: string, data: unknown) => {
         if (event === "stage" && data && typeof data === "object") {
           const stage = data as { key?: unknown; label?: unknown };
           if (typeof stage.key === "string" && typeof stage.label === "string" && stageTimeline.length < 32) {
             stageTimeline.push({ key: stage.key, label: stage.label, atMs: Math.max(0, Date.now() - startedAt) });
           }
         }
-        if ((event === "done" || event === "error") && data && typeof data === "object") {
-          const record = data as Record<string, unknown>;
-          const prose = typeof record.fallbackReason === "string"
-            && record.fallbackReason !== outcomeState.fallbackReason
-            ? record.fallbackReason : null;
-          const outcome = deriveAnswerOutcome(outcomeState);
-          const reason = event === "error"
-            ? (typeof record.reason === "string" ? record.reason : reasonFromProviderKind(typeof record.kind === "string" ? record.kind : undefined))
-            : undefined;
-          data = {
-            ...record,
-            ...outcome,
-            degraded: outcome.degraded,
-            ...(prose ? { fallbackDetail: prose } : {}),
-            ...(reason ? { reason } : {}),
-            ...(firstDraftRecord ? { firstDraft: firstDraftRecord } : {}),
-            trace: {
-              schemaVersion: 2,
-              requestId,
-              buildCommit,
-              stageTimeline,
-              incidentRepair,
-            },
+        if (!(data && typeof data === "object")) return data;
+        const record = data as Record<string, unknown>;
+        const trace = {
+          schemaVersion: 2,
+          requestId,
+          buildCommit,
+          stageTimeline,
+          incidentRepair,
+        };
+        if (event === "error") {
+          const reason = typeof record.reason === "string"
+            ? record.reason
+            : reasonFromProviderKind(typeof record.kind === "string" ? record.kind : undefined);
+          return {
+            message: record.message,
+            retryable: record.retryable === true,
+            kind: record.kind ?? "unknown",
+            reason,
+            servedModel: servedModel(),
+            providerAttempts,
+            trace,
           };
         }
-        outbound(event, data);
+        if (event === "done") {
+          const outcome = deriveAnswerOutcome({ ...outcomeState, fallbackReason: outcomeState.fallbackCode });
+          const prose = typeof record.fallbackReason === "string" ? record.fallbackReason : null;
+          return {
+            ...record,
+            route: outcome.route,
+            providerRetries: outcome.providerRetries,
+            adjudicationRecovery: outcome.adjudicationRecovery,
+            evidenceRecovery: outcome.evidenceRecovery,
+            repairAttempted: outcome.repairAttempted,
+            repairAccepted: outcome.repairAccepted,
+            appealAttempted: outcome.appealAttempted,
+            appealAccepted: outcome.appealAccepted,
+            fallbackReason: prose,
+            fallbackCode: outcome.fallbackReason,
+            partial: outcome.partial,
+            abstained: outcome.abstained,
+            allObligationsComplete: outcome.allObligationsComplete,
+            obligationCoverage: outcome.obligationCoverage,
+            degraded: outcome.degraded,
+            servedModel: servedModel(),
+            providerAttempts,
+            answerEdits,
+            ...(exposeFirstDraft && firstDraftRecord ? { firstDraft: firstDraftRecord } : {}),
+            trace,
+          };
+        }
+        return data;
       };
 
+      let send = (_event: string, _data?: unknown) => { void _event; void _data; };
       const run = async () => {
         const started = startedAt;
+        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+          generateJson<T>({
+            ...request,
+            signal: activeSignal,
+            onProviderRetry: noteRetry,
+            onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+          });
+        const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+          streamText({
+            ...request,
+            signal: activeSignal,
+            onProviderRetry: noteRetry,
+            onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+          });
 
         try {
           send("stage", {
@@ -291,7 +334,7 @@ export async function POST(request: NextRequest) {
           } catch {
             headingLabels = [];
           }
-          const rawPlan = await generateJson<unknown>({
+          const rawPlan = await callJson<unknown>({
             task: "query.plan",
             systemInstruction: SEARCH_PLANNER_SYSTEM_PROMPT,
             prompt: buildSearchPlannerPrompt({
@@ -300,7 +343,6 @@ export async function POST(request: NextRequest) {
               headingLabels,
             }),
             temperature: 0.1,
-            onProviderRetry: noteRetry,
           });
 
           const plan = searchPlanSchema.parse(rawPlan);
@@ -550,7 +592,7 @@ export async function POST(request: NextRequest) {
               try {
                 const v40Provider = await runClaimValidationWithRetry({
                   requestStartedAt: started,
-                  invoke: () => generateJson<unknown>({
+                  invoke: () => callJson<unknown>({
                     // Evidence adjudication is a strict validation operation.
                     task: "answer.validate",
                     systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
@@ -589,7 +631,7 @@ export async function POST(request: NextRequest) {
                     send("stage", { key: "selecting", label: "Independently reviewing eligible governing evidence" });
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
-                      const rawRecovery = await generateJson<unknown>({
+                      const rawRecovery = await callJson<unknown>({
                         task: "answer.validate", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
                         prompt: buildV40SourceAdjudicationPrompt({ question,
                           situation: plan.situation as V40Situation | undefined,
@@ -658,13 +700,11 @@ export async function POST(request: NextRequest) {
             ? []
             : legacyEvidenceGaps;
 
-          const rejectedApplicability = new Set(
-            (v40Diagnostic.dispositions ?? [])
-              .filter((row) => row.status === "rejected" && isApplicabilityRejection(row.reason))
-              .map((row) => row.citationLabel.toLowerCase()),
-          );
-          const crossRefs = new Set(selected.finalAuthorities.flatMap((item) =>
-            expressCrossReferences(item.sectionContent ?? "")));
+          const rejectionKeys = collectRejectionKeys({
+            dispositions: v40Diagnostic.dispositions,
+            recoveryDispositions: v40Diagnostic.recovery?.dispositions,
+            selectorRejections: v517Selection.rejectedAuthorities,
+          });
           const issues = plan.situation?.materialFacts ?? [];
           const coversIssue = (issue: string, authorities: typeof selected.finalAuthorities) => {
             const tokens = contentTokens(issue);
@@ -676,24 +716,24 @@ export async function POST(request: NextRequest) {
             });
           };
           const uncovered = issues.filter((issue) => !coversIssue(issue, selected.finalAuthorities));
-          if (selected.finalAuthorities.length === 0 || crossRefs.size > 0 || uncovered.length > 0) {
-            const seen = new Set(selected.finalAuthorities.map((item) => item.sectionId));
-            const recovered = [];
-            for (const result of searches.flatMap((search) => search.results)) {
-              if (seen.has(result.sectionId)) continue;
-              if (rejectedApplicability.has(result.citationLabel.toLowerCase())) continue;
-              if (v40SourceScopeMismatch(question, result, plan.situation?.setting)) continue;
-              const referenced = [...crossRefs].some((ref) => ref.toLowerCase() === result.citationLabel.toLowerCase());
-              const coversUncovered = uncovered.some((issue) => coversIssue(issue, [result]));
-              const attests = !plan.situation?.action || quoteAttestsActAndObject(result.sectionContent, plan.situation.action);
-              if (!referenced && !coversUncovered && !(selected.finalAuthorities.length === 0 && attests)) continue;
-              if (!referenced && !attests) continue;
-              seen.add(result.sectionId);
-              recovered.push(result);
-              if (selected.finalAuthorities.length + recovered.length >= 4) break;
-            }
-            if (recovered.length > 0) {
-              selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...recovered] };
+          const crossRefs = selected.finalAuthorities.flatMap((item) => expressCrossReferences(item.sectionContent ?? ""));
+          if (!recoverySuppressed(v40Diagnostic) && (selected.finalAuthorities.length === 0 || crossRefs.length > 0 || uncovered.length > 0)) {
+            const overlooked = selectOverlookedCandidates({
+              pool: searches.flatMap((search) => search.results),
+              admittedIds: selected.finalAuthorities.map((item) => item.sectionId),
+              rejectedKeys: rejectionKeys,
+              action: plan.situation?.action,
+              verb: plan.situation?.verb,
+              objectText: plan.situation?.object,
+            }).slice(0, 4);
+            const admitted = adjudicateOverlooked({
+              question,
+              setting: plan.situation?.setting,
+              action: plan.situation?.action,
+              candidates: overlooked,
+            });
+            if (admitted.length > 0) {
+              selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...admitted] };
               outcomeState.evidenceRecovery = true;
             }
           }
@@ -805,9 +845,8 @@ export async function POST(request: NextRequest) {
             selectedSlotMatches: selected.selectedSlotMatches,
           });
 
-            if (recoveryAttempts.length > 0) outcomeState.evidenceRecovery = true;
             if (finalAuthorities.length === 0) {
-            outcomeState.fallbackReason = "no_authority_selected";
+            outcomeState.fallbackCode = "no_authority_selected";
             outcomeState.abstained = true;
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
@@ -841,7 +880,6 @@ export async function POST(request: NextRequest) {
               fallbackReason: noAuthorityReason,
             });
 
-            closeStream();
             return;
           }
 
@@ -854,7 +892,7 @@ export async function POST(request: NextRequest) {
           const aiOperationStartedAt = Date.now();
           let claimValidationAttempts = 0;
           try {
-            const draftedAnswer = await streamText({
+            const draftedAnswer = await callText({
               task: "answer.generate",
               systemInstruction: ANSWER_STREAM_SYSTEM_PROMPT,
               prompt: buildGroundedAnswerPrompt({
@@ -888,7 +926,7 @@ export async function POST(request: NextRequest) {
             let claimValidationNote: string | null = null;
 
             if (!finalAnswer.trim()) {
-              outcomeState.fallbackReason = "empty_draft";
+              outcomeState.fallbackCode = "empty_draft";
               outcomeState.abstained = true;
               const fallbackReason = "The AI draft was empty.";
 
@@ -919,7 +957,6 @@ export async function POST(request: NextRequest) {
                 fallbackReason,
               });
 
-              closeStream();
               return;
             }
 
@@ -940,7 +977,7 @@ export async function POST(request: NextRequest) {
             }
 
             if (!finalAnswer.trim()) {
-              outcomeState.fallbackReason = "prune_emptied_draft";
+              outcomeState.fallbackCode = "prune_emptied_draft";
               outcomeState.abstained = true;
               const fallbackReason =
                 "The AI draft could not be validated after pruning unsupported content.";
@@ -972,7 +1009,6 @@ export async function POST(request: NextRequest) {
                 fallbackReason,
               });
 
-              closeStream();
               return;
             }
 
@@ -982,7 +1018,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (!citationValidation.ok) {
-              outcomeState.fallbackReason = "invalid_citations";
+              outcomeState.fallbackCode = "invalid_citations";
               outcomeState.abstained = true;
               const fallbackReason = `The AI draft cited authorities that were not retrieved: ${citationValidation.invalidCitations
                 .map((citation) => `[${citation}]`)
@@ -1016,7 +1052,6 @@ export async function POST(request: NextRequest) {
                 invalidCitations: citationValidation.invalidCitations,
               });
 
-              closeStream();
               return;
             }
 
@@ -1026,19 +1061,6 @@ export async function POST(request: NextRequest) {
             });
 
             if (!authorityMentionValidation.ok) {
-              const admittedLabels = new Set(authorityPayload.map((authority) => authority.citationLabel.toLowerCase()));
-              for (const mention of authorityMentionValidation.invalidAuthorityMentions) {
-                const retrieved = searches.flatMap((search) => search.results).find((result) =>
-                  result.citationLabel.toLowerCase() === mention.toLowerCase()
-                  || `so ${result.citationLabel.replace(/^so\s+/i, "")}`.toLowerCase() === mention.toLowerCase());
-                if (!retrieved || rejectedApplicability.has(retrieved.citationLabel.toLowerCase())) continue;
-                if (v40SourceScopeMismatch(question, retrieved, plan.situation?.setting)) continue;
-                if (admittedLabels.has(retrieved.citationLabel.toLowerCase())) continue;
-                authorityPayload.push(...buildAuthorityPayload([retrieved]));
-                finalAuthorities.push(retrieved);
-                admittedLabels.add(retrieved.citationLabel.toLowerCase());
-                outcomeState.evidenceRecovery = true;
-              }
               const rewrite = rewriteForbiddenAuthorityMentions({
                 answerText: finalAnswer,
                 authorities: authorityPayload,
@@ -1072,7 +1094,7 @@ export async function POST(request: NextRequest) {
               });
 
               if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
-                outcomeState.fallbackReason = "ungrounded_mentions";
+                outcomeState.fallbackCode = "ungrounded_mentions";
                 outcomeState.abstained = true;
                 const fallbackReason = `The AI draft mentioned or cited authorities that could not be grounded: ${
                   recheckMentions.ok
@@ -1109,7 +1131,6 @@ export async function POST(request: NextRequest) {
                   fallbackReason,
                 });
 
-                closeStream();
                 return;
               }
             }
@@ -1117,7 +1138,7 @@ export async function POST(request: NextRequest) {
             let answerClaims = extractAnswerClaims(finalAnswer);
 
             if (answerClaims.length === 0) {
-              outcomeState.fallbackReason = "no_grounded_claims";
+              outcomeState.fallbackCode = "no_grounded_claims";
               outcomeState.abstained = true;
               const fallbackReason =
                 "The AI draft contained no substantive grounded claims after deterministic validation.";
@@ -1149,7 +1170,6 @@ export async function POST(request: NextRequest) {
                 fallbackReason,
               });
 
-              closeStream();
               return;
             }
 
@@ -1158,7 +1178,7 @@ export async function POST(request: NextRequest) {
             activeAiOperation = "claim_validation";
             const validationResult = await runClaimValidationWithRetry({
               requestStartedAt: started,
-              invoke: () => generateJson<unknown>({
+              invoke: () => callJson<unknown>({
                 task: "answer.validate",
                 systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                 prompt: buildAnswerClaimValidationPrompt({
@@ -1199,7 +1219,7 @@ export async function POST(request: NextRequest) {
               v401RepairDiagnostic = "not_admitted";
               send("stage", {key:"validating", label:"Repairing the missing incident decision"});
               try {
-                const proposedRepair = await streamText({
+                const proposedRepair = await callText({
                   task: "answer.generate",
                   systemInstruction: ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
                   prompt: buildV401IncidentRepairPrompt({
@@ -1252,7 +1272,7 @@ export async function POST(request: NextRequest) {
                   repairPhase = "independent_validation";
                   const repairedReview = await runClaimValidationWithRetry({
                     requestStartedAt: started,
-                    invoke: () => generateJson<unknown>({
+                    invoke: () => callJson<unknown>({
                       task: "answer.validate",
                       systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                       prompt: buildAnswerClaimValidationPrompt({
@@ -1315,7 +1335,7 @@ export async function POST(request: NextRequest) {
                 claimValidation.responsiveness?.answersUserQuestion !== true ||
                 !answerSectionHasContent(finalAnswer, "Bottom line:") ||
                 (claimValidation.responsiveness?.unaddressedParts.length ?? 0) > 0)) {
-              outcomeState.fallbackReason = "not_responsive";
+              outcomeState.fallbackCode = "not_responsive";
               outcomeState.abstained = true;
               const fallbackReason =
                 "The cited draft did not demonstrably answer the question asked.";
@@ -1337,7 +1357,6 @@ export async function POST(request: NextRequest) {
                   `v40.1 incidentRepair=${v401RepairDiagnostic}`,
                 ].join("; "),
               });
-              closeStream();
               return;
             }
 
@@ -1376,7 +1395,7 @@ export async function POST(request: NextRequest) {
               if (disputed.length > 0) {
                 send("stage", { key: "validating", label: "Independently reviewing disputed source entailment" });
                 try {
-                  const rawAppeal = await generateJson<unknown>({
+                  const rawAppeal = await callJson<unknown>({
                     task: "answer.validate",
                     systemInstruction: ANSWER_CLAIM_APPEAL_SYSTEM_PROMPT,
                     prompt: buildAnswerClaimAppealPrompt({
@@ -1476,7 +1495,7 @@ export async function POST(request: NextRequest) {
               send("stage", {key:"validating",label:"Reconstructing a grounded Bottom line"});
               reconstructionDiagnostic = "attempted_rejected";
               try {
-                const rawRecovery = await generateJson<unknown>({
+                const rawRecovery = await callJson<unknown>({
                   task: "answer.validate",
                   systemInstruction: ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
                   prompt: buildBottomLineRecoveryPrompt({
@@ -1513,7 +1532,7 @@ export async function POST(request: NextRequest) {
                     authorities: finalAuthorities,
                   }).length === 0;
                   if (candidateClaims.length === 1 && citationOK && mentionOK && qualificationOK) {
-                    const rawReview = await generateJson<unknown>({
+                    const rawReview = await callJson<unknown>({
                       task: "answer.validate",
                       systemInstruction: ANSWER_CLAIM_VALIDATOR_SYSTEM_PROMPT,
                       prompt: buildAnswerClaimValidationPrompt({
@@ -1578,7 +1597,7 @@ export async function POST(request: NextRequest) {
                 `rejected=${ooV29RejectedClaimDetails || "none"}`,
                 `appeal=${appealDiagnostic || "not attempted"}`,
               ].join("; ");
-              outcomeState.fallbackReason = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
+              outcomeState.fallbackCode = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
               outcomeState.abstained = true;
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
@@ -1613,7 +1632,6 @@ export async function POST(request: NextRequest) {
                 claimValidationNote: ooV29FailureTrace,
               });
 
-              closeStream();
               return;
             }
 
@@ -1630,26 +1648,20 @@ export async function POST(request: NextRequest) {
                 `v38.1 validated after ${claimValidationAttempts} provider attempts`]
                 .filter(Boolean).join("; ");
             }
-            finalAnswer = labelBareRulings(finalAnswer);
+            const settlement = parseSettlement(finalAnswer);
+            finalAnswer = settlement.text;
+            if (settlement.settlement === "partial" || settlement.settlement === "insufficient") {
+              outcomeState.partial.push(settlement.settlement, ...settlement.unresolved);
+            }
+            finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
-            const declared = insufficiencyFacets(finalAnswer);
-            if (declared.length > 0 && outcomeState.fallbackReason === "none") {
-              outcomeState.partial.push(...declared);
-            }
+            answerEdits = cited.dropped;
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
-            if (describesStandingOrdersAsStatute(finalAnswer)) outcomeState.partial.push("instrument_character");
-            if (overHedgesSettledDuty(finalAnswer, finalAuthorities)) outcomeState.partial.push("over_hedged");
-            outcomeState.partial.push(...conditionalSubIssueGaps(finalAnswer));
-            if (finalAuthorities.some((authority) => actorClassDrift(finalAnswer, authority.sectionContent))) {
-              outcomeState.partial.push("actor_class");
-            }
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);
             }
-            const citedLabels = new Set(citationLabelsIn(finalAnswer).map((label) => label.toLowerCase()));
-            const citedAuthorities = authorityPayload.filter((authority) =>
-              citedLabels.has(authority.citationLabel.toLowerCase()));
+            const citedAuthorities = authoritiesReferencedByAnswer(finalAnswer, authorityPayload);
             send("answer_delta", { text: finalAnswer });
 
             send(markOperationalTerminal("done"), {
@@ -1660,7 +1672,7 @@ export async function POST(request: NextRequest) {
               latencyMs: Date.now() - started,
               plan,
               answerText: finalAnswer,
-              authorities: citedLabels.size > 0 ? citedAuthorities : authorityPayload,
+              authorities: citedAuthorities,
               rewriteNote,
               pruneNote,
               claimValidationNote,
@@ -1669,7 +1681,6 @@ export async function POST(request: NextRequest) {
               missingRequiredSlots: selected.missingRequiredSlots,
             });
 
-            closeStream();
             return;
           } catch (operationError) {
             // v38.1: the original try includes drafting AND validation. Never
@@ -1681,7 +1692,7 @@ export async function POST(request: NextRequest) {
               Date.now() - aiOperationStartedAt,
             );
             const isDraftFailure = activeAiOperation === "drafting";
-            outcomeState.fallbackReason = isDraftFailure ? "drafting_unavailable" : "validation_unavailable";
+            outcomeState.fallbackCode = isDraftFailure ? "drafting_unavailable" : "validation_unavailable";
             outcomeState.abstained = true;
             const fallbackReason = publicFailureReason(operationFailure);
             const fallbackAnswer = buildFallbackAnswer({
@@ -1714,7 +1725,6 @@ export async function POST(request: NextRequest) {
               operationFailure,
             });
 
-            closeStream();
             return;
           }
         } catch (error) {
@@ -1737,22 +1747,24 @@ export async function POST(request: NextRequest) {
                 ? (error as { kind: string }).kind
                 : "unknown",
           });
-          closeStream();
         }
       };
 
-      await superviseAnswerStream({
+      const stream = openGovernedAnswerStream({
         deadlineMs: ANSWER_STREAM_DEADLINE_MS,
         heartbeatMs: ANSWER_STREAM_HEARTBEAT_MS,
-        write: (chunk) => { try { controller.enqueue(encoder.encode(chunk)); } catch { /* closed */ } },
-        work: async (rawSend) => {
-          outbound = (event, data) => rawSend(event, data);
+        bindSend(rawSend) {
+          send = (event, data) => {
+            if (event === "done" || event === "error") markOperationalTerminal(event);
+            rawSend(event, decorate(event, data));
+          };
+          return send;
+        },
+        work: async (_send, signal) => {
+          activeSignal = signal;
           await run();
         },
       });
-      closeStream();
-    },
-  });
 
   return new Response(stream, {
     headers: {

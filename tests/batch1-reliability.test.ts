@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { superviseAnswerStream } from "../lib/open-order/answer-stream";
+import { openGovernedAnswerStream } from "../lib/open-order/answer-stream";
 import {
   actorClassDrift,
   authorisingRuleQueries,
@@ -19,6 +19,7 @@ import {
   labelBareRulings,
   mustAdjudicateFromPlanner,
   negativePowerWitnessScore,
+  servedModelFromAttempts,
   normaliseNumberWords,
   obligationPartialFacets,
   powerGrantedToDifferentBody,
@@ -37,37 +38,52 @@ import { getAiCandidates } from "../lib/ai/routes";
 
 test("hanging provider still yields one terminal error and a heartbeat", async () => {
   const chunks: string[] = [];
-  const result = await superviseAnswerStream({
+  const stream = openGovernedAnswerStream({
     deadlineMs: 40,
     heartbeatMs: 10,
-    write: (chunk) => chunks.push(chunk),
-    work: () => new Promise(() => undefined),
+    bindSend: (raw) => (event, data) => raw(event, data),
+    work: () => new Promise<void>(() => undefined),
   });
-  assert.equal(result.event, "error");
-  assert.equal(result.data.reason, "deadline_exceeded");
-  assert.ok(result.heartbeats >= 1);
-  assert.equal(chunks.filter((chunk) => chunk.startsWith("event: error")).length, 1);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    const next = await reader.read();
+    if (next.done) break;
+    buffer += decoder.decode(next.value);
+  }
+  chunks.push(...buffer.split("\n\n"));
+  assert.equal(chunks.filter((chunk) => chunk.includes("event: error")).length, 1);
   assert.ok(chunks.some((chunk) => chunk.startsWith(": heartbeat")));
+  assert.match(buffer, /deadline_exceeded/);
 });
 
 test("a completed stream is not followed by a second terminal", async () => {
-  const chunks: string[] = [];
-  const result = await superviseAnswerStream({
+  const stream = openGovernedAnswerStream({
     deadlineMs: 500,
     heartbeatMs: 200,
-    write: (chunk) => chunks.push(chunk),
+    bindSend: (raw) => (event, data) => raw(event, data),
     work: async (send) => { send("done", { ok: true }); },
   });
-  assert.equal(result.event, "done");
-  assert.equal(chunks.filter((chunk) => chunk.startsWith("event:")).length, 1);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    buffer += decoder.decode(next.value);
+  }
+  assert.equal(buffer.split("event:").length - 1, 1);
 });
 
 test("outcome flags keep fallback separate from partial", () => {
   const partial = deriveAnswerOutcome({
     route: "semantic_selector", fallbackReason: "none", partial: ["sources_do_not_settle"], abstained: false,
   });
-  assert.equal(partial.degraded, true);
+  assert.equal(partial.degraded, false);
   assert.equal(partial.fallbackReason, "none");
+  assert.deepEqual(partial.partial, ["sources_do_not_settle"]);
   const fallback = deriveAnswerOutcome({
     route: "incident_adjudication", fallbackReason: "no_authority_selected", partial: [], abstained: true,
   });
@@ -105,20 +121,23 @@ test("free-tier chain is Gemini only unless a non-Gemini fallback is opted in", 
   try {
     assert.deepEqual(getAiCandidates("answer.generate"), ["gemini"]);
     const chain = geminiFreeTierChain();
-    assert.ok(chain.every((model) => model.startsWith("gemini-")));
-    assert.ok(chain.includes("gemini-3.5-flash-lite"));
+    assert.equal(chain[0], "gemini-3.6-flash");
+    assert.equal(chain[1], "gemini-3.5-flash-lite");
     process.env.OPEN_ORDER_ALLOW_NON_GEMINI = "1";
     assert.deepEqual(getAiCandidates("answer.generate"), ["gemini", "openai-compatible"]);
     delete process.env.OPEN_ORDER_ALLOW_NON_GEMINI;
     process.env.AI_ROUTE_OVERRIDE = "openai-compatible";
     assert.throws(() => getAiCandidates("query.plan"), /OPEN_ORDER_ALLOW_NON_GEMINI/);
-    const calls: string[] = [];
-    await assert.rejects(runGeminiChain(async (model) => {
-      calls.push(model);
-      throw new AiProviderError({ message: "limited", kind: "rate_limited", statusCode: 429, retryable: true, provider: "gemini" });
-    }, { sleep: async () => undefined }));
-    assert.ok(calls.length >= 2);
-    assert.notEqual(calls[0], calls[calls.length - 1]);
+    const attempts: Array<{ model: string; outcome: string }> = [];
+    const answered = await runGeminiChain(async (model) => {
+      if (model === "gemini-3.6-flash") {
+        throw new AiProviderError({ message: "limited", kind: "rate_limited", statusCode: 429, retryable: true, provider: "gemini" });
+      }
+      return "answered";
+    }, { sleep: async () => undefined, onAttempt: (attempt) => attempts.push(attempt) });
+    assert.equal(answered, "answered");
+    assert.deepEqual(attempts.map((attempt) => attempt.outcome), ["429", "ok"]);
+    assert.equal(servedModelFromAttempts(attempts), "gemini-3.5-flash-lite");
   } finally {
     process.env.OPEN_ORDER_INFERENCE_MODE = previous.mode;
     if (previous.models === undefined) delete process.env.GEMINI_FREE_TIER_MODELS; else process.env.GEMINI_FREE_TIER_MODELS = previous.models;
@@ -138,9 +157,10 @@ test("planner route ignores opening words and relations come from the situation"
     situation: { decisionQuestion: "May the actor do this after the stage closes?", action: "alter the record" },
   }).includes("permission"), true);
   assert.deepEqual(authorisingRuleQueries({ action: "emit a beacon", decisionQuestion: "May they emit a beacon?" }), ["emit a beacon"]);
-  assert.deepEqual(stageReopeningQueries({ proceduralMoment: "after the stage closed", action: "alter the text", decisionQuestion: "" }), ["reopening a concluded stage"]);
-  assert.deepEqual(proceedingConsequenceQueries({ decisionQuestion: "Is there immunity for the speech?", action: "", setting: "debate", proceduralMoment: "" }), ["privilege and immunity of proceedings"]);
-  assert.deepEqual(errorCorrectionQueries({ decisionQuestion: "Can the recorded vote be corrected for error?", action: "correct" }), ["correction of an erroneous recorded outcome"]);
+  assert.deepEqual(stageReopeningQueries({ relations: ["stage_reopening"] }), ["reopening a concluded stage"]);
+  assert.deepEqual(proceedingConsequenceQueries({ relations: ["proceeding_consequence"] }), ["privilege and immunity of proceedings"]);
+  assert.deepEqual(errorCorrectionQueries({ relations: ["error_correction"] }), ["correction of an erroneous recorded outcome"]);
+  assert.deepEqual(stageReopeningQueries({ relations: [] }), []);
 });
 
 test("generic witnesses, anchors, tables and citation hygiene", () => {
@@ -168,8 +188,9 @@ test("generic witnesses, anchors, tables and citation hygiene", () => {
   assert.equal(powerGrantedToDifferentBody("the primary body", "The other committee may call for views."), true);
   assert.equal(exceptionNamesAuthorisingBody("unless the presiding officer authorises it"), true);
   assert.equal(describesStandingOrdersAsStatute("Standing Orders are a statute."), true);
-  assert.equal(labelBareRulings("See 49/5 for the limit."), "See Speakers' ruling 49/5 for the limit.");
-  assert.equal(labelBareRulings("See [49/5]."), "See [49/5].");
+  assert.equal(labelBareRulings("A 2/3 majority is required.", [{ citationLabel: "2/3", documentCorpus: "speakers_rulings" }]), "A 2/3 majority is required.");
+  assert.equal(labelBareRulings("The limit is 49/5.", [{ citationLabel: "49/5", documentCorpus: "speakers_rulings" }]), "The limit is Speakers' ruling 49/5.");
+  assert.equal(labelBareRulings("See [49/5].", [{ citationLabel: "49/5", documentCorpus: "speakers_rulings" }]), "See [49/5].");
   const dropped = dropUnreferencedCitationEntries("Bottom line:\nThe rule applies. [QX 1]\n\nBest authorities to inspect or cite:\n- [QX 1] governing\n- [QX 9] unused");
   assert.ok(dropped.dropped.includes("QX 9"));
   assert.ok(!dropped.text.includes("QX 9"));

@@ -67,6 +67,9 @@ export type ProceduralSearchResponse = {
   debug?: ProceduralSearchDebug;
 };
 
+// Table-row boost is 420, between path rank (280) and heading rank (650), so a
+// row can surface without outranking an exact heading. The candidate scan is
+// limited to appendix_table sections after EXPLAIN showed an unbounded scan.
 export async function searchProceduralAuthorities(
   params: ProceduralSearchParams,
 ): Promise<ProceduralSearchResponse> {
@@ -288,6 +291,7 @@ export async function searchProceduralAuthorities(
         )
         or (
           i.query_word_count >= 2
+          and s.section_type = 'appendix_table'
           and (
             s.content ~ '\\n[^:\\n]{2,80}:[[:space:]]+\\S'
             or s.content ~ '\\n\\S+[[:space:]]{2,}\\S+'

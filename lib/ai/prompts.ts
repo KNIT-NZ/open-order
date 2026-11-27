@@ -1,5 +1,6 @@
 // lib/ai/prompts.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
+import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
 
 export const SEARCH_PLANNER_SYSTEM_PROMPT = `
@@ -17,6 +18,7 @@ Important constraints:
 - Distinguish contextual events from the action being asked about. A participial or relative clause describing an existing state must not displace the main action as the search target.
 - Retain legally material timing, exclusivity, jurisdiction and procedural-stage conditions; never discard them as unimportant context.
 - When the question asks whether someone may refuse, prevent, compel, reverse, repeat or reopen an action, search for the applicable constraint or decision authority as well as a possible procedural pathway.
+- Set situation.verb and situation.object as separate fields when both are clear. Set situation.relations only from stage_reopening, proceeding_consequence, error_correction, presiding_appeal, and regulated_act, and only when that relation is the question.
 - Prefer complementary queries with different procedural functions (governing rule, limitation, remedy) over multiple broad synonyms for the same topic. Do not guess citation numbers or presume a conclusion.
 - For a natural incident, return the additional structured situation below. Treat the situation as search context, NOT a procedural conclusion or a claim of source support. An actor, the affected person, the forum, the action, the procedural moment and the decision being asked about are different things.
 - Distinguish actor class, forum and procedural homonyms. These are conceptual contrasts, not source selections.
@@ -33,34 +35,10 @@ Important constraints:
 - Prefer query terms that resemble actual heading labels or subheading labels.
 - Return JSON only.
 
-Standing Orders query style:
-- Good examples:
-  - "closure motion"
-  - "acceptance of closure motion"
-  - "point of order"
-  - "relevancy"
-  - "urgency"
-  - "financial veto"
-  - "personal explanation"
-  - "parliamentary privilege"
-- Avoid:
-  - "question be put too early"
-  - "Speaker discretion debate"
-  - "what happens if debate not finished"
-
-Speakers' Rulings query style:
-- Prefer short heading-native labels such as:
-  - "personal reflections"
-  - "against members"
-  - "procedure"
-  - "unparliamentary language"
-  - "chairperson"
-  - "relevancy"
-  - "point of order"
-  - "accountability to the House"
-  - "form of reply"
-  - "questions to Ministers"
-- Choose search queries from the corpus heading labels supplied with the question. Do not invent a topic pack.
+Query style:
+- Choose search queries from the corpus heading labels supplied with the question.
+- Keep each query short and heading-like.
+- Do not invent a topic pack or a worked example.
 
 Corpus choice:
 - Choose "standing_orders" when the question is about the formal rule itself or a named Standing Order procedure.
@@ -125,7 +103,7 @@ Critical grounding rules:
 - Prefer concise lines; use a compound sentence when needed to state one complete conditional proposition accurately.
 - Mirror the authority's modal force and conditions exactly: preserve distinctions such as "may", "may not", "must", and conditional "if" rules. Never invert a prohibition into a permission or a condition into a general rule.
 - Do not invent procedural steps, powers, discretion, appeal rights, continuation or resumption rules, withdrawal requirements, requests for leave, remedies, or consequences that are not stated or necessarily entailed by the retrieved authority text.
-- Use only the exact citation labels provided in the retrieved authorities, for example [SO 89] or [22/5].
+- Use only the exact citation labels provided in the retrieved authorities, for example [SO NN] or [NN/N].
 - Do not invent, transform, shorten, renumber, or generalise citation labels.
 - Do not cite or rely on any authority that is not present in the retrieved authority pack, even if it seems obviously relevant from your background knowledge.
 - Do not cite an authority merely because a retrieved ruling mentions, quotes, paraphrases, or refers to it. If an authority is not itself present in the retrieved pack, treat it as unavailable.
@@ -145,7 +123,8 @@ Answer-responsiveness rules:
 - Permission to use equipment or be present is not authorisation for a separately regulated act. Where the authorising rule for that act is missing, identify the unanswered authorisation instead of answering from a related permission.
 - Keep each provision within the actor class it governs.
 - Describe Standing Orders as House rules, not as a statute.
-- Cite a Speaker's ruling with its instrument label, for example "Speakers' ruling 49/5", not a bare number.
+- Cite a Speaker's ruling with its instrument label, for example "Speakers' ruling NN/N", not a bare number.
+- End with one metadata line "Settlement: settled", "Settlement: partial", or "Settlement: insufficient". When the status is not settled, add "Unresolved:" and short facet labels separated by semicolons.
 - Do not hedge a rule the sources state as a duty.
 - For a conditional sub-issue, state who decides, what discretion applies, and the consequence.
 - For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.
@@ -204,12 +183,7 @@ characters from its provided Text. Do not quote headings or invent a citation.
 The quote must establish the operative permission, restriction, discretion,
 procedure or limitation, not just mention a subject in common with the question.
 
-Permission to use equipment or be present is not authorisation for a separately regulated act.
-Identify a source governing that act, or acknowledge the evidence gap.
-
-Critically distinguish actors (MP, member of the public, committee witness),
-forums (Chamber, gallery, select committee), activities (speech, petition,
-recording, vote) and stages (personal vote, party vote, reading, committee).
+Critically distinguish actor class, forum, and procedural homonyms.
 A rule about a different actor or procedure is NOT a valid analogy when the
 question requires a direct governing rule. Reject a previous selected source
 when it covers an unrelated context. Prefer a source directly governing the
@@ -224,7 +198,7 @@ from missing evidence. Do not pick a source merely to avoid abstention.
 
 Return JSON only:
 {
-  "selected":[{"citationLabel":"SO 123","role":"governing",
+  "selected":[{"citationLabel":"SO NN","role":"governing",
     "exactQuote":"verbatim supporting source text of at least 24 characters",
     "actorMatches":true,"settingMatches":true,"actionMatches":true,
     "stageMatches":true,"rationale":"how the quoted text governs the question"}],
@@ -287,7 +261,7 @@ Validation rules:
 - Do not add authorities.
 - Return JSON only.
 - When a user question and answer draft are supplied, independently judge whether the draft actually answers the user's requested act and forum. A true claim about a different matter is not responsive. Do not mark a draft responsive solely because its citations exist or its prose is true. The responsiveness verdict is independent of the per-claim support verdicts.
-- Check ALL material decision facets: the central act, whose permission is needed, applicable forum and procedural moment, any necessary authorisation, consequences, and expressly asked objections. Permission for a related act does not answer a separately regulated act. Report each unresolved facet in unaddressedParts unless the draft explicitly states that the selected sources cannot settle it, without implying permission from silence.
+- Check ALL material decision facets: the central act, whose permission is needed, applicable forum and procedural moment, any necessary authorisation, consequences, and expressly asked objections. Report each unresolved facet in unaddressedParts unless the draft explicitly states that the selected sources cannot settle it, without implying permission from silence.
 
 Return this exact shape:
 {
@@ -399,7 +373,7 @@ quotation of at least 24 characters from its provided source body. Quote the
 operative language, not a heading. If any side, exception or condition is
 unproven, mark unsupported and do not fabricate quotations. Never use an
 uncited source. Return JSON only, in this shape:
-{"claims":[{"id":"claim-1","supported":false,"reason":"...","witnesses":[{"citationLabel":"SO 222","exactQuote":"..."}]}]}
+{"claims":[{"id":"claim-1","supported":false,"reason":"...","witnesses":[{"citationLabel":"SO NN","exactQuote":"..."}]}]}
 `.trim();
 
 export function buildAnswerClaimAppealPrompt(input: {
@@ -472,7 +446,7 @@ Authority function: ${authorityProfile.authorityFunction}
 Path: ${result.path.join(" > ")}
 Path text: ${result.pathText}
 Source URL: ${result.sourceUrl ?? "None"}
-Source anchor: ${result.sourceAnchor && !/^none$/i.test(result.sourceAnchor.trim()) ? result.sourceAnchor.trim() : "unavailable"}
+Source anchor: ${usableSourceAnchor(result.sourceAnchor) ?? "unavailable"}
 Rank: ${result.rank.toFixed(2)}
 Cluster support count: ${result.clusterSupportCount}
 Match signals:
@@ -550,11 +524,11 @@ Use ONLY the supplied authority texts and the already-surviving grounded claims.
 Write exactly ONE independently supportable Bottom line sentence; include all
 material source-stated conditions and exceptions relevant to that sentence.
 Do not copy a previously rejected overbroad conclusion or use unselected sources.
-Start with a direct grounded answer, not "Not simply". If a categorical
+Start with a direct grounded answer. If a categorical
 formulation was rejected, express the source's operative condition or defined
 threshold itself rather than repeating the disputed paraphrase. An exception
 for an adjacent practice does not qualify a separate express prohibition. Append at least one citation from the supplied pack.
-Return JSON ONLY with the shape {"bottomLine":"... [SO 1]."}.
+Return JSON ONLY with the shape {"bottomLine":"... [SO NN]."}.
 If no safe direct line can be written, return {"bottomLine":""}.
 `.trim();
 
@@ -595,7 +569,7 @@ Start with the literal line "Bottom line:" then immediately state a concise
 substantive decision supported by inline citations. If the source pack cannot
 settle a central permission or objection, say this explicitly, citing whatever
 selected source establishes the partial governing framework. Do not turn a
-related permission into authorisation for a separately regulated act. No unsupported
+No unsupported
 claims, invented citations, or conclusions inferred from missing evidence.
 
 Use the exact section headings Bottom line:, What this means:, Your options:,
