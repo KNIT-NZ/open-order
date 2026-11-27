@@ -36,6 +36,7 @@ test("settlement trailer uses answer states and uncertainty classes", () => {
   assert.equal(deriveAnswerState({ abstained: true, settlement: "supported" }), "not_answered");
   assert.equal(deriveAnswerState({ settlement: "not_answered" }), "partial");
   assert.equal(deriveAnswerState({ settlement: "supported", fallbackReason: "empty_draft" }), "not_answered");
+  assert.equal(deriveAnswerState({ settlement: "supported", fallbackReason: "" }), "not_answered");
   assert.equal(deriveAnswerState({ settlement: null }), "partial");
   const held = parseSettlement("Unresolved: corpus_silence: missing_practice");
   assert.equal(held.uncertainty[0]?.class, "retrieval_uncertainty");
@@ -102,6 +103,16 @@ test("withheld material, a rewrite and an accepted repair cannot be supported", 
   assert.equal(deriveAnswerState({ ...supported, answerEdits: ["SO 2"] }), "partial");
   assert.equal(deriveAnswerState({ ...supported, partial: ["evidence_gap"] }), "partial");
   assert.equal(deriveAnswerState({ ...supported, uncertainty: [{ class: "retrieval_uncertainty", facet: "claim withheld after checking" }] }), "partial");
+});
+
+test("an accepted bottom-line reconstruction caps the answer state", () => {
+  const route = readFileSync(new URL("../app/api/ai/answer/route.ts", import.meta.url), "utf8");
+  const at = route.indexOf('reconstructionDiagnostic = "accepted_after_recheck"');
+  assert.ok(at > 0);
+  const window = route.slice(at, at + 350);
+  assert.match(window, /repairAccepted = true/);
+  assert.match(window, /settlement = null/);
+  assert.match(window, /noteCheckedWithholding\(\)/);
 });
 
 test("overlooked admission requires a judge and drops a source the judge did not attest", async () => {

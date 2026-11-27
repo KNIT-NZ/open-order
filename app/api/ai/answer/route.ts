@@ -991,9 +991,7 @@ export async function POST(request: NextRequest) {
                 authorities: authorityPayload,
               }),
             );
-            const draftedSettlement = parseSettlement(finalAnswer, {
-              sourcesNotHeld: evidenceGaps.length > 0 || v40Diagnostic.status === "no_retrieved_source_bodies",
-            });
+            const draftedSettlement = parseSettlement(finalAnswer);
             finalAnswer = draftedSettlement.text;
             outcomeState.settlement = draftedSettlement.settlement;
             for (const item of draftedSettlement.uncertainty) outcomeState.uncertainty.push(item);
@@ -1650,6 +1648,9 @@ export async function POST(request: NextRequest) {
                       });
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
+                      outcomeState.repairAccepted = true;
+                      outcomeState.settlement = null;
+                      noteCheckedWithholding();
                     }
                   }
                 }
@@ -1735,9 +1736,7 @@ export async function POST(request: NextRequest) {
                 `claim_check_attempts=${claimValidationAttempts}`,
               ]);
             }
-            const trailingSettlement = parseSettlement(finalAnswer, {
-              sourcesNotHeld: evidenceGaps.length > 0,
-            });
+            const trailingSettlement = parseSettlement(finalAnswer);
             finalAnswer = trailingSettlement.text;
             const settlementRank = { supported: 1, partial: 2, not_answered: 3 } as const;
             if ((settlementRank[trailingSettlement.settlement ?? "supported"] ?? 0) > (settlementRank[outcomeState.settlement ?? "supported"] ?? 0)

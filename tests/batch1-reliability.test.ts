@@ -86,6 +86,10 @@ test("outcome flags keep fallback separate from partial", () => {
     route: "semantic_selector", fallbackReason: "none", partial: ["evidence_gap"], abstained: false,
   });
   assert.equal(gap.degraded, true);
+  const withheld = deriveAnswerOutcome({
+    route: "semantic_selector", fallbackReason: "none", partial: ["partial"], abstained: false,
+  });
+  assert.equal(withheld.degraded, true);
   assert.equal(partial.fallbackReason, "none");
   assert.deepEqual(partial.partial, ["sources_do_not_settle"]);
   const fallback = deriveAnswerOutcome({

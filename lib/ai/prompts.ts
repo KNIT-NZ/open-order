@@ -127,7 +127,7 @@ Answer-responsiveness rules:
 - Cite a Speaker's ruling with its instrument label, for example "Speakers' ruling NN/N", not a bare number.
 - End with one metadata line "Settlement: supported", "Settlement: partial", or "Settlement: not_answered".
 - When the line is not "Settlement: supported", add one "Unresolved:" line. Separate items with semicolons. Each item is "class:facet".
-- class is one of coverage_gap, retrieval_uncertainty, interpretive_uncertainty, authority_conflict, higher_law_tension, facts_incomplete. facet is a short label of at most 48 characters. Do not write corpus_silence.
+- class is one of retrieval_uncertainty, interpretive_uncertainty, authority_conflict, higher_law_tension, facts_incomplete. facet is a short label of at most 48 characters. Do not write corpus_silence or coverage_gap.
 - Do not hedge a rule the sources state as a duty.
 - For a conditional sub-issue, state who decides, what discretion applies, and the consequence.
 - For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.

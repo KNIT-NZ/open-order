@@ -15,7 +15,7 @@ export function presidingOfficerAppealQuery(situation?: { relations?: string[] }
 export function actorClassQualificationQuery(actor: string): string | null;
 export function splitActAndObject(action: string): { act: string[]; object: string[] };
 export function quoteAttestsActAndObject(quote: string, action?: string, verb?: string, objectText?: string): boolean;
-export function parseSettlement(answerText: string, options?: { sourcesNotHeld?: boolean }): {
+export function parseSettlement(answerText: string): {
   text: string;
   settlement: "supported" | "partial" | "not_answered" | null;
   uncertainty: Array<{ class: string; facet: string }>;
