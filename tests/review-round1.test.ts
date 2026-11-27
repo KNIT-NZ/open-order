@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { openGovernedAnswerStream } from "../lib/open-order/answer-stream";
+import { ANSWER_ROUTE_MAX_DURATION_SECONDS, ANSWER_STREAM_DEADLINE_MS, ANSWER_STREAM_SAFETY_MARGIN_MS, openGovernedAnswerStream } from "../lib/open-order/answer-stream";
 import { deriveObligations } from "../lib/v5-17-semantic-selector.js";
 import { adjudicateOverlooked } from "../lib/ai/scenario-adjudication";
 import {
@@ -31,6 +31,15 @@ async function readEvents(stream: ReadableStream<Uint8Array>) {
 function eventName(raw: string) {
   return raw.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
 }
+
+test("route maxDuration literal matches the shared deadline budget", () => {
+  const route = readFileSync(new URL("../app/api/ai/answer/route.ts", import.meta.url), "utf8");
+  const match = route.match(/export const maxDuration = (\d+);/);
+  assert.ok(match);
+  assert.equal(Number(match?.[1]), ANSWER_ROUTE_MAX_DURATION_SECONDS);
+  assert.equal(ANSWER_ROUTE_MAX_DURATION_SECONDS, 300);
+  assert.equal(ANSWER_STREAM_DEADLINE_MS, ANSWER_ROUTE_MAX_DURATION_SECONDS * 1000 - ANSWER_STREAM_SAFETY_MARGIN_MS);
+});
 
 test("answer route stream ends after done, error, and deadline", async () => {
   const route = readFileSync(new URL("../app/api/ai/answer/route.ts", import.meta.url), "utf8");

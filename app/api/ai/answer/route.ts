@@ -7,7 +7,6 @@ import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
 import {
-  ANSWER_ROUTE_MAX_DURATION_SECONDS,
   ANSWER_STREAM_DEADLINE_MS,
   ANSWER_STREAM_HEARTBEAT_MS,
   openGovernedAnswerStream,
@@ -145,9 +144,10 @@ const claimAppealSchema = z.object({
 
 type AuthorityPayload = ReturnType<typeof buildAuthorityPayload>[number];
 
-// Plan assumption: the platform honours this route segment maxDuration.
-// The SSE deadline is that budget minus ANSWER_STREAM_SAFETY_MARGIN_MS.
-export const maxDuration = ANSWER_ROUTE_MAX_DURATION_SECONDS;
+// Plan assumption: the platform honours this literal. Next.js requires a
+// static literal here; the stream deadline is derived from the same number
+// in lib/open-order/answer-stream.js (ANSWER_ROUTE_MAX_DURATION_SECONDS).
+export const maxDuration = 300;
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
