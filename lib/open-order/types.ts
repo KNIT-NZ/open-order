@@ -151,9 +151,9 @@ export type AiSourceDisposition = {
 export type AiScenarioAdjudication = {
   status: string; candidateCount: number; selected: string[]; rejected: string[];
   gaps: string[]; providerAttempts: number; dossier: string[]; retrievedOutsideDossier: string[];
-  dispositions: AiSourceDisposition[]; unavailableNominations: number;
+  dispositions: AiSourceDisposition[]; dispositionCounts?: string[]; unavailableNominations: number;
   recovery: { status: string; candidates: string[]; dispositions: AiSourceDisposition[];
-    unavailableNominations: number; selected: string[]; rejected: string[] };
+    dispositionCounts?: string[]; unavailableNominations: number; selected: string[]; rejected: string[] };
 };
 
 export type AiSelectorSummary = {
