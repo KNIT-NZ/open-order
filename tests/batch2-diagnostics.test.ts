@@ -100,9 +100,11 @@ function source(): ProceduralSearchResult {
   };
 }
 
-async function probe(mode: "no_grounded_claims" | "no_authority_selected") {
+async function probe(mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source") {
   const admitted = source();
-  const draft = mode === "no_grounded_claims"
+  const draft = mode === "named_admitted_source"
+    ? "Bottom line:\nThe House may suspend the sitting under Standing Order 1.\n\nSettlement: supported"
+    : mode === "no_grounded_claims"
     ? "Bottom line:\nThe House may suspend the sitting.\n\nBest authorities to inspect or cite:\n- [SO 1] Suspension\n\nSettlement: supported"
     : `Bottom line:\n${QUOTE} [SO 1]\n\nSettlement: supported`;
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
@@ -200,6 +202,14 @@ test("no_grounded_claims records why every uncited claim was removed", async () 
   assert.equal(JSON.stringify(trace).includes("The House may suspend the sitting."), false);
   const shown = (done.authorities as unknown[]).length;
   assert.equal(trace.shownAuthorities?.count, shown);
+});
+
+test("a claim that names an admitted source reaches validation", async () => {
+  const done = await probe("named_admitted_source");
+  assert.notEqual(done.fallbackCode, "no_grounded_claims");
+  assert.notEqual(done.fallbackCode, "prune_emptied_draft");
+  assert.equal(done.answerState, "supported");
+  assert.match(String(done.answerText), /\[SO 1\]/);
 });
 
 test("no_authority_selected records a zero nomination as codes", async () => {

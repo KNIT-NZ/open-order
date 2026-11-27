@@ -1998,6 +1998,18 @@ export type ClaimRemovalCode =
   | "unsupported_by_passage"
   | "omitted_source_qualification";
 
+function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string[] {
+  const mentions = line.match(/\b(?:standing order|so)\s+\d+[a-z]*\b|\b\d+\/\d+\b/gi) ?? [];
+  const found: string[] = [];
+  for (const mention of mentions) {
+    const normalized = normalizeAuthorityMention(mention);
+    for (const label of allowedLabels) {
+      if (normalizeAuthorityMention(label) === normalized && !found.includes(label)) found.push(label);
+    }
+  }
+  return found;
+}
+
 export function claimRemovalCode(line: string, allowedLabels: Set<string>): ClaimRemovalCode {
   const citations = extractInlineCitations(line);
   if (citations.length === 0) return "no_citation";
@@ -2051,8 +2063,15 @@ export function pruneValidatedAnswerContent(input: {
       if (lineHasAllowedCitation(trimmed, allowedLabels)) {
         kept.push(line);
       } else {
-        removedLines.push(line);
-        removalCodes.push(claimRemovalCode(trimmed, allowedLabels));
+        const named = extractInlineCitations(trimmed).length === 0
+          ? admittedLabelsNamedIn(trimmed, allowedLabels)
+          : [];
+        if (named.length > 0) {
+          kept.push(`${line} ${named.map((label) => `[${label}]`).join(" ")}`);
+        } else {
+          removedLines.push(line);
+          removalCodes.push(claimRemovalCode(trimmed, allowedLabels));
+        }
       }
       continue;
     }
