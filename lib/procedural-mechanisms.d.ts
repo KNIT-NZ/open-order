@@ -62,7 +62,7 @@ export function selectOverlookedCandidates<T extends { sectionId?: string; citat
 }): T[];
 export function filterDraftNamedAuthorities<T extends { citationLabel?: string }>(named: T[], admitted: Array<{ citationLabel?: string }>): T[];
 export function authoritiesReferencedByAnswer<T extends { citationLabel?: string }>(answerText: string, authorities: T[]): T[];
-export function servedModelFromAttempts(attempts: Array<{ model?: string; outcome?: string; answer?: boolean }>): string | null;
+export function resolveServedModel(answerModel: string | null | undefined, lastAttemptedModel: string | null | undefined): string | null;
 export function negativePowerWitnessScore(input: { actor?: string; act?: string; source?: string }): number;
 export function powerGrantedToDifferentBody(askedBody: string, source: string): boolean;
 export function dutyVersusDiscretion(text: string): "duty" | "discretion" | "either" | "unspecified";

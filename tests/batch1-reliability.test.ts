@@ -19,7 +19,7 @@ import {
   labelBareRulings,
   mustAdjudicateFromPlanner,
   negativePowerWitnessScore,
-  servedModelFromAttempts,
+  resolveServedModel,
   normaliseNumberWords,
   obligationPartialFacets,
   powerGrantedToDifferentBody,
@@ -149,7 +149,8 @@ test("free-tier chain is Gemini only unless a non-Gemini fallback is opted in", 
     assert.equal(attempts.at(-1)?.model, "gemini-3.5-flash-lite");
     assert.equal(attempts.at(-1)?.outcome, "ok");
     assert.ok(attempts.slice(0, -1).every((attempt) => attempt.outcome === "429"));
-    assert.equal(servedModelFromAttempts(attempts), "gemini-3.5-flash-lite");
+    assert.equal(attempts.at(-1)?.model, "gemini-3.5-flash-lite");
+    assert.equal(attempts.at(-1)?.outcome, "ok");
   } finally {
     process.env.OPEN_ORDER_INFERENCE_MODE = previous.mode;
     if (previous.models === undefined) delete process.env.GEMINI_FREE_TIER_MODELS; else process.env.GEMINI_FREE_TIER_MODELS = previous.models;
@@ -206,10 +207,10 @@ test("auth and missing-model errors do not fall through to another model", async
   }
 });
 
-test("servedModel on a failed path is the last model started, not a success", () => {
-  const attempts = [{ model: "gemini-3.6-flash", outcome: "other" }];
-  assert.equal(servedModelFromAttempts(attempts), "gemini-3.6-flash");
-  assert.notEqual(attempts[0]?.outcome, "ok");
+test("servedModel uses the answer draft when it succeeded, otherwise the last model started", () => {
+  assert.equal(resolveServedModel("gemini-3.5-flash-lite", "gemini-3.6-flash"), "gemini-3.5-flash-lite");
+  assert.equal(resolveServedModel(null, "gemini-3.6-flash"), "gemini-3.6-flash");
+  assert.equal(resolveServedModel(null, null), null);
 });
 
 test("planner route ignores opening words and relations come from the situation", () => {

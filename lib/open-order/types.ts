@@ -162,7 +162,9 @@ export type AiSelectorSummary = {
   minObligationCoverage: number;
   allObligationsComplete: boolean;
   obligationDetails: Array<{ coverage: number; complete: boolean }>;
-  prePruneLabels: string[];
+  prePruneLabels?: string[];
+  prePruneCount?: number;
+  legacySelectedCount?: number;
   selectedLabels: string[];
 };
 

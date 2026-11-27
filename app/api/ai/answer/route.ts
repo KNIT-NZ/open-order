@@ -33,6 +33,7 @@ import {
   recoverySuppressed,
   relationsFromPlanner,
   reasonFromProviderKind,
+  resolveServedModel,
   routeFromPlanner,
   selectOverlookedCandidates,
   stageReopeningQueries,
@@ -154,7 +155,23 @@ function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+type AnswerRouteDeps = {
+  generateJson?: typeof generateJson;
+  streamText?: typeof streamText;
+  searchProceduralAuthorities?: typeof searchProceduralAuthorities;
+  selectV517ProductionAuthorities?: typeof selectV517ProductionAuthorities;
+  loadHeadings?: () => Promise<string[]>;
+};
+
 export async function POST(request: NextRequest) {
+  return runAnswerRoute(request);
+}
+
+export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps = {}) {
+  const generate = deps.generateJson ?? generateJson;
+  const streamAnswer = deps.streamText ?? streamText;
+  const searchAuthorities = deps.searchProceduralAuthorities ?? searchProceduralAuthorities;
+  const selectAuthorities = deps.selectV517ProductionAuthorities ?? selectV517ProductionAuthorities;
   let body: unknown;
 
   try {
@@ -271,7 +288,7 @@ export async function POST(request: NextRequest) {
       };
       // Last model whose attempt started. This does not mean the attempt succeeded;
       // read providerAttempts for each outcome.
-      const servedModel = () => answerModel ?? lastAttemptedModel;
+      const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
       const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
         && process.env.VERCEL_ENV !== "production";
       const decorate = (event: string, data: unknown) => {
@@ -345,7 +362,7 @@ export async function POST(request: NextRequest) {
       const run = async () => {
         const started = startedAt;
         const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
-          generateJson<T>({
+          generate<T>({
             ...request,
             signal: activeSignal,
             onProviderRetry: noteRetry,
@@ -353,7 +370,7 @@ export async function POST(request: NextRequest) {
             onProviderAttemptStart: beginAttempt,
           });
         const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
-          streamText({
+          streamAnswer({
             ...request,
             signal: activeSignal,
             onProviderRetry: noteRetry,
@@ -368,11 +385,15 @@ export async function POST(request: NextRequest) {
           });
 
           let headingLabels: string[] = [];
-          try {
-            const { corpusHeadingLabels } = await import("@/lib/corpus-headings");
-            headingLabels = await corpusHeadingLabels();
-          } catch {
-            headingLabels = [];
+          if (deps.loadHeadings) {
+            headingLabels = await deps.loadHeadings();
+          } else {
+            try {
+              const { corpusHeadingLabels } = await import("@/lib/corpus-headings");
+              headingLabels = await corpusHeadingLabels();
+            } catch {
+              headingLabels = [];
+            }
           }
           const rawPlan = await callJson<unknown>({
             task: "query.plan",
@@ -428,7 +449,7 @@ export async function POST(request: NextRequest) {
           const searches: SearchExecution[] = [];
 
           for (const dimension of queryPlan) {
-            const searchResponse = await searchProceduralAuthorities({
+            const searchResponse = await searchAuthorities({
               q: dimension.query,
               corpus: effectiveCorpus,
               limit: 10,
@@ -447,7 +468,7 @@ export async function POST(request: NextRequest) {
           // never pretend they were included merely because the planner named them.
           for (const query of additionalScenarioQueries) {
             if (searches.some((search) => search.query.toLowerCase() === query.toLowerCase())) continue;
-            const searchResponse = await searchProceduralAuthorities({
+            const searchResponse = await searchAuthorities({
               q: query, corpus: effectiveCorpus, limit: 10, offset: 0,
             });
             searches.push({
@@ -488,7 +509,7 @@ export async function POST(request: NextRequest) {
               const searchKey = `${bridge.corpus ?? "auto"}::${bridge.query.toLowerCase()}`;
               if (existingBridgeSearchKeys.has(searchKey)) continue;
 
-              const searchResponse = await searchProceduralAuthorities({
+              const searchResponse = await searchAuthorities({
                 q: bridge.query,
                 corpus: bridge.corpus,
                 limit: 10,
@@ -548,7 +569,7 @@ export async function POST(request: NextRequest) {
               const searchKey = `${recovery.corpus ?? "auto"}::${recovery.query.toLowerCase()}`;
               if (existingSearchKeys.has(searchKey)) continue;
 
-              const searchResponse = await searchProceduralAuthorities({
+              const searchResponse = await searchAuthorities({
                 q: recovery.query,
                 corpus: recovery.corpus,
                 limit: 10,
@@ -585,10 +606,10 @@ export async function POST(request: NextRequest) {
           // and diagnostics, but it no longer determines the answer authority set.
           send("stage", { key: "selecting", label: "Qualifying procedural evidence" });
           const plannerRelations = relationsFromPlanner({ intent: plan.intent, situation: plan.situation });
-          const v517Selection = await selectV517ProductionAuthorities({
+          const v517Selection = await selectAuthorities({
             searches,
             question,
-            searchProceduralAuthorities,
+            searchProceduralAuthorities: searchAuthorities,
             plannerRelations,
             situation: plan.situation,
           });
@@ -841,9 +862,9 @@ export async function POST(request: NextRequest) {
               minObligationCoverage: v517Selection.minObligationCoverage,
               allObligationsComplete: v517Selection.allObligationsComplete,
               obligationDetails: v517Selection.obligationDetails,
-              prePruneLabels: v517Selection.prePruneLabels,
+              prePruneCount: v517Selection.prePruneLabels.length,
               selectedLabels: finalAuthorities.map((authority) => authority.citationLabel),
-              legacySelectedLabels: v517Selection.selectedLabels,
+              legacySelectedCount: v517Selection.selectedLabels.length,
               // These coverage scores belong to the lexical v5.18 selector,
               // not the incident adjudicator. Do not misstate them as v40 scores.
               evidenceAdmission: v40IncidentGate
@@ -1099,6 +1120,7 @@ export async function POST(request: NextRequest) {
             if (!citationValidation.ok) {
               outcomeState.fallbackCode = "invalid_citations";
               outcomeState.abstained = true;
+              // Count only: the unretrieved labels stay off the client payload.
               const fallbackReason = "The AI draft cited authorities that were not retrieved.";
               claimValidationNote = clientCheckNote([
                 `invalid_citations=${citationValidation.invalidCitations.length}`,
@@ -1275,7 +1297,7 @@ export async function POST(request: NextRequest) {
               onRetry: () => {
                 send("stage", {
                   key: "validating",
-                  label: "Retrying grounded-claim validation after a transient AI-service error",
+                  label: "Retrying the claim check after a transient AI-service error",
                 });
               },
             });

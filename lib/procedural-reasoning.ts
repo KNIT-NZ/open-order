@@ -2162,8 +2162,8 @@ export function buildFallbackAnswer(input: {
       : "Answer generation did not complete.")
     : validationUnavailable
       ? (best.length > 0
-        ? `Grounded-claim verification did not complete; the selected authorities are available for inspection ${citations.join(" ")}.`
-        : "Grounded-claim verification did not complete.")
+        ? `The claim check did not complete; the selected authorities are available for inspection ${citations.join(" ")}.`
+        : "The claim check did not complete.")
       : providerFailure
         ? (best.length > 0
           ? `The AI provider could not complete an answer; the selected authorities are available below for inspection ${citations.join(" ")}.`
@@ -2214,7 +2214,7 @@ export function buildFallbackAnswer(input: {
     "Risks or constraints:",
     `- A substantive answer was withheld because ${
       input.failureClass === "drafting_unavailable" ? "answer generation did not complete" :
-      input.failureClass === "validation_unavailable" ? "grounded-claim verification did not complete" :
+      input.failureClass === "validation_unavailable" ? "the claim check did not complete" :
       input.failureClass === "provider" ? "drafting failed" :
       input.failureClass === "selection" ? "authority selection was inconclusive" :
       "validation failed"

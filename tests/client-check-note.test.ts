@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clientCheckNote, publicScenarioAdjudication } from "../lib/open-order/client-check-note";
+import { adjudicationNote, clientCheckNote, publicScenarioAdjudication } from "../lib/open-order/client-check-note";
 import { formatAiDebugSnapshot } from "../lib/open-order/format";
 import { EMPTY_AI_DIAGNOSTICS } from "../lib/open-order/types";
 
@@ -110,4 +110,83 @@ test("done, error and debug output omit rejected labels and check prose", () => 
   assert.match(done.claimValidationNote ?? "", /claim_ids=claim-1/);
   assert.match(snapshot, /Invalid citations: 1/);
   assert.match(snapshot, /rewritten_mentions=1|None reported/);
+});
+
+test("adjudication filtering is idempotent and keeps colon refusal codes", () => {
+  const raw = {
+    status: "v40_quoted_source_adjudication",
+    candidateCount: 4,
+    selected: ["SO 1"],
+    rejected: [
+      "SO 404:scope-not-established:actor",
+      "SO 405:scope-not-established:actor",
+      "SO 406:the draft invented a power",
+    ],
+    gaps: ["facet one", "facet two", "facet three"],
+    providerAttempts: 1,
+    dossier: ["standing_orders:SO 404"],
+    retrievedOutsideDossier: ["standing_orders:SO 405"],
+    dispositions: [{
+      citationLabel: "SO 404",
+      corpus: "standing_orders",
+      status: "rejected",
+      reason: "scope-not-established:actor",
+      role: null,
+    }],
+    unavailableNominations: 0,
+    recovery: {
+      status: "v40_no_governing_witness",
+      candidates: ["standing_orders:SO 404", "standing_orders:SO 405"],
+      dispositions: [{
+        citationLabel: "SO 405",
+        corpus: "standing_orders",
+        status: "rejected",
+        reason: "act-not-attested",
+        role: null,
+      }],
+      unavailableNominations: 0,
+      selected: [],
+      rejected: ["SO 404:act-not-attested"],
+    },
+  };
+  const once = publicScenarioAdjudication(raw);
+  const twice = publicScenarioAdjudication(once);
+  assert.deepEqual(twice, once);
+  assert.equal(adjudicationNote(once), adjudicationNote(raw));
+  assert.equal(adjudicationNote(twice), adjudicationNote(once));
+  const note = adjudicationNote(once) ?? "";
+  assert.match(note, /primary_refusal=scope-not-established:actor:2/);
+  assert.match(note, /primary_refusal=other:1/);
+  assert.match(note, /disposition=rejected_scope-not-established:actor:1/);
+  assert.match(note, /unresolved_facets=3/);
+  assert.match(note, /recovery_candidates=2/);
+  assert.match(note, /recovery_refusal=act-not-attested:1/);
+  assert.match(note, /disposition=rejected_act-not-attested:1/);
+  assert.equal(note.includes("SO 404"), false);
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    selectorSummary: {
+      candidateCount: 4,
+      minObligationCoverage: 1,
+      allObligationsComplete: true,
+      obligationDetails: [],
+      prePruneCount: 2,
+      selectedLabels: ["SO 1"],
+      scenarioAdjudication: once,
+    },
+  });
+  assert.match(snapshot, /unresolved_facets=3/);
+  assert.match(snapshot, /recovery_candidates=2/);
+  assert.match(snapshot, /primary_refusal=scope-not-established:actor:2/);
+  assert.match(snapshot, /disposition=rejected_scope-not-established:actor:1/);
+  assert.equal(/unresolved_facets=1(?!\d)/.test(snapshot), false);
+  assert.equal(snapshot.includes("primary_refusal=1:1"), false);
+  assert.equal(snapshot.includes("SO 404"), false);
+});
+
+test("operation-failure code tokens keep uppercase provider codes", () => {
+  assert.equal(
+    clientCheckNote(["code=UNAVAILABLE", "code=RESOURCE_EXHAUSTED", "kind=LEAKMARKER", "code=SO 404"]),
+    "code=UNAVAILABLE;code=RESOURCE_EXHAUSTED",
+  );
 });

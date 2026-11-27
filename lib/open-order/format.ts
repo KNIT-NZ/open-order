@@ -540,7 +540,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
         "Per-obligation coverage:",
         ...selector.obligationDetails.slice(0, 12).map((detail, index) =>
           `  ${index + 1}. ${detail.coverage.toFixed(3)} (${detail.complete ? "complete" : "incomplete"})`),
-        `Selection before redundancy pruning: ${selector.prePruneLabels.join(", ") || "None"}`,
+        `Selection before redundancy pruning: ${selector.prePruneCount ?? selector.prePruneLabels?.length ?? 0}`,
       ].join("\n")
     : "Semantic selection summary: Not received";
 
