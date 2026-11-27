@@ -1,10 +1,10 @@
 import type { AiScenarioAdjudication, AiSourceDisposition } from "./types";
-import { COUNT_DIGITS, RECOVERY_COUNT_DIGITS, boundedCount } from "./emitted-widths";
+import { COUNT_DIGITS, DIAGNOSTIC_KEY_LENGTH, RECOVERY_COUNT_DIGITS, boundedCount } from "./emitted-widths";
 
 // Public diagnostics are counts and reason codes. Authority labels do not leave
 // this function: selected, dossier, the out-of-dossier list, disposition rows,
 // and recovery candidates and selected are emptied. Counts replace them.
-const COUNTED = new RegExp(`^[a-z0-9_.:,-]{1,64}=\\d{1,${COUNT_DIGITS}}$`, "i");
+const COUNTED = new RegExp(`^[a-z0-9_.:,-]{1,${DIAGNOSTIC_KEY_LENGTH}}=\\d{1,${COUNT_DIGITS}}$`, "i");
 const SCOPE = /^scope-not-established:(?:actor|setting|action|stage)(?:,(?:actor|setting|action|stage))*$/;
 const REASONS = new Set([
   "verified_source_witness", "model_did_not_nominate", "ambiguous-source-identity", "admission_limit",

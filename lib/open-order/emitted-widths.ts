@@ -12,6 +12,9 @@ export const RECOVERY_COUNT_DIGITS = 4;
 /** claim-N ids. The emitter and the checker share this cap. */
 export const CLAIM_ID_MAX_LENGTH = 40;
 
+/** Longest key name in a public diagnostic token. */
+export const DIAGNOSTIC_KEY_LENGTH = 64;
+
 /** Largest integer a digit width can emit. */
 export function countLimit(digits: number): number {
   return 10 ** digits - 1;

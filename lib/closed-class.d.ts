@@ -1,3 +1,4 @@
+export const THE: string;
 export const ARTICLES: readonly string[];
 export const DEMONSTRATIVES: readonly string[];
 export const DETERMINERS: readonly string[];
@@ -12,6 +13,9 @@ export const ON: string;
 export const FOR: string;
 export const PREPOSITIONS: readonly string[];
 export const CONJUNCTIONS: readonly string[];
+export const NUMERALS: readonly string[];
+export const NAMED_NONCONTENT: Set<string>;
+export function isNamedNonContent(word: string): boolean;
 export const COMPLEMENT_PREPOSITIONS: readonly string[];
 export const TOPIC_PREPOSITION: string;
 export const CLOSED_CLASS: Set<string>;

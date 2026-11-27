@@ -1,3 +1,4 @@
+import { THE } from "../lib/closed-class.js";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -132,11 +133,11 @@ export function deriveReferents(sections: PackSection[]): {
       const key = window.map((slot) => (slot.boundary ? "" : slot.word)).join(" ");
       occ.set(key, (occ.get(key) ?? 0) + 1);
       const before = start > 0 ? slots[start - 1] : undefined;
-      if (before && !before.boundary && before.word === "the") theCount.set(key, (theCount.get(key) ?? 0) + 1);
+      if (before && !before.boundary && before.word === THE) theCount.set(key, (theCount.get(key) ?? 0) + 1);
     }
   }
   const referentWords = [...occ.keys()].filter((key) => {
-    if (key.includes(" ") || key === "the" || (occ.get(key) ?? 0) < 5) return false;
+    if (key.includes(" ") || key === THE || (occ.get(key) ?? 0) < 5) return false;
     const total = occ.get(key) ?? 0;
     const definite = (theCount.get(key) ?? 0) / total >= 0.5 && (headUse.get(key) ?? 0) / total >= 0.5;
     const caps = (capMid.get(key) ?? 0) + (lower.get(key) ?? 0);
@@ -144,7 +145,7 @@ export function deriveReferents(sections: PackSection[]): {
     return definite || capitalised;
   }).sort();
   const referentPhrases = [...occ.keys()].filter((key) => {
-    if (!key.includes(" ") || key.startsWith("the ") || (occ.get(key) ?? 0) < 5) return false;
+    if (!key.includes(" ") || key.startsWith(`${THE} `) || (occ.get(key) ?? 0) < 5) return false;
     return (theCount.get(key) ?? 0) / (occ.get(key) ?? 1) >= 0.5;
   }).sort();
   return { functionWords, referentWords, referentPhrases };

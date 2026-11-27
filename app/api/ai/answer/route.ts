@@ -1796,7 +1796,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               !finalMentionValidation.ok
             ) {
               const rejectedIds = unsupportedClaimIds
-                .filter((id) => /^[a-z0-9_.:-]{1,40}$/i.test(id))
+                .filter((id) => new RegExp(`^[a-z0-9_.:-]{1,${CLAIM_ID_MAX_LENGTH}}$`, "i").test(id))
                 .slice(0, 8);
               const ooV29FailureTrace = clientCheckNote([
                 "v29_semantic_fallback",
