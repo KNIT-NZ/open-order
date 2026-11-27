@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateV40Proposal, type V40Authority, type V40ProposedWitness } from "../lib/ai/scenario-adjudication";
-import { extractCommitteeTokens, withCorpusCommitteeNames } from "../lib/committee-names";
+import { withCorpusCommitteeNames } from "../lib/committee-names-context";
+import { extractCommitteeTokens } from "../lib/committee-names";
 import { forumIdentityMismatch, forumIdentityOutcome } from "../lib/procedural-mechanisms";
 
 const NAMED = [

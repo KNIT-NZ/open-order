@@ -10,10 +10,10 @@ export type CommitteeNameRecord = {
   path: string[];
 };
 export function committeeRecords(): CommitteeNameRecord[];
-export function withCorpusCommitteeNames<T>(
+export function compileCommitteeLabels(
   labels: Array<string | { name?: string; tokens?: string[]; sectionId?: string; citationLabel?: string; path?: string[] }>,
-  run: () => T,
-): T;
+): CommitteeNameRecord[];
+export function installCommitteeRecordReader(reader: () => CommitteeNameRecord[] | null): void;
 export function committeeRecordsFromSections(rows: Array<{
   sectionId?: string;
   id?: string;

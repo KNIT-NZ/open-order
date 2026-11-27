@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { AiProviderError } from "../lib/ai/errors";
-import { withCorpusCommitteeNames } from "../lib/committee-names";
+import { withCorpusCommitteeNames } from "../lib/committee-names-context";
 import type { AiGenerateJsonRequest, AiStreamTextRequest } from "../lib/ai/types";
 import type { ProceduralSearchResponse, ProceduralSearchResult } from "../lib/procedural-search";
 
