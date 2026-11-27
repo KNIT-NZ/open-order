@@ -56,4 +56,12 @@ export function selectV517AuthorityPack(input: {
   searches: V517SearchExecution[];
   searchProceduralAuthorities: V517SearchFunction;
   maxAuthorities?: number;
+  plannerRelations?: string[];
+  situation?: {
+    kind?: string;
+    actor?: string;
+    setting?: string;
+    action?: string;
+    decisionQuestion?: string;
+  };
 }): Promise<V517SelectionResult>;

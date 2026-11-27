@@ -145,7 +145,7 @@ async function executeSearch(params: URLSearchParams, observeCount: (count: numb
       documentTitle: row.documentTitle,
       documentCorpus: row.documentCorpus,
       sourceUrl: row.sourceUrl,
-      sourceAnchor: row.sourceAnchor,
+      sourceAnchor: row.sourceAnchor && !/^none$/i.test(row.sourceAnchor.trim()) ? row.sourceAnchor.trim() : null,
       rank: row.rank,
       sectionRank: row.sectionRank,
       pathRank: row.pathRank,

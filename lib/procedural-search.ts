@@ -286,6 +286,41 @@ export async function searchProceduralAuthorities(
           i.query_lower <> ''
           and lower(array_to_string(s.path, ' > ')) like '%' || i.query_lower || '%'
         )
+        or (
+          i.query_word_count >= 2
+          and (
+            s.content ~ '\\n[^:\\n]{2,80}:[[:space:]]+\\S'
+            or s.content ~ '\\n\\S+[[:space:]]{2,}\\S+'
+          )
+          and (
+            select count(*) filter (
+              where exists (
+                select 1
+                from regexp_split_to_table(
+                  lower(array_to_string(s.path, ' ') || ' ' || coalesce(s.heading, '') || ' ' || s.content),
+                  '[^a-z0-9]+'
+                ) as p(word)
+                where char_length(p.word) >= 4
+                  and (
+                    left(p.word, 4) = left(q.word, 4)
+                    or left(q.word, 4) = left(p.word, 4)
+                  )
+              )
+            )
+            from (
+              select regexp_replace(raw, '[^a-z0-9]', '', 'g') as word
+              from regexp_split_to_table(i.query_lower, '[[:space:]]+') as raw
+            ) q
+            where char_length(q.word) >= 4
+          ) >= greatest((
+            select count(*)
+            from (
+              select regexp_replace(raw, '[^a-z0-9]', '', 'g') as word
+              from regexp_split_to_table(i.query_lower, '[[:space:]]+') as raw
+            ) q
+            where char_length(q.word) >= 4
+          ) - 1, 1)
+        )
       )
       and (i.corpus_filter is null or d.corpus = i.corpus_filter)
     ),
@@ -379,6 +414,12 @@ export async function searchProceduralAuthorities(
           case
             when sc.cluster_support_count >= 2
             then least((sc.cluster_support_count - 1) * 45, 135)
+            else 0
+          end +
+          case
+            when sc.section_content ~ '\\n[^:\\n]{2,80}:[[:space:]]+\\S'
+              or sc.section_content ~ '\\n\\S+[[:space:]]{2,}\\S+'
+            then sc.path_phrase_rank * 420
             else 0
           end
         ) as overall_rank

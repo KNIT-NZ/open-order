@@ -1,6 +1,7 @@
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
+import { conceptsMatchingLabels } from "@/lib/procedural-mechanisms";
 import {
   CONCEPT_REGISTRY,
   type AuthorityExclusionSpec,
@@ -155,7 +156,9 @@ export function buildSourceHref(
   const content = normalizeWhitespace(result.sectionContent);
   const textStart = firstWords(content, 10) || null;
   const baseUrl = result.sourceUrl.split("#")[0];
-  const anchor = result.sourceAnchor ? encodeURI(result.sourceAnchor) : null;
+  const usableAnchor = result.sourceAnchor && !/^none$/i.test(result.sourceAnchor.trim())
+    ? result.sourceAnchor.trim() : null;
+  const anchor = usableAnchor ? encodeURI(usableAnchor) : null;
 
   if (textStart && anchor) {
     return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;
@@ -189,15 +192,6 @@ export function buildAuthorityPayload(results: ProceduralSearchResult[]) {
   }));
 }
 
-function hasAlias(question: string, concept: ProceduralConcept): boolean {
-  const q = question.toLowerCase();
-  return concept.aliases.some((alias) => q.includes(alias));
-}
-
-function getConceptById(id: ProceduralConcept["id"]): ProceduralConcept | null {
-  return CONCEPT_REGISTRY.find((c) => c.id === id) ?? null;
-}
-
 function normalizeConceptTrigger(text: string): string {
   return cleanQuery(text).toLowerCase();
 }
@@ -225,93 +219,14 @@ function addPlannerTriggeredConcepts(
 }
 
 export function inferConcepts(
-  question: string,
+  _question: string,
   plannerQueries: string[] = [],
 ): ProceduralConcept[] {
-  const q = question.toLowerCase();
   const matched = new Map<string, ProceduralConcept>();
-
-  for (const concept of CONCEPT_REGISTRY) {
-    if (hasAlias(q, concept)) {
-      matched.set(concept.id, concept);
-    }
+  for (const concept of conceptsMatchingLabels(CONCEPT_REGISTRY, plannerQueries) as ProceduralConcept[]) {
+    matched.set(concept.id, concept);
   }
-
-  if (
-    q.includes("question to be put") ||
-    q.includes("question be put") ||
-    q.includes("premature")
-  ) {
-    const concept = getConceptById("closure_motion");
-    if (concept) matched.set(concept.id, concept);
-  }
-
-  if (q.includes("point of order")) {
-    const concept = getConceptById("point_of_order");
-    if (concept) matched.set(concept.id, concept);
-  }
-
-  if (
-    q.includes("committee of the whole") ||
-    q.includes("committee stage")
-  ) {
-    const committee = getConceptById("committee_of_whole");
-    if (committee) matched.set(committee.id, committee);
-
-    const chair = getConceptById("chair_control");
-    if (chair) matched.set(chair.id, chair);
-  }
-
-  if (
-    q.includes("racist") ||
-    q.includes("racism") ||
-    q.includes("country of origin") ||
-    q.includes("right to speak") ||
-    q.includes("ethnicity") ||
-    q.includes("nationality")
-  ) {
-    const personal = getConceptById("personal_reflection");
-    if (personal) matched.set(personal.id, personal);
-
-    const racism = getConceptById("allegation_of_racism");
-    if (racism) matched.set(racism.id, racism);
-  }
-
-  if (
-    q.includes("evasive") ||
-    q.includes("relevancy") ||
-    q.includes("relevant") ||
-    q.includes("back on track")
-  ) {
-    const relevancy = getConceptById("relevancy");
-    if (relevancy) matched.set(relevancy.id, relevancy);
-  }
-
-  if (
-    q.includes("accountability to the house") ||
-    q.includes("account to the house") ||
-    q.includes("avoid directly answering") ||
-    q.includes("non-answer")
-  ) {
-    const accountability = getConceptById("ministerial_accountability");
-    if (accountability) matched.set(accountability.id, accountability);
-  }
-
-  if (
-    q.includes("yesterday") ||
-    q.includes("previous sitting") ||
-    q.includes("require an apology") ||
-    q.includes("require a member to apologise")
-  ) {
-    const retrospective = getConceptById("retrospective_discipline");
-    if (retrospective) matched.set(retrospective.id, retrospective);
-
-    const withdrawal = getConceptById("withdrawal_and_apology");
-    if (withdrawal) matched.set(withdrawal.id, withdrawal);
-  }
-
   addPlannerTriggeredConcepts(matched, plannerQueries);
-
   return [...matched.values()];
 }
 
@@ -335,53 +250,8 @@ function deriveFrame(
 }
 
 function canonicalizeProceduralQuery(query: string): string[] {
-  const q = cleanQuery(query).toLowerCase();
-  if (!q) return [];
-
-  const aliases: Record<string, string[]> = {
-    "question to be put": ["closure motion"],
-    "question be put": ["closure motion"],
-    premature: ["closure motion", "acceptance of closure motion"],
-    evasive: ["relevancy"],
-    evasiveness: ["relevancy"],
-    "back on track": ["relevancy"],
-    "country of origin": ["personal reflections", "against members"],
-    nationality: ["personal reflections", "against members"],
-    ethnicity: ["personal reflections", "against members"],
-    racist: ["allegations of racism"],
-    racism: ["allegations of racism"],
-    "borderline racist": ["allegations of racism"],
-    "right to speak": ["against members", "personal reflections"],
-    "chairperson relevancy committee of the whole": [
-      "chairperson",
-      "relevancy",
-      "point of order",
-    ],
-    "committee of the whole chairperson": ["chairperson"],
-    "chairperson relevancy": ["chairperson", "relevancy"],
-    "point of order relevancy": ["point of order", "relevancy"],
-    "relevancy committee of the whole": ["relevancy", "chairperson"],
-  };
-
-  if (aliases[q]) return aliases[q];
-
-  if (
-    q.includes("committee of the whole") &&
-    q.includes("chairperson") &&
-    q.includes("relevancy")
-  ) {
-    return ["chairperson", "relevancy", "point of order"];
-  }
-
-  if (q.includes("point of order") && q.includes("relevancy")) {
-    return ["point of order", "relevancy"];
-  }
-
-  if (q.includes("chairperson") && q.includes("relevancy")) {
-    return ["chairperson", "relevancy"];
-  }
-
-  return [query];
+  const q = cleanQuery(query);
+  return q ? [q] : [];
 }
 
 function addSearchDimension(
@@ -414,47 +284,21 @@ function addCanonicalExpansions(
   }
 }
 
-export function derivePostStagePathwayQueries(question: string): string[] {
-  const text = question.toLowerCase().replace(/\s+/g, " ");
-  const hasBill = /\b(?:bill|bills|legislation)\b/.test(text);
-  const hasWholeHouseStage = /\b(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
-  const isSelectCommitteeOnly = /\bselect committee\b/.test(text) && !/\bcommittee of the whole(?: house)?\b/.test(text);
-  const seeksAlteration = /\b(?:amend(?:ment|ments|ed|ing)?|alter(?:ation|ations|ed|ing)?|modify|modification|change(?:d|s|ing)?|revise|revision)\b/.test(text);
-  const stageClosed = /\b(?:committee of the whole(?: house)?|committee stage)\b.{0,85}\b(?:finish(?:ed|es|ing)?|complet(?:e|ed|ion|ing)|conclu(?:de(?:d|s)?|ding|sion)|end(?:ed|ing)?|report(?:ed|s)?|pass(?:ed|es)?)\b/.test(text);
-  const afterStage = /\b(?:after|once|following|now that)\b.{0,95}\b(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
-  const afterStageConclusion = /\b(?:after|following)\b.{0,25}\b(?:completion|conclusion|end|reporting)\b.{0,35}\b(?:of )?(?:the )?(?:committee of the whole(?: house)?|committee stage)\b/.test(text);
-  const incompleteStage = /\b(?:committee of the whole(?: house)?|committee stage)\b.{0,45}\b(?:not|never|hasn't|has not)\b.{0,12}\b(?:finish(?:ed|ing)?|complet(?:e|ed|ion|ing)|conclu(?:de(?:d|s)?|ding|sion)|end(?:ed|ing)?)\b/.test(text);
-  if (!(hasBill && hasWholeHouseStage && !isSelectCommitteeOnly && seeksAlteration && !incompleteStage && ((afterStage && stageClosed) || afterStageConclusion))) {
-    return [];
-  }
-  return ["recommittal of bill"];
+export function derivePostStagePathwayQueries(_question: string): string[] {
+  return [];
 }
 
 // Map requests about legal recourse for parliamentary speech to the consequence
 // expressed in governing authority text; no citation IDs or answer labels here.
-export function deriveLegalEffectQueries(question: string): string[] {
-  const text = question.toLowerCase().replace(/\s+/g, " ");
-  const asksAboutLiability = /\b(?:sue|sued|suing|lawsuit|litigat(?:e|ed|ing|ion)|civil (?:claim|liability|proceedings|action)|legal action|legally liable|held liable)\b/.test(text);
-  const concernsSpeech = /\b(?:statements?|words?|speeches|speech|speaking|spoken|said|say|remarks?|comments?|allegations?|accusations?|defam(?:ation|atory|ed|ing|e)|utterances?)\b/.test(text);
-  const inParliament = /\b(?:in|inside|within) (?:the )?(?:house|parliament|parliamentary chamber)\b/.test(text)
-    || /\b(?:during|in) (?:a |the )?parliamentary (?:sitting|debate|proceedings?)\b/.test(text)
-    || /\bin proceedings? of (?:the )?house\b/.test(text);
-  if (!(asksAboutLiability && concernsSpeech && inParliament)) {
-    return [];
-  }
-  return ["held liable"];
+export function deriveLegalEffectQueries(_question: string): string[] {
+  return [];
 }
 
 // Narrowly retrieve the corpus-native procedural error rule when a user asks
 // about a second vote because of a disputed count or claimed error. The query
 // is not a citation or a positive entitlement; the selector remains decisive.
-export function deriveVoteErrorQueries(question: string): string[] {
-  const text = question.toLowerCase().replace(/\s+/g, " ");
-  const vote = /\b(?:votes?|voting|divisions?)\b/.test(text);
-  const secondVote = /\b(?:retak(?:e|en|ing)|repeat(?:ed|ing)?|second\s+vote|re-?vote|vote\s+(?:be\s+)?taken\s+again)\b/.test(text);
-  const errorIssue = /\b(?:wrong|error|errors|mistake|mistakes|confusion|confused|incorrect(?:ly)?|inaccurat(?:e|ely)|miscount\w*|count(?:ing)?|tally)\b/.test(text);
-  if (!vote || !secondVote || !errorIssue) return [];
-  return ["errors and mistakes"];
+export function deriveVoteErrorQueries(_question: string): string[] {
+  return [];
 }
 
 export function buildProceduralQueryPlan(input: {
@@ -729,15 +573,10 @@ function corpusMatches(
 }
 
 function requiredTextMatches(
-  result: ProceduralSearchResult,
-  requiredTextIncludes?: string[],
+  _result: ProceduralSearchResult,
+  _requiredTextIncludes?: string[],
 ): boolean {
-  if (!requiredTextIncludes || requiredTextIncludes.length === 0) return true;
-
-  const content = result.sectionContent.toLowerCase();
-  return requiredTextIncludes.some((phrase) =>
-    content.includes(phrase.toLowerCase()),
-  );
+  return true;
 }
 
 function matchesSlot(
@@ -780,66 +619,8 @@ function scoreContextualAuthority(input: {
   query: string;
   frame: DerivedFrame;
 }): number {
-  const profile = buildAuthorityProfile(input.result);
-  const query = input.query.toLowerCase();
-
-  let boost = 0;
-
-  if (input.frame.committeeOfWhole) {
-    if (profile.isCommitteeOfWhole) boost += 120;
-    if (profile.isChairperson && profile.isCommitteeOfWhole) boost += 140;
-    if (profile.isSelectCommitteeChairpersons) boost -= 260;
-  }
-
-  if (input.frame.memberConduct) {
-    if (profile.isPersonalReflections) boost += 140;
-    if (profile.isAgainstMembers) boost += 160;
-    if (profile.isAllegationsOfRacism) boost += 180;
-    if (profile.heading === "procedure" && profile.isPersonalReflections)
-      boost += 120;
-    if (profile.pathText.includes("judiciary")) boost -= 180;
-    if (profile.pathText.includes("questions to ministers and members"))
-      boost -= 180;
-  }
-
-  if (input.frame.closure) {
-    if (profile.heading.includes("closure")) boost += 140;
-    if (profile.pathText.includes("closure of debate")) boost += 120;
-    if (profile.isPointsOfOrder) boost += 60;
-  }
-
-  if (input.frame.relevancy) {
-    if (profile.isRelevancy) boost += 130;
-
-    if (input.frame.committeeOfWhole) {
-      if (profile.isCommitteeOfWhole && profile.isChairperson) boost += 100;
-    } else {
-      if (profile.isRulesOfDebate) boost += 180;
-      if (profile.isCommitteeStage) boost -= 220;
-    }
-  }
-
-  if (input.frame.ministerialAccountability) {
-    if (profile.heading === "accountability to the house") boost += 170;
-    if (profile.heading === "form of reply") boost += 150;
-    if (profile.isPointsOfOrder) boost += 80;
-  }
-
-  if (input.frame.retrospectiveDiscipline) {
-    if (profile.heading === "withdrawal") boost += 170;
-    if (profile.heading === "procedure") boost += 130;
-    if (profile.isPointsOfOrder) boost += 70;
-  }
-
-  if (query.includes("point of order") && profile.isPointsOfOrder) boost += 100;
-  if (query.includes("relevancy") && profile.isRelevancy) boost += 90;
-  if (query.includes("chairperson") && profile.isChairperson) boost += 90;
-  if (query.includes("against members") && profile.isAgainstMembers) boost += 110;
-  if (query.includes("allegations of racism") && profile.isAllegationsOfRacism)
-    boost += 120;
-  if (query.includes("closure motion") && profile.isClosure) boost += 100;
-
-  return boost;
+  void input;
+  return 0;
 }
 
 function dedupeScoredAuthorities(
@@ -1526,60 +1307,19 @@ function isRequiredSlot(slot: AuthoritySlotSpec): boolean {
   return slot.requirement === "required";
 }
 
-function countTextMatches(
-  content: string,
-  phrases: string[],
-): number {
-  return phrases.filter((phrase) =>
-    content.includes(phrase.toLowerCase()),
-  ).length;
-}
-
 function scorePreferredText(
-  result: ProceduralSearchResult,
-  slot: AuthoritySlotSpec,
+  _result: ProceduralSearchResult,
+  _slot: AuthoritySlotSpec,
 ): number {
-  const preferred = slot.preferredTextIncludes ?? [];
-  if (preferred.length === 0) return 0;
-
-  const content = result.sectionContent.toLowerCase();
-  return countTextMatches(content, preferred) * 120;
-}
-
-function contextPreferenceApplies(
-  activeConceptIds: Set<string>,
-  preference: NonNullable<AuthoritySlotSpec["contextualTextPreferences"]>[number],
-): boolean {
-  const any = preference.whenAnyConcepts ?? [];
-  const all = preference.whenAllConcepts ?? [];
-
-  const anySatisfied =
-    any.length === 0 || any.some((conceptId) => activeConceptIds.has(conceptId));
-  const allSatisfied =
-    all.length === 0 || all.every((conceptId) => activeConceptIds.has(conceptId));
-
-  return anySatisfied && allSatisfied;
+  return 0;
 }
 
 function scoreContextualBridgeText(
-  result: ProceduralSearchResult,
-  slot: AuthoritySlotSpec,
-  activeConceptIds: Set<string>,
+  _result: ProceduralSearchResult,
+  _slot: AuthoritySlotSpec,
+  _activeConceptIds: Set<string>,
 ): number {
-  const preferences = slot.contextualTextPreferences ?? [];
-  if (preferences.length === 0) return 0;
-
-  const content = result.sectionContent.toLowerCase();
-
-  return preferences.reduce((score, preference) => {
-    if (!contextPreferenceApplies(activeConceptIds, preference)) {
-      return score;
-    }
-
-    const matches = countTextMatches(content, preference.textIncludes);
-    const bonusPerMatch = preference.bonusPerMatch ?? 180;
-    return score + matches * bonusPerMatch;
-  }, 0);
+  return 0;
 }
 
 function scoreDiscoveryBreadcrumb(
@@ -1895,12 +1635,22 @@ export async function selectV517ProductionAuthorities(input: {
   question: string;
   searchProceduralAuthorities: V517SearchFunction;
   maxAuthorities?: number;
+  plannerRelations?: string[];
+  situation?: {
+    kind?: "incident" | "procedure";
+    actor?: string;
+    setting?: string;
+    action?: string;
+    decisionQuestion?: string;
+  };
 }): Promise<V517SelectionResult> {
   return selectV517AuthorityPack({
     question: input.question,
     searches: input.searches,
     searchProceduralAuthorities: input.searchProceduralAuthorities,
     maxAuthorities: input.maxAuthorities,
+    plannerRelations: input.plannerRelations,
+    situation: input.situation,
   });
 }
 

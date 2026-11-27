@@ -60,10 +60,9 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "closure_motion",
     aliases: [
-      "question be put",
-      "question to be put",
-      "closure",
-      "premature closure",
+      "closure motion",
+      "acceptance of closure motion",
+      "effect of carrying closure motion",
     ],
     plannerTriggers: ["closure motion", "acceptance of closure motion"],
     preferredQueries: ["closure motion", "acceptance of closure motion"],
@@ -103,38 +102,13 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         headings: ["points of order", "point of order"],
         classes: ["procedural_mechanism"],
         functions: ["procedure"],
-        preferredTextIncludes: [
-          "speaker can take action",
-        ],
-        contextualTextPreferences: [
-          {
-            whenAnyConcepts: [
-              "personal_reflection",
-              "allegation_of_racism",
-              "relevancy",
-            ],
-            textIncludes: [
-              "transgressing the rules of debate",
-              "breach of the rules",
-              "call the attention of the speaker",
-              "draw the speaker's attention",
-            ],
-            bonusPerMatch: 260,
-          },
-        ],
         maxMatches: 1,
       },
     ],
   },
   {
     id: "personal_reflection",
-    aliases: [
-      "personal attack",
-      "attack on member",
-      "right to speak",
-      "personal reflection",
-      "personal reflections",
-    ],
+    aliases: ["personal reflections"],
     plannerTriggers: ["personal reflections", "against members"],
     preferredQueries: [
       "personal reflections",
@@ -152,11 +126,6 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         classes: ["governing_rule", "analogy_or_support"],
         functions: ["rule", "application", "constraint"],
         preferredCorpora: ["standing_orders", "speakers_rulings"],
-        requiredTextIncludes: [
-          "personal reflection",
-          "standing order 121",
-          "improper motives",
-        ],
         maxMatches: 1,
       },
       {
@@ -165,19 +134,13 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         pathIncludes: ["rules of debate", "personal reflections"],
         headings: ["offensive or disorderly words", "procedure"],
         preferredCorpora: ["standing_orders", "speakers_rulings"],
-        requiredTextIncludes: [
-          "speaker intervenes",
-          "speaker will intervene",
-          "chair's immediate intervention",
-          "chair’s immediate intervention",
-        ],
         maxMatches: 1,
       },
     ],
   },
   {
     id: "allegation_of_racism",
-    aliases: ["racist", "racism", "country of origin", "ethnicity", "nationality"],
+    aliases: ["allegations of racism"],
     plannerTriggers: ["allegations of racism"],
     preferredQueries: ["allegations of racism"],
     supersedesSlots: ["personal_reflection_rule"],
@@ -196,7 +159,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   },
   {
     id: "relevancy",
-    aliases: ["evasive", "evasiveness", "off topic", "not relevant", "relevancy"],
+    aliases: ["relevancy"],
     plannerTriggers: ["relevancy"],
     preferredQueries: ["relevancy"],
     defaultPackContribution: 2,
@@ -214,7 +177,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   },
   {
     id: "chair_control",
-    aliases: ["chair", "chairperson", "speaker control"],
+    aliases: ["chairperson"],
     plannerTriggers: ["chairperson"],
     preferredQueries: ["chairperson"],
     defaultPackContribution: 2,
@@ -282,13 +245,8 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   {
     id: "ministerial_accountability",
     aliases: [
-      "areas of responsibility",
-      "avoid directly answering",
-      "abdication of responsibility",
-      "account to the house",
       "accountability to the house",
-      "evasive answer",
-      "non-answer",
+      "form of reply",
     ],
     plannerTriggers: ["accountability to the house", "form of reply"],
     preferredQueries: ["accountability to the House", "form of reply", "point of order"],
@@ -316,14 +274,7 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
   },
   {
     id: "retrospective_discipline",
-    aliases: [
-      "yesterday",
-      "previous sitting",
-      "something that happened in the house yesterday",
-      "require a member to apologise",
-      "require an apology",
-      "apology for something that happened",
-    ],
+    aliases: [],
     preferredQueries: [
       "withdrawal",
       "procedure",
@@ -337,22 +288,11 @@ export const CONCEPT_REGISTRY: ProceduralConcept[] = [
         requirement: "required",
         pathIncludes: ["rules of debate", "maintenance of order"],
         preferredCorpora: ["standing_orders", "speakers_rulings"],
-        requiredTextIncludes: [
-          "previous sitting",
-          "earlier sitting",
-          "previous day",
-          "earlier day",
-          "at an earlier sitting",
-          "at a previous sitting",
-        ],
         recoveryQueries: [
           "previous sitting",
           "earlier sitting",
-          "previous day",
         ],
         recoveryCorpora: ["speakers_rulings", "standing_orders"],
-        evidenceGapDescription:
-          "whether the Speaker may require withdrawal or an apology for conduct from an earlier sitting",
         maxMatches: 1,
       },
     ],

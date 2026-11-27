@@ -1,3 +1,10 @@
+import {
+  forumIdentityMismatch,
+  mustAdjudicateFromPlanner,
+  procedureHomonymMismatch,
+  quoteAttestsActAndObject,
+} from "@/lib/procedural-mechanisms";
+
 /**
  * Open Order v40: source-adjudication contracts, candidate diversity and evidence gates.
  * No authority IDs, benchmark answers or preferred rulings are embedded here.
@@ -29,22 +36,16 @@ export type V40Situation = {
   materialFacts: string[];
   evidenceQueries: string[];
 };
-/**
- * A recording or broadcast question requires an authorisation source, not
- * merely a source allowing the device used to make a recording. These are
- * topic-level retrieval queries, not embedded authorities or benchmark answers.
- */
-export function v401MaterialEvidenceQueries(question: string): string[] {
-  const recording = /\b(?:live[\s-]?stream\w*|(?:take|takes|taking|make|makes|making)\s+(?:an?\s+)?(?:photo|picture|image)|film(?:ing)?|broadcast\w*|photograph\w*|video(?:ing)?|(?:make|take|capture)\s+(?:an?\s+)?(?:video\s+|sound\s+|audio\s+)?recording(?:s)?|record(?:ing)?\s+(?:a\s+|the\s+|his\s+|her\s+|their\s+|own\s+)?(?:speech|debate|proceedings))\b/i.test(question);
-  const parliamentary = /\b(?:mp|mps|member|members|chamber|house|parliament|speech|debate|committee)\b/i.test(question);
-  return recording && parliamentary
-    ? ["coverage of proceedings", "making recordings"]
-    : [];
+/** Retrieve the authorising rule for a structured regulated act. */
+export function v401MaterialEvidenceQueries(action?: string | null): string[] {
+  const text = String(action ?? "").replace(/\s+/g, " ").trim();
+  if (text.length < 3 || text.length > 90) return [];
+  return [text];
 }
 
-function v401MediaWitnessMatches(question: string, quote: string): boolean {
-  if (v401MaterialEvidenceQueries(question).length === 0) return true;
-  return /\b(?:record(?:ing|ings|ed|s)?|broadcast\w*|image|images|filming|film|photograph\w*|video|live[\s-]?stream\w*)\b/i.test(quote);
+function v401MediaWitnessMatches(action: string | undefined, quote: string): boolean {
+  if (!action) return true;
+  return quoteAttestsActAndObject(quote, action);
 }
 
 export function v401AcceptIndependentRepair(input: {
@@ -173,22 +174,11 @@ export function buildV40Dossier<T extends V40Authority>(input: {
   return [...result.values()].slice(0,max);
 }
 
-export function v40SourceScopeMismatch(question: string, source: V40Authority): string | null {
-  const q = question.toLowerCase();
-  const path = (source.path ?? []).join(" ").toLowerCase();
-  const heading = (source.heading ?? "").toLowerCase();
-  // Generic FORUM and ACTIVITY exclusions, not authority-number exceptions.
-  const chamberActivity = /\b(chamber|house debate|in the house|speech|speaking|mp tells the house|another mp)\b/.test(q);
-  const committeeActivity = /\b(select committee|committee hearing|committee evidence)\b/.test(q);
-  if (chamberActivity && !committeeActivity && /\bselect committees\b/.test(path))
-    return "select-committee source for chamber question";
-  if (/\b(speech|speaking|address the house|in a debate|during debate)\b/.test(q) &&
-      !/\b(petition|petitions)\b/.test(q) &&
-      /\bpetitions\b/.test(path))
-    return "petition procedure for speech question";
-  if (/\bdivision\b/.test(q) && /\b(vote|voting|voters|mps|members)\b/.test(q) &&
-      /\bdivid(?:e|ing) (?:a |the )?bill\b/.test(heading))
-    return "dividing a bill is not a vote division";
+export function v40SourceScopeMismatch(question: string, source: V40Authority, setting?: string): string | null {
+  const homonym = procedureHomonymMismatch(question, source.heading ?? "");
+  if (homonym) return homonym;
+  const forum = forumIdentityMismatch(setting || "", source.path ?? []);
+  if (forum) return forum;
   return null;
 }
 
@@ -205,6 +195,8 @@ export function validateV40Proposal<T extends V40Authority>(input: {
   candidates: T[];
   proposal: V40Adjudication;
   limit?: number;
+  setting?: string;
+  action?: string;
 }): V40Review<T> {
   const limit = Math.max(1, Math.min(4, input.limit ?? 4));
   const byLabel = new Map<string, T>();
@@ -244,11 +236,11 @@ export function validateV40Proposal<T extends V40Authority>(input: {
         !item.actionMatches && "action", !item.stageMatches && "stage"].filter(Boolean).join(",");
       mark("rejected", `scope-not-established:${failed}`); continue;
     }
-    const mismatch = v40SourceScopeMismatch(input.question, source);
+    const mismatch = v40SourceScopeMismatch(input.question, source, input.setting);
     if (mismatch) { mark("rejected", mismatch); continue; }
     const quote = normalizeWhitespace(item.exactQuote);
-    if (item.role === "governing" && !v401MediaWitnessMatches(input.question, quote)) {
-      mark("rejected", "recording-permission-not-attested"); continue;
+    if (item.role === "governing" && !v401MediaWitnessMatches(input.action, quote)) {
+      mark("rejected", "act-not-attested"); continue;
     }
     if (quote.length < 24 || !normalizeWhitespace(source.sectionContent).includes(quote)) {
       mark("rejected", "unverified-verbatim-witness"); continue;
@@ -310,19 +302,7 @@ export function v402RepairRefusals(input: Parameters<typeof v401AcceptIndependen
   return reasons;
 }
 
-export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,
+export function v40MustAdjudicate(_question: string, kind: V40Situation["kind"] | undefined,
   hasLegacy: boolean): boolean {
-  if(!hasLegacy)return true;
-  // On established procedural GEN questions, retain v39.1's tested selector.
-  // The planner's incident classification is advisory: corroborate it with an
-  // expressed event, actor or physical setting in the original question.
-  const q=question.toLowerCase();
-  const actorOrSetting = /\b(?:mp|mps|member|members|gallery|chamber|speaker|whanau|whānau)\b/.test(q);
-  const event = actorOrSetting && /\b(?:wear\w*|say\w*|tell\w*|bring\w*|shout\w*|stand\w*|start\w*|begin\w*|swear\w*|trie\w*|try\w*|stays?|turn\w*|speak\w*|during|when|after|before|while|as|want\w*|display\w*|object\w*|record\w*|live\w*|vote\w*|can|may|could|what)\b/.test(q);
-  if (kind === "procedure") return false;
-  if (kind === "incident") return event;
-  // Backwards-compatible contingency if the planner omits the optional
-  // situation DTO: distinguish narrative incident openers from the procedural
-  // interrogatives used by the already-frozen GEN20 regression.
-  return event && /^(?:an?\s|several\s|members?\s|during\s|in the middle\s|as a\s|the speaker\s|wh[aā]nau\s)/.test(q);
+  return mustAdjudicateFromPlanner(kind, hasLegacy);
 }

@@ -77,7 +77,9 @@ export function buildSourceHref(result: SearchResult): string | null {
   const baseUrl = result.sourceUrl.split("#")[0];
   // Corrected provisions may link to the official Word volume, not stale HTML.
   if (/\.docx$/i.test(baseUrl)) return baseUrl;
-  const anchor = result.sourceAnchor ? encodeURI(result.sourceAnchor) : null;
+  const usableAnchor = result.sourceAnchor && !/^none$/i.test(result.sourceAnchor.trim())
+    ? result.sourceAnchor.trim() : null;
+  const anchor = usableAnchor ? encodeURI(usableAnchor) : null;
 
   if (textStart && anchor) {
     return `${baseUrl}#${anchor}:~:text=${encodeURIComponent(textStart)}`;

@@ -19,7 +19,7 @@ Important constraints:
 - When the question asks whether someone may refuse, prevent, compel, reverse, repeat or reopen an action, search for the applicable constraint or decision authority as well as a possible procedural pathway.
 - Prefer complementary queries with different procedural functions (governing rule, limitation, remedy) over multiple broad synonyms for the same topic. Do not guess citation numbers or presume a conclusion.
 - For a natural incident, return the additional structured situation below. Treat the situation as search context, NOT a procedural conclusion or a claim of source support. An actor, the affected person, the forum, the action, the procedural moment and the decision being asked about are different things.
-- Distinguish, for example, criticism of a member from criticism of a non-member, a contribution from a gallery visitor from a member's speech, a bill being divided from members voting, and interpretation of language from a rule's definitional interpretation. These are conceptual contrasts, not source selections.
+- Distinguish actor class, forum and procedural homonyms. These are conceptual contrasts, not source selections.
 - Identify at most two short additional heading-like evidenceQueries for incident facts that the main queries may overlook. If there is no genuine separate dimension, use an empty list. Do not invent authority numbers.
 - For procedure-first questions, situation.kind="procedure" and evidenceQueries=[].
 - Separately preserve up to 4 short, salient terms or phrases from the user's own wording when they may plausibly appear verbatim in the parliamentary corpus.
@@ -60,21 +60,7 @@ Speakers' Rulings query style:
   - "accountability to the House"
   - "form of reply"
   - "questions to Ministers"
-- When the issue concerns remarks attacking a member personally, especially identity, ethnicity, nationality, or their right to speak:
-  - strongly prefer queries like "personal reflections", "against members", "procedure", "unparliamentary language"
-  - do NOT rely on a broad query like "unparliamentary language" alone if "personal reflections" or "against members" is more on point
-- When the issue concerns evasiveness, lack of relevance, or getting a Minister back on track in committee of the whole:
-  - prefer queries like "chairperson", "relevancy", "point of order", "committee of the whole"
-  - avoid diffuse queries like "committee of the whole debate" unless paired with a more precise procedural label
-- When the issue concerns whether remarks should be withdrawn or the Chair should intervene:
-  - include "procedure" if the relevant corpus is Speakers' Rulings
-  - consider "withdrawal" when apology or retraction is central
-- When the issue concerns Ministers avoiding direct accountability in replies:
-  - prefer queries like "accountability to the House", "point of order", and only use "relevancy" if the context is debate rather than replies
-- When the issue concerns requiring a member to apologise or withdraw for something said in an earlier sitting:
-  - prefer queries like "withdrawal", "procedure", and "point of order"
-  - avoid vague queries like "Speaker's powers" unless no more specific procedural label is available
-- If a question sounds like member conduct rather than a formal rule text, prefer "speakers_rulings" over "standing_orders".
+- Choose search queries from the corpus heading labels supplied with the question. Do not invent a topic pack.
 
 Corpus choice:
 - Choose "standing_orders" when the question is about the formal rule itself or a named Standing Order procedure.
@@ -156,8 +142,13 @@ Critical grounding rules:
 
 Answer-responsiveness rules:
 - Output a literal heading "Bottom line:" followed by at least one substantive, citation-bearing sentence. Do not replace the heading with markdown emphasis, a synonym, or an empty label.
-- Address the primary permission, prohibition, intervention or consequence BEFORE peripheral rules about equipment, etiquette or background context. Permission to USE a device is not permission to RECORD proceedings. Where the primary permission source is missing, explicitly identify the unanswered authorisation question instead of starting with "Yes" based on a related practice.
-- For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. Do not open with "Not simply" or another evasive stock phrase. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.
+- Permission to use equipment or be present is not authorisation for a separately regulated act. Where the authorising rule for that act is missing, identify the unanswered authorisation instead of answering from a related permission.
+- Keep each provision within the actor class it governs.
+- Describe Standing Orders as House rules, not as a statute.
+- Cite a Speaker's ruling with its instrument label, for example "Speakers' ruling 49/5", not a bare number.
+- Do not hedge a rule the sources state as a duty.
+- For a conditional sub-issue, state who decides, what discretion applies, and the consequence.
+- For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.
 - Distinguish the act the user proposes from a different mechanism that might later achieve a related result. Answer the first question before explaining the alternative.
 - Distinguish who can APPLY for an action, who DECIDES it, and which requirements must be satisfied. A necessary condition is not automatically sufficient; permission to request is not authority to compel.
 - Where the relevant source states a negative limit with an exception or threshold, express the limit as a qualified negative. Never infer that satisfying the threshold guarantees the opposite outcome.
@@ -168,7 +159,7 @@ Multipart-answer integrity rules:
 - If the user asks two or more independently meaningful questions, address EACH separately in the substantive answer, in the order asked. Use a direct grounded conclusion for each; if the authority pack does not settle one part, state its evidential limit rather than inventing an answer. Do not treat a single conclusion as covering all parts.
 - Where an authority in the selected pack establishes a distinct application, request, decision, limitation, or consequence needed for one of those parts, use that authority in a citation-bearing substantive claim in "Bottom line" or "What this means". Listing it only in "Best authorities to inspect or cite" does not answer that part.
 - For an application, distinguish the applicant's power to ask, any stated timing or reasons requirement, and the decision-maker's separate discretion. Do not infer that a valid request must be granted.
-- For questions about later access or disclosure, say specifically what the selected provisions allow, restrict, and leave unresolved. Distinguish people present at a hearing from people authorised to receive evidence afterwards.
+- Distinguish who is present at a proceeding from who may later receive or disclose its material.
 - If the selected evidence contains an operative exception expressly cross-referring to another selected authority, explain the limited circumstance the two supplied sources jointly establish, cite the relevant provisions, and avoid presenting the primary prohibition as absolute.
 - If a selected authority cross-refers to a provision NOT included in the supplied authority pack, do not give that unselected provision's number, paraphrase its unprovided content, or substitute an opaque phrase such as "the retrieved authority". State the supported general rule and identify any cross-referenced exception as an unresolved limit, citing only the selected authority that expressly identifies it.
 - Keep citations beside the actual claims they support. Never move material procedural content into the authority-reference list merely to avoid substantive claim validation. Keep each substantive physical line independently supportable, with all necessary qualifications attached.
@@ -213,10 +204,8 @@ characters from its provided Text. Do not quote headings or invent a citation.
 The quote must establish the operative permission, restriction, discretion,
 procedure or limitation, not just mention a subject in common with the question.
 
-If an incident concerns taking or streaming images or sound of proceedings,
-separate the right to operate an electronic device from AUTHORISATION to make
-recordings. A device-use permission is not an operative recording permission.
-Identify a source governing the recording act or acknowledge the evidence gap.
+Permission to use equipment or be present is not authorisation for a separately regulated act.
+Identify a source governing that act, or acknowledge the evidence gap.
 
 Critically distinguish actors (MP, member of the public, committee witness),
 forums (Chamber, gallery, select committee), activities (speech, petition,
@@ -278,7 +267,7 @@ Validation rules:
 - When the full draft is supplied, check whether a categorical Bottom line purports to settle a material issue that another line expressly identifies as unresolved. Reject the overbroad claim and mark the draft nonresponsive if it gives a misleading answer to that issue. A supported narrower rule with an explicit, consistent evidence limit is acceptable.
 - A claim is supported only if its cited authority text directly supports that proposition, either expressly or by a close and necessary logical consequence of its express terms. A necessary consequence is not a guess from silence: an exhaustive, expressly defined threshold excludes lower thresholds without the source having to enumerate every disallowed threshold.
 - Apply mandatory prerequisites as real logical constraints: if the source says a decision can be effective only after a decision-maker is satisfied that X, a conclusion that the decision cannot be effective when X is false can be entailed without a second express negative sentence. Do not turn this into a blanket ban on proposing or discussing an ineffective determination. Distinguish a necessary condition for a valid outcome from an independent prohibition on an unrelated act.
-- When the source defines a threshold as an overwhelming or specified supermajority, saying an ordinary majority alone is insufficient is a direct consequence of that definition. Do not demand the exact words "ordinary majority" in the source. Check whether the claim also adds any broader unsupported legal consequence.
+- An exhaustive threshold excludes lower ones. Failing a necessary precondition invalidates the dependent decision. Do not demand a particular synonym of the threshold in the source. Check whether the claim also adds any broader unsupported legal consequence.
 - Validation is an entailment test, not an exhaustiveness test. Do not reject an otherwise supported claim merely because it omits other true details, consequences, or adjacent rules from the authority.
 - An omitted qualification matters only when omitting it makes the proposition broader, false, or materially misleading. Determine whether each exception actually qualifies the SAME operative action and actor. An "other than" phrase governing a separate practice does not create an exception to another sentence's independent prohibition.
 - For a categorical or exhaustive claim about a prohibition, duty, exclusive permission, or mandatory consequence, inspect the FULL operative subsection for explicit "except", "unless", "subject to", "provided that", or other limiting clauses. If the claim mentions one route but silently omits another express exception to that same rule, it is broader than the source and MUST be marked unsupported.
@@ -298,7 +287,7 @@ Validation rules:
 - Do not add authorities.
 - Return JSON only.
 - When a user question and answer draft are supplied, independently judge whether the draft actually answers the user's requested act and forum. A true claim about a different matter is not responsive. Do not mark a draft responsive solely because its citations exist or its prose is true. The responsiveness verdict is independent of the per-claim support verdicts.
-- Check ALL material decision facets: the central act, whose permission is needed, applicable forum and procedural moment, any necessary authorisation, consequences, and expressly asked objections. Addressing electronic-device etiquette does not answer recording permission. Report each unresolved facet in unaddressedParts unless the draft explicitly states that the selected sources cannot settle it, without implying permission from silence.
+- Check ALL material decision facets: the central act, whose permission is needed, applicable forum and procedural moment, any necessary authorisation, consequences, and expressly asked objections. Permission for a related act does not answer a separately regulated act. Report each unresolved facet in unaddressedParts unless the draft explicitly states that the selected sources cannot settle it, without implying permission from silence.
 
 Return this exact shape:
 {
@@ -433,7 +422,9 @@ export function buildAnswerClaimAppealPrompt(input: {
 export function buildSearchPlannerPrompt(input: {
   question: string;
   corpus?: string | null;
+  headingLabels?: string[];
 }): string {
+  const headings = (input.headingLabels ?? []).slice(0, 180).join("\n");
   return `
 User question:
 ${input.question}
@@ -441,7 +432,10 @@ ${input.question}
 Requested corpus filter:
 ${input.corpus ?? "none"}
 
-Generate a search plan now.
+Corpus heading labels:
+${headings || "(none supplied)"}
+
+Generate a search plan now. Prefer the supplied heading labels when they match the operative act.
 `.trim();
 }
 
@@ -478,7 +472,7 @@ Authority function: ${authorityProfile.authorityFunction}
 Path: ${result.path.join(" > ")}
 Path text: ${result.pathText}
 Source URL: ${result.sourceUrl ?? "None"}
-Source anchor: ${result.sourceAnchor ?? "None"}
+Source anchor: ${result.sourceAnchor && !/^none$/i.test(result.sourceAnchor.trim()) ? result.sourceAnchor.trim() : "unavailable"}
 Rank: ${result.rank.toFixed(2)}
 Cluster support count: ${result.clusterSupportCount}
 Match signals:
@@ -601,7 +595,7 @@ Start with the literal line "Bottom line:" then immediately state a concise
 substantive decision supported by inline citations. If the source pack cannot
 settle a central permission or objection, say this explicitly, citing whatever
 selected source establishes the partial governing framework. Do not turn a
-restriction on phone use into a recording ban or permission. No unsupported
+related permission into authorisation for a separately regulated act. No unsupported
 claims, invented citations, or conclusions inferred from missing evidence.
 
 Use the exact section headings Bottom line:, What this means:, Your options:,
