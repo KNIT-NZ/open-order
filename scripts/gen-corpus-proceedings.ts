@@ -178,6 +178,13 @@ function classModulePath(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../lib/committee-class-data.js");
 }
 
+export function listedBodyNames(records: Array<{ path?: string[] | null }>): string[] {
+  return records.map((record) => {
+    const path = Array.isArray(record.path) ? record.path : [];
+    return path.length > 0 ? String(path[path.length - 1]) : "";
+  }).filter((name) => name.length > 0);
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -187,10 +194,8 @@ async function main(): Promise<void> {
   const rows = await readProceedingRows(connectionString);
   const derived = deriveCorpusProceedings(rows);
   writeFileSync(modulePath(), renderCorpusProceedingsModule(derived));
-  const listed = rows
-    .map((row) => String(row.heading ?? row.path?.at(-1) ?? ""))
-    .filter((heading) => /committee/i.test(heading));
-  const classes = deriveCommitteeClassWords(rows, listed);
+  const { committeeNameRecords } = await import("../lib/committee-names-data.js");
+  const classes = deriveCommitteeClassWords(rows, listedBodyNames(committeeNameRecords));
   writeFileSync(classModulePath(), renderCommitteeClassModule(classes));
   console.log(`Wrote ${derived.phrases.length} proceeding phrases and ${classes.length} class words.`);
 }

@@ -219,3 +219,37 @@ test("provider failure codes stay, and a token with a space does not", () => {
     "code=UNAVAILABLE;code=RESOURCE_EXHAUSTED",
   );
 });
+
+test("code-shaped identifiers do not pass the client note or the adjudication status", () => {
+  const shapes = [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "sec-48213",
+    "SO9",
+    "corpus.example",
+    "127.0.0.1",
+    "corpus.example:5432",
+    "abcdefghijklmnopqrstuvwxyz012345",
+  ];
+  for (const shape of shapes) {
+    assert.equal(clientCheckNote([
+      `claim_ids=${shape}`, `code=${shape}`, `kind=${shape}`, `status=${shape}`, shape,
+    ]), null, shape);
+    const sent = publicScenarioAdjudication({
+      status: shape,
+      candidateCount: 0,
+      selected: [],
+      rejected: [shape, `${shape}:${shape}`],
+      gaps: [],
+      providerAttempts: 0,
+      dossier: [],
+      retrievedOutsideDossier: [],
+      dispositions: [],
+      unavailableNominations: 0,
+      recovery: { status: shape, candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [shape] },
+    });
+    const blob = JSON.stringify(sent);
+    assert.equal(blob.includes(shape), false, shape);
+    assert.equal(sent.status, "other");
+  }
+  assert.equal(clientCheckNote(["claim_ids=claim-1,claim-2", "claim_ids=the_member_said"]), "claim_ids=claim-1,claim-2");
+});

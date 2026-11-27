@@ -40,7 +40,7 @@ test("a plural committee head is unlisted, and a generic name passes a generic l
     assert.equal(forumIdentityOutcome("the committee", ["Chapter 9", "Select committees", "Reports of select committees"]), "match");
     assert.equal(forumIdentityOutcome("a committee", ["HARBOUR COMMITTEE", "Meetings"]), "uncertain");
     assert.equal(forumIdentityOutcome("a committee", ["Select committees", "Meetings"]), "match");
-    assert.equal(forumIdentityOutcome("the Brindlemoors", ["BRINDLEMOOR AND QUARRYSIDE", "Brindlemoors"]), "match");
+    assert.equal(forumIdentityOutcome("the Brindlemoors", ["BRINDLEMOOR AND QUARRYSIDE", "Brindlemoors"]), "uncertain");
   });
 });
 

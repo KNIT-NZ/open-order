@@ -6,6 +6,8 @@ import { AiProviderError } from "../lib/ai/errors";
 import { withCorpusCommitteeNames } from "../lib/committee-names-context";
 import type { AiGenerateJsonRequest, AiStreamTextRequest } from "../lib/ai/types";
 import type { ProceduralSearchResponse, ProceduralSearchResult } from "../lib/procedural-search";
+import { formatAiDebugSnapshot } from "../lib/open-order/format";
+import { EMPTY_AI_DIAGNOSTICS } from "../lib/open-order/types";
 
 // The route module constructs the corpus pool on import. CI has no database.
 // A loopback URL satisfies that check; the stubs below never open a connection.
@@ -53,7 +55,8 @@ type Scenario =
   | "forum_stage"
   | "forum_stage_incident"
   | "forum_motion"
-  | "forum_motion_incident";
+  | "forum_motion_incident"
+  | "planner_leak";
 
 const forumCase: Partial<Record<Scenario, { setting: string; path: string | string[]; kind?: "incident" | "procedure" }>> = {
   forum_same: { setting: "Widget Committee", path: "Widget Committee" },
@@ -241,7 +244,14 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       return value as T;
     }
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
-      const value = scenario === "forum_codes"
+      const value = scenario === "planner_leak"
+        ? {
+          ...plan("procedure"),
+          searchQueries: ["Rule 999ZZ suspension"],
+          salientTerms: ["Gloriana Ceremonial Rule"],
+          notes: "Gloriana Ceremonial Rule Rule 999ZZ",
+        }
+        : scenario === "forum_codes"
         ? plan("procedure", "Widget Oversight Committee", "a delegate")
         : forumPath
           ? plan(forumPath.kind ?? "procedure", forumPath.setting)
@@ -713,4 +723,22 @@ test("an unretrieved citation falls back and the done answer is not answered", a
   assert.deepEqual(done.invalidCitations, []);
   assert.match(String(done.claimValidationNote), /invalid_citations=1/);
   assert.equal(String(done.claimValidationNote).includes("SO 99"), false);
+});
+
+test("planner text does not appear in any streamed event or the debug snapshot", async () => {
+  const events = await ask("planner_leak");
+  const markers = ["999ZZ", "Gloriana Ceremonial Rule", "Gloriana"];
+  const blob = JSON.stringify(events);
+  for (const marker of markers) assert.equal(blob.includes(marker), false, marker);
+  assert.equal(events.some((item) => item.event === "plan"), false);
+  const done = events.find((item) => item.event === "done");
+  assert.equal(Object.prototype.hasOwnProperty.call(done?.data ?? {}, "plan"), false);
+  const diagnostics = events.find((item) => item.event === "diagnostics")?.data ?? {};
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    ...(diagnostics as object),
+    expandedQueries: [],
+    retrievals: (diagnostics as { retrievals?: never }).retrievals ?? [],
+  });
+  for (const marker of markers) assert.equal(snapshot.includes(marker), false, marker);
 });

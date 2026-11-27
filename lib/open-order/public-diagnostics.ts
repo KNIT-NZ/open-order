@@ -3,14 +3,38 @@ import type { AiScenarioAdjudication, AiSourceDisposition } from "./types";
 // Public diagnostics are counts and reason codes. Authority labels do not leave
 // this function: selected, dossier, the out-of-dossier list, disposition rows,
 // and recovery candidates and selected are emptied. Counts replace them.
-const CODE = /^[a-z0-9_.:,-]{1,64}$/i;
 const COUNTED = /^[a-z0-9_.:,-]{1,64}=\d{1,4}$/i;
+const SCOPE = /^scope-not-established:(?:actor|setting|action|stage)(?:,(?:actor|setting|action|stage))*$/;
+const REASONS = new Set([
+  "verified_source_witness", "model_did_not_nominate", "ambiguous-source-identity", "admission_limit",
+  "unverified-verbatim-witness", "invalid-source-role", "act_attestation_unconfirmed",
+  "forum_identity_unconfirmed", "missing-primary-governing-witness", "unavailable-or-duplicate",
+  "forum-identity", "procedure-homonym", "other_reason",
+]);
+const DISPOSITION_STATUS = new Set(["admitted", "rejected", "not_nominated", "withheld_no_primary", "not_reviewed_limit"]);
+const ADJUDICATION_STATUS = new Set([
+  "v40_quoted_source_adjudication", "v40_no_governing_witness", "v402_independent_governing_recovery",
+  "no_retrieved_source_bodies", "not_reported", "not_needed",
+]);
+const FAILURE_KIND = new Set(["configuration", "rate_limited", "unavailable", "upstream", "unknown", "parse", "validation", "timeout"]);
 
-// A reason is kept only when it is already a code. Prose (including fixed
-// server prose) becomes "other_reason" so no sentence can ride out as a slug.
-function reasonCode(raw: string): string {
-  const text = String(raw ?? "").trim();
-  return CODE.test(text) ? text.toLowerCase() : "other_reason";
+function knownReason(raw: string): string {
+  const text = String(raw ?? "").trim().toLowerCase();
+  if (REASONS.has(text) || SCOPE.test(text)) return text;
+  return "other_reason";
+}
+
+function publicStatus(raw: string): string {
+  const text = String(raw ?? "").trim().toLowerCase();
+  if (ADJUDICATION_STATUS.has(text)) return text;
+  const prefix = "adjudication_unavailable:";
+  if (text.startsWith(prefix) && FAILURE_KIND.has(text.slice(prefix.length))) return text;
+  return "other";
+}
+
+function dispositionStatus(raw: string): string {
+  const text = String(raw ?? "").trim().toLowerCase();
+  return DISPOSITION_STATUS.has(text) ? text : "other";
 }
 
 /** "label:reason" entries (or already-counted codes) become "reason=count" codes. */
@@ -20,10 +44,15 @@ export function rejectionCodes(entries: readonly string[] | undefined): string[]
   let total = 0;
   for (const entry of entries ?? []) {
     const text = String(entry ?? "");
-    if (COUNTED.test(text)) { if (!passthrough.includes(text)) passthrough.push(text); continue; }
+    if (COUNTED.test(text)) {
+      const key = text.slice(0, text.indexOf("="));
+      const kept = key === "rejected" ? text : `${knownReason(key)}=${text.slice(text.indexOf("=") + 1)}`;
+      if (!passthrough.includes(kept)) passthrough.push(kept);
+      continue;
+    }
     const colon = text.indexOf(":");
     const reason = colon >= 0 ? text.slice(colon + 1) : text;
-    const code = reasonCode(reason);
+    const code = knownReason(reason);
     counts.set(code, (counts.get(code) ?? 0) + 1);
     total += 1;
   }
@@ -36,7 +65,7 @@ function statusCounts(rows: readonly AiSourceDisposition[] | undefined, prior?: 
   if (counted.length > 0 || !rows || rows.length === 0) return counted;
   const counts = new Map<string, number>();
   for (const row of rows) {
-    const code = `${reasonCode(row.status)}:${reasonCode(row.reason)}`;
+    const code = `${dispositionStatus(row.status)}:${knownReason(row.reason)}`;
     counts.set(code, (counts.get(code) ?? 0) + 1);
   }
   return [...counts].map(([code, count]) => `${code}=${count}`);
@@ -103,7 +132,7 @@ export function publicScenarioAdjudication(input: PublicInput): PublicInput {
     ? [...recoveryCandidates]
     : [`recovery_candidates=${recoveryCandidates.length}`];
   return {
-    status: reasonCode(input.status),
+    status: publicStatus(input.status),
     candidateCount: Number(input.candidateCount) || 0,
     selected: [],
     selectedCount: input.selected?.length ? input.selected.length : nonNegativeInt(input.selectedCount),
@@ -121,7 +150,7 @@ export function publicScenarioAdjudication(input: PublicInput): PublicInput {
     unavailableNominations: Number(input.unavailableNominations) || 0,
     ...(nominations ?? {}),
     recovery: {
-      status: reasonCode(recovery?.status ?? "not_reported"),
+      status: publicStatus(recovery?.status ?? "not_reported"),
       candidates: recoveryCandidateCode,
       dispositions: [],
       dispositionCounts: statusCounts(recovery?.dispositions, recovery?.dispositionCounts),

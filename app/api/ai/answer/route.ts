@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
 import { publicScenarioAdjudication } from "@/lib/open-order/public-diagnostics";
+import { publicRetrievals } from "@/lib/open-order/public-search";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
@@ -426,8 +427,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const effectiveCorpus = corpus ?? null;
           const inferredConcepts = inferConcepts(question, plan.searchQueries);
 
-          send("plan", plan);
-
           send("stage", {
             key: "retrieving",
             label: "Retrieving authorities",
@@ -831,7 +830,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
           const legacyEvidenceGaps = describeMissingAuthoritySlots({
             question,
-            plannerQueries: plan.searchQueries,
+            plannerQueries: [],
             missingRequiredSlots: selected.missingRequiredSlots,
           });
           // The legacy slot blueprint controls recovery and diagnostics, not the
@@ -987,10 +986,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             satisfiedSlots: selected.satisfiedSlots,
             missingRequiredSlots: selected.missingRequiredSlots,
             blueprintSatisfied: selected.blueprintSatisfied,
-            expandedQueries,
+            expandedQueries: [],
+            expandedQueryCount: expandedQueries.length,
             recoveryAttempts,
             evidenceGaps,
-            retrievals: searches.map((search) => {
+            retrievals: publicRetrievals(searches.map((search) => {
               const discovery = selected.discoveredDimensions.find(
                 (dimension) =>
                   dimension.query.toLowerCase() === search.query.toLowerCase() &&
@@ -1020,7 +1020,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   matchSignals: result.matchSignals,
                 })),
               };
-            }),
+            })),
             // The final selection diagnostic must describe the semantic pack
             // actually supplied to drafting, not the earlier legacy ranking.
             finalAuthoritySelection: shownResults.map((result) => ({
@@ -1074,7 +1074,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: fallbackAnswer,
               authorities: listedAuthorities(authorityPayload),
               fallbackReason: noAuthorityReason,
@@ -1158,7 +1157,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
@@ -1212,7 +1210,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
@@ -1256,7 +1253,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
@@ -1337,7 +1333,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   question,
                   corpus: effectiveCorpus,
                   latencyMs: Date.now() - started,
-                  plan,
                   answerText: fallbackAnswer,
                   authorities: listedAuthorities(authorityPayload),
                   fallbackReason,
@@ -1377,7 +1372,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
@@ -1842,7 +1836,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 question,
                 corpus: effectiveCorpus,
                 latencyMs: Date.now() - started,
-                plan,
                 answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload),
                 fallbackReason,
@@ -1909,7 +1902,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: finalAnswer,
               authorities: citedAuthorities,
               rewriteNote,
@@ -1956,7 +1948,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               question,
               corpus: effectiveCorpus,
               latencyMs: Date.now() - started,
-              plan,
               answerText: fallbackAnswer,
               authorities: listedAuthorities(authorityPayload),
               fallbackReason,

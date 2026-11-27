@@ -1,6 +1,6 @@
 {
- "version": "forum-spec-v2.7",
- "schema": "see PR15-forum-spec-v2.7-ENGINEER-SAFE.md (which refers to the v2.6, v2.5, v2.4, v2.3, v2.2, v2.1, v2 and v1 mds)",
+ "version": "forum-spec-v2.11",
+ "schema": "see PR15-forum-spec-v2.11-ENGINEER-SAFE.md (which refers to the v2.10 and earlier mds)",
  "fixtures": {
   "committeeList": {
    "fixture": [
@@ -7371,13 +7371,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (Classless setting: the leaf names no conflicting body.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (v2.8: R5/R12: neutral or general leaf. (Classless setting: the leaf names no conflicting body.))",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding_proper_noun|*|*",
    "deferred": null
   },
@@ -7417,13 +7417,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "different_proceeding_withholds",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (v2.6: R7: an ancestor names a different proceeding. (Classless setting: compare only with the leaf.))",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (v2.8: R5/R12: neutral or general leaf. (v2.6: R7: an ancestor names a different proceeding. (Classless setting: compare only with the leaf.)))",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
   },
@@ -7463,13 +7463,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (v2.8: R5/R12: neutral or general leaf. (A generic rule.))",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
   },
@@ -7515,13 +7515,13 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "same_body_passes",
-   "reason": "[R5] R5: classless self-match on the leaf. (Own proceeding leaf under a combined heading.)",
+   "reason": "[R4] R4: the segment that names the setting adds a name word or a referent. (v2.10: R5: classless self-match on the leaf. (Own proceeding leaf under a combined heading.))",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding_proper_noun|proceeding|unlisted",
    "deferred": null
   },
@@ -7668,6 +7668,414 @@
    },
    "rule": "FR23",
    "reason": "[FR23] FR23: a generic committee name against a neutral leaf under a part heading that names a specific body. (Generic committee name, neutral leaf, specific part heading.)"
+  },
+  {
+   "settingKind": "proceeding",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-174",
+   "setting": "the Kelvara debate",
+   "question": "In the Kelvara debate, may a member speak twice?",
+   "action": "speak twice",
+   "body": "A member may speak twice.",
+   "path": [
+    {
+     "text": "Chapter 3",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "ORMSBY",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 5",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Kelvara debate",
+     "kind": "proceeding:debate",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R7",
+   "reason": "[R7] R7: an ancestor names a different proceeding. (Headed proceeding under a bare proper-noun heading that names a different proceeding.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-175",
+   "setting": "the Pellow",
+   "question": "During the Pellow, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "PELLOW",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Arnscombe",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-3",
+   "reason": "[T-3] T-3: the leaf carries a name word the classless setting lacks. (Classless setting against a different proper-noun leaf; the path names the setting, so T-4(1) is satisfied and T-3 decides.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-176",
+   "setting": "the Dunmarra",
+   "question": "During the Dunmarra, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "DUNMARRA",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Dunmarras",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-3",
+   "reason": "[T-3] T-3: the leaf carries a name word the classless setting lacks. (Classless setting against a plural-of-name leaf; the path names the setting, so T-4(1) is satisfied and T-3 decides.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-177",
+   "setting": "the Caddow",
+   "question": "During the Caddow, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Caddow building",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (v2.10: T-3: the leaf overlaps the classless setting without equalling it. (Classless setting against a name-plus-word leaf; the path names the setting, so T-4(1) is satisfied and T-3 decides.))"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-178",
+   "setting": "the ballot",
+   "question": "During the ballot, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Clerk",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-4(2)",
+   "reason": "[T-4(2)] T-4(2): the leaf names a specific role, document, event or stage. (Classless setting: a corpus-word setting against a specific role leaf (T-4(2)).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-179",
+   "setting": "the member",
+   "question": "During the member, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Membership",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-4(3)",
+   "reason": "[T-4(3)] T-4(3): the leaf is prefix-related to the classless setting without equalling it. (Classless setting: a corpus-word setting against a prefix-related corpus-word leaf (T-4(3)).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-180",
+   "setting": "the state",
+   "question": "During the state, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "STATEMENTS",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "General rules",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R3",
+   "reason": "[R3] R3: an ancestor overlaps the classless setting without equalling it. (Classless setting: an ancestor heading prefix-overlaps a corpus-word setting; the leaf is neutral (R3).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-181",
+   "setting": "the Orrin",
+   "question": "During the Orrin, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Orrin opening",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "5l",
+   "bindingFrom": "r5l",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: the segment that names the setting adds a name word or a referent. (Classless setting: the leaf names the setting but adds a referent word (R4).)"
   }
  ],
  "changelog": [
@@ -7705,6 +8113,21 @@
   "Class words (confirmed source): committee-class words come only from structural headings that end in 'committees', never from body text, minus listed-name words. The pinned corpus yields no others.",
   "FR20 (list closed): the identity signals that cap a classless self-match are exactly a listed body, a corpus proceeding, the Committee of the whole, a committee-shaped name, and a committee chapter or part. A bare proper-noun heading, or any other heading, is not a signal. Settings with a proceeding class still follow R7.",
   "Correction notice (supersedes the FR20 example in the v2.4 md): a bare proper-noun heading (for example 'QUARRYSIDE') is NOT an identity signal. A classless setting that equals its own leaf is supported under such an ancestor. The v2.4 md listed 'QUARRYSIDE' among ancestors that give qualified; that example was wrong.",
-  "FR23: a generic committee name against a neutral leaf (for example 'Meetings' or 'Chairperson') whose part heading names a specific body, listed or committee-shaped, is qualified. This follows from the FR20 ancestor signal together with FR22. Example: 'a committee' under 'HARBOUR COMMITTEE > Meetings' gives qualified_partial; 'a committee' under 'Select committees > Meetings' still gives supported."
+  "FR23: a generic committee name against a neutral leaf (for example 'Meetings' or 'Chairperson') whose part heading names a specific body, listed or committee-shaped, is qualified. This follows from the FR20 ancestor signal together with FR22. Example: 'a committee' under 'HARBOUR COMMITTEE > Meetings' gives qualified_partial; 'a committee' under 'Select committees > Meetings' still gives supported.",
+  "T-2 (ruled): any neutral leaf passes a classless setting that has no FR20 ancestor signal. Comparing the leaf's content words is not a cap.",
+  "R7 (confirmed for headed settings): the closed FR20 list applies only to classless settings. A setting with a proceeding class (for example 'the Lantern debate') is qualified under an ancestor that names a different proceeding, including a bare proper-noun heading (for example 'ORCHARD' above a 'Lantern debate' leaf).",
+  "FR23 (clarified): 'neutral leaf' means any leaf that is not a specific committee. House-level leaves stay under R13 and FR19.",
+  "T-3 (ruled): a 'name word' is any word absent from a vocabulary generated from the pinned corpus pack: its headings, path segments and body text. A word counts as a corpus word if it, its plural-folded form, or its -s/-es form appears in that vocabulary. A classless setting against a neutral leaf (any leaf that is not a specific body, the Committee of the whole House, a House-level leaf or a proceeding leaf) is qualified if (a) the leaf shares a word with the setting without equalling it, or (b) the leaf carries a name word the setting lacks. Otherwise the neutral leaf passes, per T-2. A name word never becomes a synthetic proceeding head, so names keep whole-word identity with no plural folding (ruling 4). No hand-written word lists.",
+  "T-4 (binding; withdraws the earlier view that role, document and event leaves written in corpus words are neutral). (1) A classless setting that contains a name word is supported only where the leaf or an ancestor names it, meaning the segment contains every content word of the setting as whole words, with no folding. It is qualified everywhere else. (2) 'Neutral' means a leaf that states a rule topic generically (for example 'Time limits', 'General rules', 'Meetings'). A leaf that names a specific role, document, event or stage (for example 'Chairperson', 'The Speaker', a business paper, an opening ceremony, 'Committee stage') is not neutral, so a classless setting that does not equal it is qualified. (3) The overlap clause also catches prefix relations between two corpus words ('second' and 'seconder', 'chair' and 'Chairperson', 'committal' and 'committee'): one word is a prefix of the other with at least 4 letters, or the two share a prefix of at least 5 letters. That counts as overlap without equality, so the result is qualified. Name words are never folded or prefix-matched (ruling 4).",
+  "T-4 mechanism (no hand lists): a leaf names a specific role, document, event or stage when (a) it contains the committee head word, or (b) one of its content words is a corpus referent word, or (c) its whole phrase, without determiners, is a corpus referent phrase. Referents are generated from the pinned pack's body text. A referent word occurs at least 5 times and either (i) is preceded by 'the' in at least 50% of occurrences and used as a noun-phrase head (followed by punctuation or a generated function word in at least 50% of occurrences; the function words are the 60 most frequent body words), or (ii) is capitalised mid-sentence in at least 80% of occurrences. A referent phrase (2 or 3 words) occurs at least 5 times and is preceded by 'the' in at least 50% of occurrences. 'The Speaker' and 'Chairperson' are referents; 'Time limits' and 'General rules' are not.",
+  "T-3/T-4 (accepted limits): (1) a classless setting that is itself a corpus word may still reach a leaf that shares that word through the proceeding route (for example 'the second' against 'Second ballot'). (2) An everyday word that does not occur in the corpus counts as a name word, so a setting or leaf built on it is qualified unless the path names it, which is over-cautious. (3) The referent signal is statistical. Some generic topic leaves count as specific and become over-cautious (some single generic nouns and some '... of business' topic leaves). Some sparse roles count as neutral (a word used fewer than 5 times, such as 'seconder', is caught only by the prefix clause). (4) Leaves at House level ('Adjournment of the House') name a specific body, so they are qualified against a classless setting. (5) The vocabulary and referent data must be regenerated and pinned whenever the corpus pack changes.",
+  "v2.10 rulings recorded: S-167 and S-169 are qualified under T-4(1). Under F+, House-level leaves count as specific against classless settings only; R13 and FR19 are unchanged for House and Chamber settings. 'Committee stage' is caught by the committee head word in Batch 1; treating it as the Committee of the whole House under R9 is deferred to Batch 2.",
+  "v2.10 rows S-178 and S-179 test T-4(2) and T-4(3). They are information only for round 5l and binding from round r5l onwards (fields informationOnly='5l', bindingFrom='r5l').",
+  "v2.11 encodes the round 5l clarifying rulings on T-3 and T-4 (PR15-rulings-r5l-T3T4-scope-ENGINEER-SAFE.md). That document wins wherever it differs from the v2.9 or v2.10 text.",
+  "Scope: T-3 and T-4(1) apply only to classless settings. Headed settings keep R5, R7 and R12. No headed row changes.",
+  "Overlap (T-3 and T-4(3)): two words overlap if they are equal, or if one is a case-insensitive prefix of the other with a shared prefix of at least 4 characters. The v2.9 clause 'or the two share a prefix of at least 5 letters' is withdrawn, so 'committal' and 'committee' no longer overlap.",
+  "Ancestors: the overlap test runs on the leaf and on every ancestor. A segment that overlaps the setting without equalling it gives qualified.",
+  "'Names it' is necessary but not sufficient. A classless setting with a name word needs a segment (the leaf or an ancestor) that contains its name word(s). Each such segment is then reduced by removing articles and the generated function words (the top-60 list in GENERATION-ALGORITHM.md). If what remains equals the setting, it is supported. If it adds a name word or an F+ referent, it is qualified. If it adds only ordinary words, it is supported.",
+  "Rows re-derived under these rulings: S-170 becomes qualified because its combined heading adds a second name word. S-177 becomes supported because 'building' is an ordinary word. The new rows S-180 and S-181 are information only for 5l and binding from r5l."
  ]
 }
