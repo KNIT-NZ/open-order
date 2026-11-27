@@ -26,4 +26,4 @@ export const HEADING_PREFIX_SEED = [
 ] as const;
 
 /** Generic reference words. A name made only of these and class words is generic. */
-export const COMMITTEE_REFERENCE_SEED = ["relevant", "appropriate", "responsible", "same"] as const;
+export const COMMITTEE_REFERENCE_SEED = ["relevant", "appropriate", "responsible", "same", "similar"] as const;
