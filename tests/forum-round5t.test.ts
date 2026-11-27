@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AUXILIARIES, MODALS, NAMED_NONCONTENT, PRONOUNS } from "../lib/closed-class.js";
+import { AUXILIARIES, MODALS, NAMED_NONCONTENT, PRONOUNS, isNamedNonContent } from "../lib/closed-class.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms.js";
 import { corpusProceedingHeads } from "../lib/corpus-proceedings-data.js";
 import { headingPrefixes } from "../lib/domain-vocabulary-data.js";
@@ -171,6 +171,19 @@ test("a possessive determiner does not name a committee", () => {
     forumIdentityOutcome("the Merrow debate", ["Chapter 4", "WE COMMITTEE", "SO 5", "Merrow debate"]),
     "uncertain",
   );
+});
+
+test("relative pronouns before a class word name the committee", () => {
+  for (const word of ["who", "whom", "whoever", "whomever"]) {
+    assert.equal(isNamedNonContent(word), false, word);
+    assert.equal(NAMED_NONCONTENT.has(word), false, word);
+    const heading = `${word.toUpperCase()} COMMITTEE`;
+    assert.equal(
+      forumIdentityOutcome("a committee", ["Chapter 4", heading, "SO 5", "Meetings"]),
+      "uncertain",
+      heading,
+    );
+  }
 });
 
 test("a modal names a committee and a numeral does not", () => {

@@ -34,7 +34,7 @@ test("closed classes are complete and pinned", () => {
   assert.equal(isNamedNonContent("its"), true);
   assert.equal(isNamedNonContent("may"), false);
   assert.equal(HER, "her");
-  for (const word of ["never", "there", "then", "only", "who"]) {
+  for (const word of ["never", "there", "then", "only"]) {
     assert.equal(CLOSED_CLASS.has(word), true, word);
     assert.equal(isNamedNonContent(word), true, word);
   }
