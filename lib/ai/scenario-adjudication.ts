@@ -1,5 +1,6 @@
 import {
   forumIdentityMismatch,
+  forumIdentityOutcome,
   procedureHomonymMismatch,
   quoteAttestsActAndObject,
 } from "@/lib/procedural-mechanisms";
@@ -265,15 +266,20 @@ export function validateV40Proposal<T extends V40Authority>(input: {
       mark("rejected", "invalid-source-role"); continue;
     }
     // A lexical act miss is not a defective authority. Admit it and qualify.
+    // An unresolved body name is the same kind of soft miss: admit, qualify, never a hard reject.
     const actUnconfirmed = item.role === "governing" && !v401MediaWitnessMatches(input.action, quote);
+    const forumUncertain = forumIdentityOutcome(input.setting || "", source.path ?? []) === "uncertain";
     authorities.push(source);
     accepted.push(source.citationLabel);
-    if (actUnconfirmed) {
-      if (!qualifications.includes("act_attestation_unconfirmed")) qualifications.push("act_attestation_unconfirmed");
-      mark("admitted", "act_attestation_unconfirmed");
-    } else {
-      mark("admitted", "verified_source_witness");
+    if (actUnconfirmed && !qualifications.includes("act_attestation_unconfirmed")) {
+      qualifications.push("act_attestation_unconfirmed");
     }
+    if (forumUncertain && !qualifications.includes("forum_identity_unconfirmed")) {
+      qualifications.push("forum_identity_unconfirmed");
+    }
+    if (actUnconfirmed) mark("admitted", "act_attestation_unconfirmed");
+    else if (forumUncertain) mark("admitted", "forum_identity_unconfirmed");
+    else mark("admitted", "verified_source_witness");
     if (item.role === "governing") primaryAdmitted = true;
   }
   for (const item of input.proposal.selected) {

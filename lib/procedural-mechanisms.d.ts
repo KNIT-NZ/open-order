@@ -42,7 +42,12 @@ export function deriveAnswerState(state: {
   fallbackCode?: string;
 }): "supported" | "partial" | "not_answered";
 export function procedureHomonymMismatch(question: string, heading: string): string | null;
+export function forumIdentityOutcome(setting: string, path: string[]): "match" | "reject" | "uncertain";
 export function forumIdentityMismatch(setting: string, path: string[]): string | null;
+export function tallyForumOutcomes(
+  records: Array<{ sectionId?: string; citationLabel?: string; heading?: string | null; path?: string[] }>,
+  setting?: string,
+): { identity: number; ambiguous: number };
 export function expressCrossReferences(text: string): string[];
 export function isApplicabilityRejection(reason: string): boolean;
 export function rejectionKeysFor(record: { sectionId?: string; citationLabel?: string; documentCorpus?: string; corpus?: string }): string[];

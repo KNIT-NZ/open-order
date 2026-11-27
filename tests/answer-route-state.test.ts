@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { AiProviderError } from "../lib/ai/errors";
+import { withCorpusCommitteeNames } from "../lib/committee-names";
 import type { AiGenerateJsonRequest, AiStreamTextRequest } from "../lib/ai/types";
 import type { ProceduralSearchResponse, ProceduralSearchResult } from "../lib/procedural-search";
 
@@ -36,18 +37,20 @@ type Scenario =
   | "qualified_act"
   | "wrong_object"
   | "qualified_fallback"
-  | "overlooked_soft";
+  | "overlooked_soft"
+  | "forum_codes"
+  | "forum_ambiguous";
 
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
 const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
 
-function authority(label: string, sectionId: string, sectionContent = QUOTE): ProceduralSearchResult {
+function authority(label: string, sectionId: string, sectionContent = QUOTE, path = ["Debate"]): ProceduralSearchResult {
   return {
     sectionId,
     sectionKey: sectionId,
     citationLabel: label,
     heading: "Suspension",
-    path: ["Debate"],
+    path,
     pathText: "Debate",
     documentSlug: "standing-orders",
     documentTitle: "Standing Orders",
@@ -72,7 +75,7 @@ function authority(label: string, sectionId: string, sectionContent = QUOTE): Pr
   };
 }
 
-function plan(kind: "incident" | "procedure") {
+function plan(kind: "incident" | "procedure", setting = "Chamber", affectedPerson = "") {
   return {
     intent: "explain_rule",
     preferredCorpus: null,
@@ -82,9 +85,9 @@ function plan(kind: "incident" | "procedure") {
     situation: {
       kind,
       actor: "member",
-      setting: "Chamber",
+      setting,
       action: "suspend the sitting",
-      affectedPerson: "",
+      affectedPerson,
       proceduralMoment: "debate",
       decisionQuestion: "May the House suspend the sitting?",
       materialFacts: kind === "incident" ? ["an occurrence was recorded"] : [],
@@ -136,6 +139,10 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
   const overlookedBody = `${QUOTE} The House may suspend business of a committee when its chair so decides.`;
   const primaryForOverlooked = authority("SO 1", "s1", `${QUOTE} subject to SO 2.`);
   const overlookedSource = authority("SO 2", "s2", overlookedBody);
+  const forumPrimary = authority("SO 1", "s1", `${QUOTE} subject to SO 2. subject to SO 3.`, ["Widget Oversight Committee"]);
+  const forumMismatch = authority("SO 2", "s2", QUOTE, ["Gadget Review Committee"]);
+  const forumShort = authority("SO 3", "s3", QUOTE, ["Widget Committee"]);
+  const ambiguousSource = authority("SO 1", "s1", QUOTE, ["Widget Trade Committee"]);
   const pack = scenario === "no_bodies"
     ? []
     : scenario === "answer_edits"
@@ -146,8 +153,14 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
           ? [authority("SO 1", "s1", WRONG_OBJECT)]
           : scenario === "overlooked_soft"
             ? [primaryForOverlooked, overlookedSource]
-            : [authority("SO 1", "s1")];
-  const selectedPack = scenario === "overlooked_soft" ? [primaryForOverlooked] : pack;
+            : scenario === "forum_codes"
+              ? [forumPrimary, forumMismatch, forumShort]
+              : scenario === "forum_ambiguous"
+                ? [ambiguousSource]
+                : [authority("SO 1", "s1")];
+  const selectedPack = scenario === "overlooked_soft" ? [primaryForOverlooked]
+    : scenario === "forum_codes" ? [forumPrimary]
+      : pack;
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
@@ -189,7 +202,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       return value as T;
     }
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
-      const value = plan(incident ? "incident" : "procedure");
+      const value = scenario === "forum_codes"
+        ? plan("procedure", "Widget Oversight Committee", "a delegate")
+        : scenario === "forum_ambiguous"
+          ? plan("procedure", "Widget Committee")
+          : plan(incident ? "incident" : "procedure");
       request.validate?.(value);
       request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
       return value as T;
@@ -294,6 +311,14 @@ test("a fully checked draft is supported", async () => {
   assert.equal(stages.find((item) => item.task === "query.plan")?.model, "gemini-3.5-flash-lite");
   assert.equal(stages.find((item) => item.task === "query.plan")?.outcome, "ok");
   assert.equal(diagnostics?.data.routingReason, "planner_procedure");
+  const planner = diagnostics?.data.planner as { hasMaterialFacts?: boolean; hasAffectedPerson?: boolean };
+  assert.equal(planner.hasMaterialFacts, false);
+  assert.equal(planner.hasAffectedPerson, false);
+  assert.equal(JSON.stringify(planner).includes("suspend"), false);
+  const listed = done.authorities as Array<{ unconfirmed?: boolean }>;
+  assert.ok(listed.length > 0);
+  assert.ok(listed.every((item) => typeof item.unconfirmed === "boolean"));
+  assert.ok(listed.every((item) => item.unconfirmed === false));
 });
 
 test("pruning an uncited line caps the done answer at partial", async () => {
@@ -356,12 +381,20 @@ test("an accepted Bottom-line reconstruction caps the done answer at partial", a
 });
 
 test("a lexical act miss stays a qualified partial answer", async () => {
-  const done = doneOf(await ask("qualified_act"));
+  const events = await ask("qualified_act");
+  const done = doneOf(events);
   assert.equal(done.answerState, "partial");
   assert.equal(done.abstained, false);
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
   const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
   assert.ok(facets.some((item) => item.class === "retrieval_uncertainty" && item.facet === "act_attestation_unconfirmed"));
+  const planner = events.find((item) => item.event === "diagnostics")?.data.planner as {
+    hasMaterialFacts?: boolean;
+    hasAffectedPerson?: boolean;
+  };
+  assert.equal(planner.hasMaterialFacts, true);
+  assert.equal(planner.hasAffectedPerson, false);
+  assert.equal(JSON.stringify(planner).includes("occurrence"), false);
 });
 
 test("the same verb with a different object stays partial and names the authority", async () => {
@@ -387,6 +420,9 @@ test("an overlooked soft act miss is qualified and is not the sole authority", a
   assert.ok(labels.includes("SO 2"));
   assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, false);
   assert.equal(listed.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
+  const doneAuthorities = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.ok(doneAuthorities.every((item) => typeof item.unconfirmed === "boolean"));
+  assert.equal(doneAuthorities.find((item) => item.citationLabel === "SO 2")?.unconfirmed, true);
 });
 
 test("a qualified source is not listed as an authority when the answer is withheld", async () => {
@@ -395,9 +431,61 @@ test("a qualified source is not listed as an authority when the answer is withhe
   assert.match(String(done.answerText), /Possibly relevant, not confirmed to apply/);
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
   assert.equal(String(done.answerText).includes("Best authorities to inspect or cite:\n- [SO 1]"), false);
-  assert.deepEqual(done.authorities, []);
+  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
+  assert.ok(listed.every((item) => typeof item.unconfirmed === "boolean"));
   const facets = done.uncertainty as Array<{ facet?: string }>;
   assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
+});
+
+const FORUM_CODE = /^(?:selector_forum|overlooked_forum)=forum-(?:identity|ambiguous):\d+$/;
+
+test("forum codes are counts and planner diagnostics are booleans", async () => {
+  const events = await withCorpusCommitteeNames([
+    "Widget Oversight Committee",
+    "Gadget Review Committee",
+    "Widget Trade Committee",
+    "Widget Review Committee",
+  ], () => ask("forum_codes"));
+  const diagnostics = events.find((item) => item.event === "diagnostics");
+  const selector = diagnostics?.data.selectorSummary as { forumCodes?: string[] };
+  const codes = selector.forumCodes ?? [];
+  assert.ok(codes.some((code) => code.startsWith("selector_forum=forum-identity:") && !code.endsWith(":0")));
+  assert.ok(codes.some((code) => code.startsWith("selector_forum=forum-ambiguous:") && !code.endsWith(":0")));
+  assert.ok(codes.some((code) => code.startsWith("overlooked_forum=forum-identity:") && !code.endsWith(":0")));
+  assert.ok(codes.some((code) => code.startsWith("overlooked_forum=forum-ambiguous:") && !code.endsWith(":0")));
+  const joined = codes.join(";");
+  assert.ok(codes.every((code) => FORUM_CODE.test(code)));
+  assert.equal(/\s/.test(joined), false);
+  assert.equal(joined.includes("Widget"), false);
+  assert.equal(joined.includes("Gadget"), false);
+  assert.equal(joined.includes("SO"), false);
+  const planner = diagnostics?.data.planner as { hasMaterialFacts?: unknown; hasAffectedPerson?: unknown };
+  assert.equal(planner.hasMaterialFacts, false);
+  assert.equal(planner.hasAffectedPerson, true);
+  assert.equal(Object.keys(planner).length, 2);
+  assert.equal(JSON.stringify(planner).includes("delegate"), false);
+  const adjudication = (diagnostics?.data.selectorSummary as { scenarioAdjudication?: unknown }).scenarioAdjudication;
+  assert.ok(adjudication);
+});
+
+test("an ambiguous committee parse is never a supported answer", async () => {
+  const events = await withCorpusCommitteeNames([
+    "Widget Trade Committee",
+    "Widget Review Committee",
+  ], () => ask("forum_ambiguous"));
+  const done = doneOf(events);
+  assert.equal(done.answerState, "partial");
+  assert.notEqual(done.answerState, "supported");
+  assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to be the body the question is about/);
+  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
+  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
+  const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
+  assert.ok(facets.some((item) => item.class === "retrieval_uncertainty" && item.facet === "forum_identity_unconfirmed"));
+  const codes = ((events.find((item) => item.event === "diagnostics")?.data.selectorSummary as { forumCodes?: string[] }).forumCodes) ?? [];
+  assert.ok(codes.some((code) => code === "selector_forum=forum-ambiguous:1"));
+  assert.ok(codes.every((code) => FORUM_CODE.test(code)));
+  assert.equal(codes.join(";").includes("Widget"), false);
 });
 
 test("an unretrieved citation falls back and the done answer is not answered", async () => {

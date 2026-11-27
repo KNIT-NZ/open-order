@@ -1,7 +1,7 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { clientCheckNote, publicScenarioAdjudication } from "@/lib/open-order/client-check-note";
+import { clientCheckNote, forumCountCodes, publicScenarioAdjudication } from "@/lib/open-order/client-check-note";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
@@ -27,6 +27,7 @@ import {
   labelBareRulings,
   parseSettlement,
   obligationPartialFacets,
+  forumIdentityOutcome,
   presidingOfficerAppealQuery,
   proceedingConsequenceQueries,
   recoverySuppressed,
@@ -35,6 +36,7 @@ import {
   resolveServedModel,
   selectOverlookedCandidates,
   stageReopeningQueries,
+  tallyForumOutcomes,
 } from "@/lib/procedural-mechanisms";
 import {
   failureDiagnostic,
@@ -75,6 +77,7 @@ import {
   buildAuthorityProfile,
   buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
+  withholdingStage,
   buildMissingSlotRecoveryRequests,
   buildProceduralQueryPlan,
   describeMissingAuthoritySlots,
@@ -636,21 +639,36 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const v40IncidentGate = adjudicationRoute.adjudicate;
           outcomeState.route = v40IncidentGate ? "incident_adjudication" : "semantic_selector";
           let actUnconfirmed = false;
-          const unconfirmedLabels = new Set<string>();
-          const noteActQualification = (labels: string[]) => {
+          let forumUnconfirmed = false;
+          const actLabels = new Set<string>();
+          const forumLabels = new Set<string>();
+          const remember = (target: Set<string>, labels: string[]) => {
             for (const label of labels) {
               const text = String(label ?? "").trim();
-              if (text) unconfirmedLabels.add(text);
+              if (text) target.add(text);
             }
-            if (unconfirmedLabels.size === 0) return;
+          };
+          const noteActQualification = (labels: string[]) => {
+            remember(actLabels, labels);
+            if (actLabels.size === 0) return;
             actUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
               outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "act_attestation_unconfirmed" });
             }
           };
-          const hiddenLabel = (label: string) => unconfirmedLabels.has(label) || [...unconfirmedLabels].some((item) => item.toLowerCase() === label.toLowerCase());
-          const clientAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
-            list.filter((item) => !hiddenLabel(String(item.citationLabel ?? "")));
+          const noteForumQualification = (labels: string[]) => {
+            remember(forumLabels, labels);
+            if (forumLabels.size === 0) return;
+            forumUnconfirmed = true;
+            if (!outcomeState.uncertainty.some((item) => item.facet === "forum_identity_unconfirmed")) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "forum_identity_unconfirmed" });
+            }
+          };
+          const hiddenLabel = (label: string) => {
+            const text = String(label ?? "");
+            const has = (set: Set<string>) => set.has(text) || [...set].some((item) => item.toLowerCase() === text.toLowerCase());
+            return has(actLabels) || has(forumLabels);
+          };
           const withUnconfirmed = <T extends { citationLabel?: string }>(list: T[]) =>
             list.map((item) => ({ ...item, unconfirmed: hiddenLabel(String(item.citationLabel ?? "")) }));
           const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
@@ -675,6 +693,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             rejectedGoverning: [],
             recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
           };
+          let recoveryRan = false;
+          let overlookedRecords: Array<{ sectionId?: string; citationLabel?: string; heading?: string | null; path?: string[] }> = [];
           if (v40IncidentGate) {
             const dossier = buildV40Dossier({
               question, searches, legacySelected: v40AuthoritySet,
@@ -733,7 +753,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   const candidates = v402RecoveryCandidates({ question, candidates: dossier, review: v40Review });
                   v40Diagnostic.recovery.candidates = candidates.map((source) => `${source.documentCorpus}:${source.citationLabel}`);
                   v40Diagnostic.recovery.status = candidates.length === 0 ? "no_eligible_sources" : "time_budget_exhausted";
+                  // The deadline status is set before recovery runs. Only entering this block counts as recovery.
                   if (candidates.length > 0 && Date.now() - started < 20_000) {
+                    recoveryRan = true;
                     send("stage", { key: "selecting", label: "Reviewing eligible governing evidence again" });
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
@@ -833,6 +855,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
             }
             const recoveryPool = selected.finalAuthorities.length === 0 ? retrieved : chain.candidates;
+            overlookedRecords = recoveryPool;
             const eligible = selectOverlookedCandidates({
               pool: recoveryPool,
               admittedIds: selected.finalAuthorities.map((item) => item.sectionId),
@@ -881,6 +904,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
           }
           const finalAuthorities = selected.finalAuthorities;
+          const forumSetting = plan.situation?.setting ?? "";
+          for (const authority of finalAuthorities) {
+            if (forumIdentityOutcome(forumSetting, authority.path ?? []) === "uncertain") {
+              noteForumQualification([authority.citationLabel]);
+            }
+          }
+          const forumCodes = [
+            ...forumCountCodes("selector_forum", tallyForumOutcomes(searches.flatMap((search) => search.results), forumSetting)),
+            ...forumCountCodes("overlooked_forum", tallyForumOutcomes(overlookedRecords, forumSetting)),
+          ];
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
 
@@ -923,6 +956,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 ? v40Diagnostic.status : v517Selection.evidenceAdmission,
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
               scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
+              forumCodes,
+            },
+            planner: {
+              hasMaterialFacts: (plan.situation?.materialFacts ?? []).some((item) => String(item ?? "").trim().length > 0),
+              hasAffectedPerson: String(plan.situation?.affectedPerson ?? "").trim().length > 0,
             },
             routingReason: adjudicationRoute.reason,
             inferredConcepts: diagnosticConcepts,
@@ -995,12 +1033,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
-            const recoveryStatus = v40Diagnostic.recovery.status;
-            const withheldStage = !v40IncidentGate
-              ? "selection"
-              : recoveryStatus !== "not_needed" && recoveryStatus !== "no_eligible_sources"
-                ? "recovery"
-                : "adjudication";
+            const withheldStage = withholdingStage({ adjudicated: v40IncidentGate, recoveryRan });
             const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
@@ -1027,7 +1060,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: clientAuthorities(authorityPayload),
+              authorities: withUnconfirmed(authorityPayload),
               fallbackReason: noAuthorityReason,
             });
 
@@ -1111,7 +1144,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload),
+                authorities: withUnconfirmed(authorityPayload),
                 fallbackReason,
               });
 
@@ -1165,7 +1198,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload),
+                authorities: withUnconfirmed(authorityPayload),
                 fallbackReason,
               });
 
@@ -1209,7 +1242,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload),
+                authorities: withUnconfirmed(authorityPayload),
                 fallbackReason,
                 claimValidationNote,
                 invalidCitations: [],
@@ -1290,7 +1323,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   latencyMs: Date.now() - started,
                   plan,
                   answerText: fallbackAnswer,
-                  authorities: clientAuthorities(authorityPayload),
+                  authorities: withUnconfirmed(authorityPayload),
                   fallbackReason,
                   claimValidationNote,
                 });
@@ -1330,7 +1363,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload),
+                authorities: withUnconfirmed(authorityPayload),
                 fallbackReason,
               });
 
@@ -1523,7 +1556,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload), fallbackReason,
+                authorities: withUnconfirmed(authorityPayload), fallbackReason,
                 claimValidationNote: clientCheckNote([
                   "responsiveness=withheld",
                   `incident_repair=${v401RepairDiagnostic}`,
@@ -1795,7 +1828,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: clientAuthorities(authorityPayload),
+                authorities: withUnconfirmed(authorityPayload),
                 fallbackReason,
                 // v29: existing debug-snapshot field, only for this failure path.
                 claimValidationNote: ooV29FailureTrace,
@@ -1833,9 +1866,17 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
+            const qualificationLines: string[] = [];
             if (actUnconfirmed) {
-              const named = [...unconfirmedLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
-              finalAnswer = `${finalAnswer}\n\nQualification:\n${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`;
+              const named = [...actLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
+              qualificationLines.push(`${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`);
+            }
+            if (forumUnconfirmed) {
+              const named = [...forumLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
+              qualificationLines.push(`${named} has not been confirmed to be the body the question is about. Check that it applies before relying on it.`);
+            }
+            if (qualificationLines.length > 0) {
+              finalAnswer = `${finalAnswer}\n\nQualification:\n${qualificationLines.join("\n")}`;
             }
             answerEdits = cited.dropped;
             if (answerEdits.length > 0) noteCheckedWithholding();
@@ -1901,7 +1942,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: clientAuthorities(authorityPayload),
+              authorities: withUnconfirmed(authorityPayload),
               fallbackReason,
               claimValidationNote: clientCheckNote([
                 `operation=${operationFailure.phase}`,

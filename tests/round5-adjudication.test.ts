@@ -9,8 +9,9 @@ import {
   type V40Authority,
   type V40ProposedWitness,
 } from "../lib/ai/scenario-adjudication";
+import { withCorpusCommitteeNames } from "../lib/committee-names";
 import { publicScenarioAdjudication } from "../lib/open-order/client-check-note";
-import { buildFallbackAnswer } from "../lib/procedural-reasoning";
+import { buildFallbackAnswer, withholdingStage } from "../lib/procedural-reasoning";
 import { actAttestation, forumIdentityMismatch, quoteAttestsActAndObject, suffixStem } from "../lib/procedural-mechanisms";
 
 const suspension = "A suspension of the sitting is permitted when the presiding officer so decides.";
@@ -68,6 +69,7 @@ test("different act words are admitted with a qualification instead of withheld"
 });
 
 test("forum type matches a generic body and rejects two different names", () => {
+  withCorpusCommitteeNames(["Widget Oversight Committee", "Gadget Review Committee"], () => {
   assert.equal(forumIdentityMismatch("select committee", ["Widget Oversight Committee"]), null);
   assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Select committees"]), null);
   assert.equal(forumIdentityMismatch("House of Representatives", ["Sittings of the House"]), null);
@@ -121,6 +123,7 @@ test("forum type matches a generic body and rejects two different names", () => 
   });
   assert.equal(house.authorities.length, 1);
   assert.deepEqual(house.qualifications, []);
+  });
 });
 
 test("an unverifiable quote is still a hard rejection", () => {
@@ -175,6 +178,34 @@ test("incident routing uses the planner event slot, not question openings", () =
   assert.equal(adjudicationRouting(question, "procedure", true, { materialFacts: ["ignored"] }).reason, "planner_procedure");
   assert.equal(adjudicationRouting(question, undefined, true, { affectedPerson: "a visitor" }).reason, "narrative_corroborated");
   assert.equal(adjudicationRouting(question, undefined, true, {}).reason, "kind_absent");
+});
+
+test("withholding stage follows the recovery that actually ran", () => {
+  const cases = [
+    { status: "not_needed", ran: false, stage: "adjudication" },
+    { status: "no_eligible_sources", ran: false, stage: "adjudication" },
+    { status: "time_budget_exhausted", ran: false, stage: "adjudication" },
+    { status: "provider_unavailable", ran: true, stage: "recovery" },
+    { status: "invalid_structured_result", ran: true, stage: "recovery" },
+    { status: "ran_nothing_admitted", ran: true, stage: "recovery" },
+  ] as const;
+  assert.equal(withholdingStage({ adjudicated: false, recoveryRan: false }), "selection");
+  for (const item of cases) {
+    const stage = withholdingStage({ adjudicated: true, recoveryRan: item.ran });
+    assert.equal(stage, item.stage, item.status);
+    const text = buildFallbackAnswer({
+      question: "synthetic",
+      planIntent: "explain_rule",
+      authorities: [],
+      effectiveCorpus: null,
+      fallbackReason: "Retrieved evidence did not satisfy the semantic authority-selection requirements.",
+      failureClass: "selection",
+      retrievedEvidenceCount: 2,
+      withheldStage: stage,
+    });
+    assert.match(text, new RegExp(`withheld at ${item.stage}`), item.status);
+    if (item.stage !== "recovery") assert.equal(text.includes("withheld at recovery"), false, item.status);
+  }
 });
 
 test("withholding text matches the stage that withheld", () => {

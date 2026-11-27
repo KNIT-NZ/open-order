@@ -2137,6 +2137,15 @@ function classifyOption(result: ProceduralSearchResult): string {
   return `Inspect or cite ${heading} to test whether it directly governs the step in issue [${result.citationLabel}].`;
 }
 
+/** The stage word follows the stage that actually ran. A deadline before recovery is adjudication. */
+export function withholdingStage(input: {
+  adjudicated: boolean;
+  recoveryRan: boolean;
+}): "selection" | "adjudication" | "recovery" {
+  if (!input.adjudicated) return "selection";
+  return input.recoveryRan ? "recovery" : "adjudication";
+}
+
 export function buildFallbackAnswer(input: {
   question: string;
   planIntent: string;

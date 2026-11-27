@@ -1,4 +1,4 @@
-const ALLOWED_KEY = /^(?:rewritten_mentions|pruned_lines|invalid_citations|ungrounded_mentions|responsiveness|incident_repair|pruned_unsupported_claims|claim_ids|appeal_attempted|appeal_corroborated|appeal_unavailable|bottom_line_before|bottom_line_after|draft_claims|rejected_claims|remaining_claims|citations_valid|mentions_valid|appeal|bottom_line_recovery|claim_check_attempts|repair|repair_attempts|operation|kind|status|code|provider|retryable|attempts|unresolved_facets|primary_refusal|recovery_refusal|disposition|recovery_candidates)$/;
+const ALLOWED_KEY = /^(?:rewritten_mentions|pruned_lines|invalid_citations|ungrounded_mentions|responsiveness|incident_repair|pruned_unsupported_claims|claim_ids|appeal_attempted|appeal_corroborated|appeal_unavailable|bottom_line_before|bottom_line_after|draft_claims|rejected_claims|remaining_claims|citations_valid|mentions_valid|appeal|bottom_line_recovery|claim_check_attempts|repair|repair_attempts|operation|kind|status|code|provider|retryable|attempts|unresolved_facets|primary_refusal|recovery_refusal|disposition|recovery_candidates|selector_forum|overlooked_forum)$/;
 const ALLOWED_BARE = new Set(["v29_semantic_fallback"]);
 const CODE_VALUE = /^[a-z0-9_.,:-]{1,120}$/;
 // Provider failure codes are uppercase (UNAVAILABLE, RESOURCE_EXHAUSTED). Only this key accepts them.
@@ -173,6 +173,20 @@ export function publicScenarioAdjudication(input: PublicAdjudication | null | un
     },
     ...nominationCounts(input),
   };
+}
+
+/** Counts only. The same key=code:count shape as the adjudication refusal lines. */
+export function forumCountCodes(
+  prefix: "selector_forum" | "overlooked_forum",
+  counts: { identity?: number; ambiguous?: number },
+): string[] {
+  const identity = Math.max(0, Math.trunc(Number(counts?.identity) || 0));
+  const ambiguous = Math.max(0, Math.trunc(Number(counts?.ambiguous) || 0));
+  const tokens = [
+    `${prefix}=forum-identity:${identity}`,
+    `${prefix}=forum-ambiguous:${ambiguous}`,
+  ];
+  return clientCheckNote(tokens)?.split(";") ?? [];
 }
 
 export function adjudicationNote(input: PublicAdjudication | null | undefined): string | null {
