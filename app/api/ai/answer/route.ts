@@ -17,6 +17,7 @@ import {
 } from "@/lib/open-order/answer-stream";
 import {
   actorClassQualificationQuery,
+  authoritiesReferencedByAnswer,
   authorisingRuleQueries,
   citationLabelsIn,
   collectRejectionKeys,
@@ -373,6 +374,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       };
 
       let send = (_event: string, _data?: unknown) => { void _event; void _data; };
+      let citationList = (_answerText: string): Array<{ citationLabel?: string; unconfirmed?: boolean }> => [];
       const run = async () => {
         const started = startedAt;
         const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
@@ -940,9 +942,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const shownAuthorities = listedAuthorities(authorityPayload);
           const shownLabels = new Set(shownAuthorities.map((authority) => authority.citationLabel.toLowerCase()));
           const shownResults = finalAuthorities.filter((authority) => shownLabels.has(authority.citationLabel.toLowerCase()));
-          send("authorities", {
-            authorities: shownAuthorities,
-          });
+          citationList = (answerText: string) => {
+            const cited = listedAuthorities(authoritiesReferencedByAnswer(answerText, authorityPayload));
+            const fallback = String(outcomeState.fallbackCode ?? "none").trim();
+            const declined = outcomeState.abstained === true || fallback !== "none";
+            return declined ? cited.filter((item) => !item.unconfirmed) : cited;
+          };
 
           const diagnosticConcepts = [
             ...new Set([
@@ -1994,6 +1999,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         bindSend(rawSend) {
           send = (event, data) => {
             if (event === "done" || event === "error") markOperationalTerminal(event);
+            if (event === "done" && data && typeof data === "object") {
+              const record = data as { answerText?: unknown };
+              const authorities = citationList(typeof record.answerText === "string" ? record.answerText : "");
+              rawSend("authorities", decorate("authorities", { authorities }));
+              rawSend(event, decorate(event, { ...data, authorities }));
+              return;
+            }
             rawSend(event, decorate(event, data));
           };
           return send;

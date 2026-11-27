@@ -483,8 +483,7 @@ test("a qualified source is not listed as an authority when the answer is withhe
   assert.match(String(done.answerText), /Possibly relevant, not confirmed to apply/);
   assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
   assert.equal(String(done.answerText).includes("Best authorities to inspect or cite:\n- [SO 1]"), false);
-  const listed = done.authorities as Array<{ citationLabel?: string; unconfirmed?: boolean }>;
-  assert.equal(listed.find((item) => item.citationLabel === "SO 1")?.unconfirmed, true);
+  assert.deepEqual(done.authorities, []);
   const facets = done.uncertainty as Array<{ facet?: string }>;
   assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
 });
@@ -709,8 +708,8 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
       unconfirmed?: boolean;
     }>;
     for (const list of [doneAuthorities, panel]) {
-      const cited = list.find((item) => item.citationLabel === "SO 1");
-      if (cited) assert.equal(cited.unconfirmed, true, site.code);
+      assert.equal(list.some((item) => item.citationLabel === "SO 1"), false, site.code);
+      assert.ok(list.every((item) => item.unconfirmed === false), site.code);
     }
   }
 });
