@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { verifiedDatabaseUrl } from "../lib/db-transport";
-import { CLOSED_CLASS } from "../lib/closed-class.js";
+import { CLOSED_CLASS, isNamedNonContent } from "../lib/closed-class.js";
 import { foldPlural } from "../lib/plural-fold.js";
 import {
   COMMITTEE_REFERENCE_SEED,
@@ -37,7 +37,9 @@ export function foldToken(word: string): string {
 
 function tokensOf(text: string): string[] {
   return (String(text ?? "").replace(/['’]s\b/gi, "").match(/\p{L}+/gu) ?? [])
-    .map(foldToken)
+    .map((word) => word.toLowerCase())
+    .filter((token) => token.length > 1)
+    .map((token) => (CLOSED_CLASS.has(token) || isNamedNonContent(token) ? token : foldToken(token)))
     .filter((token) => token.length > 1);
 }
 
