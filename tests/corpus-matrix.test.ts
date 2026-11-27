@@ -124,9 +124,9 @@ test("proceedings and class words rebuild from committed section paths", () => {
   const committedPhrases = corpusProceedingPhrases.map((phrase: string[]) => phrase.join(" "));
   assert.deepEqual(committedPhrases.slice().sort(), Object.keys(matrix.derivation.proceedings).sort());
   for (const phrase of fromPaths) assert.ok(committedPhrases.includes(phrase), phrase);
-  // The pinned 445-section pack is not in the repo. These three leaves are absent
-  // from the committed public paths, so the offline rebuild cannot derive them.
-  // Their text is the published derivation, not a stand-in heading fed back in.
+  // These three leaves are absent from the committed public matrix paths, so the
+  // offline rebuild from those paths cannot derive them. Their text is the
+  // published derivation. The pinned pack is tests/fixtures/so-pack.json.
   const absentLeaves = committedPhrases.filter((phrase) => !fromPaths.has(phrase));
   assert.deepEqual(absentLeaves.sort(), ["annual review debate", "notice of motion", "proxy vote"]);
   const classWords = deriveCommitteeClassWords(rows, listedNames);

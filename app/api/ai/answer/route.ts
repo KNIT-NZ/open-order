@@ -1565,7 +1565,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send("answer_delta", {text: fallbackAnswer});
               send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
-                latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
+                latencyMs: Date.now() - started, answerText: fallbackAnswer,
                 authorities: listedAuthorities(authorityPayload), fallbackReason,
                 claimValidationNote: clientCheckNote([
                   "responsiveness=withheld",

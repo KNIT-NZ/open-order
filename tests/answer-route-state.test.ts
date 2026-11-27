@@ -56,7 +56,8 @@ type Scenario =
   | "forum_stage_incident"
   | "forum_motion"
   | "forum_motion_incident"
-  | "planner_leak";
+  | "planner_leak"
+  | "planner_leak_incident";
 
 const forumCase: Partial<Record<Scenario, { setting: string; path: string | string[]; kind?: "incident" | "procedure" }>> = {
   forum_same: { setting: "Widget Committee", path: "Widget Committee" },
@@ -176,6 +177,7 @@ function claimsIn(prompt: string): Array<{ id: string; text: string }> {
 
 async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
   const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies"
+    || scenario === "planner_leak_incident"
     || scenario === "qualified_act" || scenario === "wrong_object" || scenario === "qualified_fallback"
     || forumCase[scenario]?.kind === "incident";
   const overlookedBody = `${QUOTE} The House may suspend business of a committee when its chair so decides.`;
@@ -244,13 +246,15 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       return value as T;
     }
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
+      const planted = {
+        searchQueries: ["SO 99 suspension", "99/999"],
+        salientTerms: ["Ruling 999 of Gloriana"],
+        notes: "SO 99; 99/999; Ruling 999 of Gloriana",
+      };
       const value = scenario === "planner_leak"
-        ? {
-          ...plan("procedure"),
-          searchQueries: ["Rule 999ZZ suspension"],
-          salientTerms: ["Gloriana Ceremonial Rule"],
-          notes: "Gloriana Ceremonial Rule Rule 999ZZ",
-        }
+        ? { ...plan("procedure"), ...planted }
+        : scenario === "planner_leak_incident"
+          ? { ...plan("incident"), ...planted }
         : scenario === "forum_codes"
         ? plan("procedure", "Widget Oversight Committee", "a delegate")
         : forumPath
@@ -261,7 +265,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
       return value as T;
     }
     const found = claimsIn(request.prompt);
-    const responsive = scenario === "repair" && !request.prompt.includes("Bottom line:")
+    const responsive = scenario === "planner_leak_incident" || (scenario === "repair" && !request.prompt.includes("Bottom line:"))
       ? { answersUserQuestion: false, reason: "withheld", unaddressedParts: ["decision"] }
       : { answersUserQuestion: true, reason: "fits", unaddressedParts: [] as string[] };
     const value = {
@@ -726,19 +730,21 @@ test("an unretrieved citation falls back and the done answer is not answered", a
 });
 
 test("planner text does not appear in any streamed event or the debug snapshot", async () => {
-  const events = await ask("planner_leak");
-  const markers = ["999ZZ", "Gloriana Ceremonial Rule", "Gloriana"];
-  const blob = JSON.stringify(events);
-  for (const marker of markers) assert.equal(blob.includes(marker), false, marker);
-  assert.equal(events.some((item) => item.event === "plan"), false);
-  const done = events.find((item) => item.event === "done");
-  assert.equal(Object.prototype.hasOwnProperty.call(done?.data ?? {}, "plan"), false);
-  const diagnostics = events.find((item) => item.event === "diagnostics")?.data ?? {};
-  const snapshot = formatAiDebugSnapshot({
-    ...EMPTY_AI_DIAGNOSTICS,
-    ...(diagnostics as object),
-    expandedQueries: [],
-    retrievals: (diagnostics as { retrievals?: never }).retrievals ?? [],
-  });
-  for (const marker of markers) assert.equal(snapshot.includes(marker), false, marker);
+  const markers = ["SO 99", "99/999", "Ruling 999 of Gloriana"];
+  for (const scenario of ["planner_leak", "planner_leak_incident"] as const) {
+    const events = await ask(scenario);
+    const blob = JSON.stringify(events);
+    for (const marker of markers) assert.equal(blob.includes(marker), false, `${scenario} ${marker}`);
+    assert.equal(events.some((item) => item.event === "plan"), false, scenario);
+    const done = events.find((item) => item.event === "done");
+    assert.equal(Object.prototype.hasOwnProperty.call(done?.data ?? {}, "plan"), false, scenario);
+    if (scenario === "planner_leak_incident") assert.equal(done?.data.fallbackCode, "not_responsive");
+    const diagnostics = events.find((item) => item.event === "diagnostics")?.data ?? {};
+    const snapshot = formatAiDebugSnapshot({
+      ...EMPTY_AI_DIAGNOSTICS,
+      ...(diagnostics as object),
+      retrievals: (diagnostics as { retrievals?: never[] }).retrievals ?? [],
+    });
+    for (const marker of markers) assert.equal(snapshot.includes(marker), false, `${scenario} snapshot ${marker}`);
+  }
 });

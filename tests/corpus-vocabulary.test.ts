@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { committeeNameRecords } from "../lib/committee-names-data.js";
 import { corpusVocabulary } from "../lib/corpus-vocabulary-data.js";
@@ -58,6 +60,14 @@ test("class words from the pack use listed body names and regenerate the committ
     ["Harbor Committee"],
   );
   assert.deepEqual(synthetic, ["gadget", "widget"]);
+});
+
+test("the proceedings generator reads the pinned pack and matches both modules", () => {
+  const run = spawnSync(process.execPath, ["--import", "tsx", "scripts/gen-corpus-proceedings.ts", "--pack", "tests/fixtures/so-pack.json", "--check"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0, run.stderr);
 });
 
 test("a made-up name matches none of the 445 standing-order paths that do not name it", () => {

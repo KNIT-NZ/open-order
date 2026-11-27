@@ -14,9 +14,14 @@ const REASONS = new Set([
 const DISPOSITION_STATUS = new Set(["admitted", "rejected", "not_nominated", "withheld_no_primary", "not_reviewed_limit"]);
 const ADJUDICATION_STATUS = new Set([
   "v40_quoted_source_adjudication", "v40_no_governing_witness", "v402_independent_governing_recovery",
-  "no_retrieved_source_bodies", "not_reported", "not_needed",
+  "no_retrieved_source_bodies", "not_reported", "not_needed", "not_invoked",
+  "no_eligible_sources", "time_budget_exhausted", "provider_unavailable",
+  "invalid_structured_result", "accepted_source_witness",
 ]);
-const FAILURE_KIND = new Set(["configuration", "rate_limited", "unavailable", "upstream", "unknown", "parse", "validation", "timeout"]);
+const FAILURE_KIND = new Set([
+  "configuration", "rate_limited", "unavailable", "upstream", "unknown", "parse", "validation", "timeout",
+  "provider_transient", "provider_nonretryable", "validation_format", "application_or_unknown",
+]);
 
 function knownReason(raw: string): string {
   const text = String(raw ?? "").trim().toLowerCase();
@@ -60,8 +65,24 @@ export function rejectionCodes(entries: readonly string[] | undefined): string[]
   return [`rejected=${total}`, ...[...counts].map(([code, count]) => `${code}=${count}`)];
 }
 
+function publicDispositionCount(entry: string): string | null {
+  const eq = entry.lastIndexOf("=");
+  if (eq < 0 || !/^\d{1,4}$/.test(entry.slice(eq + 1))) return null;
+  const key = entry.slice(0, eq);
+  const colon = key.indexOf(":");
+  if (colon < 0) return null;
+  const status = dispositionStatus(key.slice(0, colon));
+  const reason = knownReason(key.slice(colon + 1));
+  if (status === "other") return null;
+  return `${status}:${reason}=${entry.slice(eq + 1)}`;
+}
+
 function statusCounts(rows: readonly AiSourceDisposition[] | undefined, prior?: readonly string[]): string[] {
-  const counted = (prior ?? []).filter((item) => COUNTED.test(item));
+  const counted = (prior ?? []).flatMap((item) => {
+    if (!COUNTED.test(item)) return [];
+    const checked = publicDispositionCount(item);
+    return checked ? [checked] : [];
+  });
   if (counted.length > 0 || !rows || rows.length === 0) return counted;
   const counts = new Map<string, number>();
   for (const row of rows) {

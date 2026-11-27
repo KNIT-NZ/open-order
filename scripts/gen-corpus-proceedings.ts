@@ -9,7 +9,7 @@
  * published derivation.
  * Does not print headings or connection strings.
  */
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Pool } from "pg";
@@ -29,7 +29,7 @@ const STOPWORDS = new Set([
 
 const FORUM_WORDS = new Set(["committee", "committees", "house", "chamber"]);
 
-export type HeadingRow = { heading?: string | null; path?: string[] | null };
+export type HeadingRow = { heading?: string | null; path?: string[] | null; section_type?: string | null };
 
 export function foldToken(word: string): string {
   return foldPlural(word);
@@ -185,18 +185,43 @@ export function listedBodyNames(records: Array<{ path?: string[] | null }>): str
   }).filter((name) => name.length > 0);
 }
 
+function rowsFromPack(packPath: string): HeadingRow[] {
+  const pack = JSON.parse(readFileSync(packPath, "utf8")) as { sections?: HeadingRow[] };
+  return (pack.sections ?? []).filter((section) => section.section_type === "standing_order");
+}
+
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.error("DATABASE_URL is required.");
-    process.exit(1);
-  }
-  const rows = await readProceedingRows(connectionString);
-  const derived = deriveCorpusProceedings(rows);
-  writeFileSync(modulePath(), renderCorpusProceedingsModule(derived));
+  const packFlag = process.argv.indexOf("--pack");
   const { committeeNameRecords } = await import("../lib/committee-names-data.js");
+  let rows: HeadingRow[];
+  if (packFlag >= 0) {
+    const packPath = process.argv[packFlag + 1];
+    if (!packPath) throw new Error("--pack needs a file");
+    rows = rowsFromPack(packPath);
+  } else {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      console.error("DATABASE_URL is required.");
+      process.exit(1);
+    }
+    rows = await readProceedingRows(connectionString);
+  }
+  const derived = deriveCorpusProceedings(rows);
   const classes = deriveCommitteeClassWords(rows, listedBodyNames(committeeNameRecords));
-  writeFileSync(classModulePath(), renderCommitteeClassModule(classes));
+  const proceedings = renderCorpusProceedingsModule(derived);
+  const classModule = renderCommitteeClassModule(classes);
+  if (process.argv.includes("--check")) {
+    const sameProceedings = readFileSync(modulePath(), "utf8") === proceedings;
+    const sameClasses = readFileSync(classModulePath(), "utf8") === classModule;
+    if (!sameProceedings || !sameClasses) {
+      console.error("generated modules do not match the fixture");
+      process.exit(1);
+    }
+    console.log(`Checked ${derived.phrases.length} proceeding phrases and ${classes.length} class words.`);
+    return;
+  }
+  writeFileSync(modulePath(), proceedings);
+  writeFileSync(classModulePath(), classModule);
   console.log(`Wrote ${derived.phrases.length} proceeding phrases and ${classes.length} class words.`);
 }
 

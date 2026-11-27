@@ -252,4 +252,36 @@ test("code-shaped identifiers do not pass the client note or the adjudication st
     assert.equal(sent.status, "other");
   }
   assert.equal(clientCheckNote(["claim_ids=claim-1,claim-2", "claim_ids=the_member_said"]), "claim_ids=claim-1,claim-2");
+  for (const shape of ["localhost:5432", "sec_48213", "section-48213", "48213", "so-9", "s.o.9", "fe80::1", "claim-1,550e8400-e29b-41d4-a716-446655440000"]) {
+    assert.equal(clientCheckNote([`repair=${shape}`, `appeal=${shape}`]), null, shape);
+  }
+  const outside = "standing_orders:QX OUTSIDE DOSSIER";
+  const outsideRaw = {
+    status: "v40_quoted_source_adjudication",
+    candidateCount: 1,
+    selected: [],
+    rejected: [],
+    gaps: ["first private gap", "second private gap"],
+    providerAttempts: 1,
+    dossier: [],
+    retrievedOutsideDossier: [outside],
+    dispositions: [],
+    unavailableNominations: 0,
+    recovery: { status: "not_needed", candidates: [], dispositions: [], unavailableNominations: 0, selected: [], rejected: [] },
+  };
+  const once = publicScenarioAdjudication(outsideRaw);
+  const twice = publicScenarioAdjudication(once);
+  assert.equal(JSON.stringify(once).includes("QX OUTSIDE"), false);
+  assert.equal(once.outsideDossierCount, 1);
+  assert.deepEqual(twice.gaps, once.gaps);
+  assert.equal(JSON.stringify(twice).includes("unresolved_facets=2:"), false);
+  const snapshot = formatAiDebugSnapshot({
+    ...EMPTY_AI_DIAGNOSTICS,
+    selectorSummary: {
+      candidateCount: 0, minObligationCoverage: 0, allObligationsComplete: false,
+      obligationDetails: [], prePruneLabels: [], selectedLabels: [], scenarioAdjudication: outsideRaw,
+    },
+  });
+  assert.equal(snapshot.includes("QX OUTSIDE"), false);
+  assert.match(snapshot, /Outside dossier: 1/);
 });

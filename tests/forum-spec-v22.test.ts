@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.12.json", import.meta.url), "utf8"));
+const spec = JSON.parse(readFileSync(new URL("./fixtures/forum-spec-v2.14.json", import.meta.url), "utf8"));
 
 type SpecRow = {
   id: string;
@@ -24,6 +24,7 @@ type SpecRow = {
   softActMiss: boolean;
   expected: Record<string, string>;
   deferred?: string | null;
+  informationOnly?: string | null;
 };
 
 type RunAnswerRoute = typeof import("../app/api/ai/answer/route").runAnswerRoute;
@@ -177,12 +178,12 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.12 matches the fixture on either route", async () => {
+test("forum spec v2.14 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;
   for (const row of spec.rows as SpecRow[]) {
-    if (row.deferred) continue;
+    if (row.deferred || row.informationOnly === "batch2-log") continue;
     const names = spec.fixtures.committeeList[row.committeeList] as string[];
     await withCorpusCommitteeNames(names, async () => {
       for (const route of row.routes) {

@@ -1,6 +1,6 @@
 {
- "version": "forum-spec-v2.12",
- "schema": "see PR15-forum-spec-v2.12-ENGINEER-SAFE.md (which refers to the v2.11 and earlier mds)",
+ "version": "forum-spec-v2.14",
+ "schema": "see PR15-forum-spec-v2.14-ENGINEER-SAFE.md (which refers to the v2.13 and earlier mds)",
  "fixtures": {
   "committeeList": {
    "fixture": [
@@ -8180,6 +8180,809 @@
    },
    "rule": "R4",
    "reason": "[R4] R4: the name-bearing part of a segment adds a name word or a referent. (Classless setting: the leaf names the setting and adds a referent word that is also a generated function word (addendum 2 C).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-184",
+   "setting": "the chair",
+   "question": "During the chair, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 4",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "Select committees",
+     "kind": "committee_generic",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Time limits",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR17",
+   "reason": "[FR17] FR17: a committee chapter or Committee-of-the-whole ancestor caps a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: corpus word, committee part.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-185",
+   "setting": "the chair",
+   "question": "During the chair, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Committee of the whole House",
+     "kind": "cotwh",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Time limits",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR17",
+   "reason": "[FR17] FR17: a committee chapter or Committee-of-the-whole ancestor caps a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: corpus word, Committee-of-the-whole part.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-186",
+   "setting": "the chair",
+   "question": "During the chair, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 5",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "THIRD READING",
+     "kind": "proceeding:reading",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Time limits",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR20",
+   "reason": "[FR20] FR20: an identity-bearing ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: corpus word, proceeding part.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-187",
+   "setting": "the Oskendale",
+   "question": "During the Oskendale, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 4",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "Select committees",
+     "kind": "committee_generic",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Oskendale member",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR17",
+   "reason": "[FR17] FR17: a committee chapter or Committee-of-the-whole ancestor caps a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: named setting, committee part.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-188",
+   "setting": "the Oskendale",
+   "question": "During the Oskendale, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Committee of the whole House",
+     "kind": "cotwh",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Oskendale member",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR17",
+   "reason": "[FR17] FR17: a committee chapter or Committee-of-the-whole ancestor caps a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: named setting, Committee-of-the-whole part.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-189",
+   "setting": "the Oskendale",
+   "question": "During the Oskendale, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 5",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "THIRD READING",
+     "kind": "proceeding:reading",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Oskendale member",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "FR20",
+   "reason": "[FR20] FR20: an identity-bearing ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: named setting, proceeding part.)"
+  },
+  {
+   "settingKind": "proceeding",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-190",
+   "setting": "the Quorvane debate",
+   "question": "In the Quorvane debate, may a member speak twice?",
+   "action": "speak twice",
+   "body": "A member may speak twice.",
+   "path": [
+    {
+     "text": "Chapter 3",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "QUORVANE",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 5",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Quorvane debate",
+     "kind": "proceeding:debate",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5",
+   "reason": "[R5] R5: same or generic proceeding on the leaf. (D-6 (r5m): a headed setting under a bare proper-noun ancestor that names the setting itself.)"
+  },
+  {
+   "id": "S-191",
+   "setting": "a select committee",
+   "question": "During a select committee, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 5",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 9",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Transfer to select committee",
+     "kind": "committee_generic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "settingKind": "committee",
+   "pathClaimKind": "committee",
+   "specificity": "generic",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "generic_passes",
+   "policyCall": null,
+   "stratum": "committee|committee|generic",
+   "deferred": null,
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "P-generic",
+   "reason": "[P-generic] P-generic: no specific committee in the path. (D-8 (r5m): a generic committee name against a generic 'X to select committee' leaf (FR21/FR22).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-192",
+   "setting": "the sizes",
+   "question": "During the sizes, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Time limits",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "batch2-log",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-4(1)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (batch2-log: plural-fold residue (w+s/w+es kept for Batch 1): '-zes' folds to '-z', so a plural of a corpus word is a name word.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-193",
+   "setting": "the lobby",
+   "question": "During the lobby, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Time limits",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "batch2-log",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-4(1)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (batch2-log: plural-fold residue (w+s/w+es kept for Batch 1): the singular of a corpus '-ies' plural is a name word.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-194",
+   "setting": "the Wendlecote",
+   "question": "During the Wendlecote, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Wendlecote Day",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "batch2-log",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (batch2-log: a name plus a sparse event word that is a generated function word but not a referent (known F+ limit).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-195",
+   "setting": "the clerk",
+   "question": "During the clerk, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Clerk's roster",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (R1 (addendum 3): a corpus-word setting against a leaf that carries the same word (the proceeding route) and adds a name word.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-196",
+   "setting": "the second",
+   "question": "During the second, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Halvergate rules",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-3/R2",
+   "reason": "[T-3/R2] T-3(b) (R2): the leaf carries a name word the classless setting lacks. (R2 (addendum 3): T-3(b) for a corpus-word setting; the leaf carries a name word the setting lacks.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-197",
+   "setting": "the chair",
+   "question": "During the chair, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "CHAIRPERSONS",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "The chair",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (R3 (addendum 3): a leaf equal to the setting beats a prefix-overlapping ancestor.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-198",
+   "setting": "the ballot",
+   "question": "During the ballot, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Ballot budget",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (R4 (addendum 3): a name-bearing corpus-word leaf that adds a referent word.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-199",
+   "setting": "the ballot",
+   "question": "During the ballot, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Ballot papers",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5m",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (R4 (addendum 3): a name-bearing corpus-word leaf that adds only an ordinary corpus word (ruling 4, not ruling 3).)"
   }
  ],
  "changelog": [
@@ -8235,6 +9038,9 @@
   "Rows re-derived under these rulings: S-170 becomes qualified because its combined heading adds a second name word. S-177 becomes supported because 'building' is an ordinary word. The new rows S-180 and S-181 are information only for 5l and binding from r5l.",
   "v2.12 encodes rulings addendum 2 (PR15-rulings-r5l-addendum-2-ENGINEER-SAFE.md). Combined headings: before the ruling-4 test, a segment that contains the name word is split at 'and', 'or', '&' and commas, and only the part that contains the name word is tested. S-170 is supported again, and FR20 combined-heading behaviour stands.",
   "Ruling-4 reduction: generated referent words, referent phrases and the committee head word are never removed as function words, even when they appear in the top-60 list.",
-  "Ruling 4 applies to the name-bearing segments (their name-bearing parts). Ruling 3, overlap without equality, applies to every other segment. Name words take part in the prefix test, which needs a prefix of at least 4 characters. New rows S-182 and S-183 are information only for 5l and binding from r5l."
+  "Ruling 4 applies to the name-bearing segments (their name-bearing parts). Ruling 3, overlap without equality, applies to every other segment. Name words take part in the prefix test, which needs a prefix of at least 4 characters. New rows S-182 and S-183 are information only for 5l and binding from r5l.",
+  "v2.13 adds rows for the round-5m rulings. D-7: for classless settings the FR16/R7, FR17 and FR20 ancestor checks run whether or not the leaf equals the setting (S-184 to S-189, expected qualified). D-6: a bare proper-noun ancestor that names the setting itself never caps it; only a different proceeding caps, as in S-174 (S-190, expected supported). D-8: a generic committee mention after a generated function word is generic, so a generic committee name against an 'X to select committee' leaf is supported under FR21/FR22 (S-191). These rows are binding from r5m.",
+  "Batch-2 log (information only, informationOnly 'batch2-log'): S-192 and S-193 record the current Batch-1 expectation for the plural-fold residue (the w+s/w+es rule stays for Batch 1); S-194 records a name plus a sparse event word that ruling 4 strips (a known F+ limit, no hand list). No existing expectation changed.",
+  "v2.14 encodes rulings addendum 3 (PR15-rulings-r5m-addendum-3-ENGINEER-SAFE.md). R1: for a classless setting T-3 and T-4 decide the result on every route, including the proceeding route (S-195). R2: T-3(b) applies to corpus-word settings (S-196). R3: a leaf equal to the setting, after articles and generated function words are removed with referents kept, beats a mere ruling-3 prefix overlap in an ancestor; the FR16/R7, FR17 and FR20 ancestor conflicts still run (S-197). R4: a segment or split part is name-bearing when it contains the setting's distinguishing token, the name word or for a corpus-word setting its content word, matched exactly; ruling 4 applies to name-bearing segments including the leaf, and ruling 3 to every other segment (S-198, S-199). R5 is covered by S-191. New rows are binding from r5m. No existing expectation changed."
  ]
 }
