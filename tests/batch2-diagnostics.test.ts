@@ -194,6 +194,20 @@ test("a joined number after one name is a provision unless a quantity word follo
   });
   assert.equal(flagged.rewrittenText.includes("99"), false);
   assert.notEqual(flagged.rewrittenText, speaker);
+  for (const possessive of ["SO 1 and 99 Members' bills", "SO 1 and 99 days' notice"]) {
+    const keptNumber = rewriteForbiddenAuthorityMentions({ answerText: possessive, authorities: admitted });
+    assert.equal(keptNumber.rewrittenText.includes("99"), false, possessive);
+  }
+  const bracket = validateAnswerCitations({
+    answerText: "The House sits [SO 1 and 2 members].",
+    authorities: admitted,
+  });
+  assert.equal(bracket.ok, true);
+  const possessiveBracket = validateAnswerCitations({
+    answerText: "The House sits [SO 1 and 99 Members' bills].",
+    authorities: admitted,
+  });
+  assert.equal(possessiveBracket.ok, false);
 });
 
 test("an over-long standing-order number is consumed whole", () => {

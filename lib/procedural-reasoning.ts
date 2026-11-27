@@ -1844,7 +1844,7 @@ function citationCandidates(prefix: string, part: string): string[] {
 }
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
-function citationIsGrounded(cited: string, allowedLabels: Set<string>): boolean {
+function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
   const parts = citationParts(cited);
   let prefix = "";
   let parent = "";
@@ -1856,6 +1856,7 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>): boolean 
       if (!ok) return false;
       continue;
     }
+    if (QUANTITY_CONTINUATION.test(part)) continue;
     if (/^\d+[a-z]*$/i.test(part)) {
       const resolved = citationCandidates(prefix, part).find((item) => isCitationAllowed(item, allowedLabels));
       if (!resolved) return false;
@@ -1868,8 +1869,11 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>): boolean 
     const lead = part.match(/^(.*?)(?=\d)/);
     prefix = lead?.[1] ?? prefix;
   }
-  const allowed = allowedSet([...allowedLabels].map((citationLabel) => ({ citationLabel })));
-  return mentionSpans(cited, allowed).every((span) => span.admitted && !span.suffix);
+  // One number and no fraction cannot hide a second provision. The full detector stays
+  // for every other bracket, where a list, a ruling, or a second name can.
+  const numbers = cited.match(/\d+/g);
+  if ((numbers?.length ?? 0) <= 1 && !cited.includes("/")) return true;
+  return mentionSpans(cited, allowedForms).every((span) => span.admitted && !span.suffix);
 }
 
 function stripBracketedCitations(text: string): string {
@@ -1893,18 +1897,25 @@ const WS1 = `[${WS_CLASS}]+`;
 const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
 // A joined number is a provision unless a curated follower comes next. Any other word stays a provision.
+// A word followed by an apostrophe is not a follower: "Members' bills" still names 99.
 const FOLLOWER = String.raw`(?:per${WS1}cent|calendar${WS1}days|working${WS1}days|sitting${WS1}days|members?|mps?|people|persons|questions?|bills?|motions|amendments|votes|times|percent|days|hours|hrs|hr|minutes|mins|min|seconds|secs|weeks|months|years|am|pm|o'clock)`;
-const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1})?${FOLLOWER}`;
+const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1})?${FOLLOWER}(?!['’])`;
 const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.)|${WS}%)`;
+const QUANTITY_CONTINUATION = new RegExp(String.raw`^\d{1,6}[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?${WS1}(?:or${WS1}(?:more|fewer|less)${WS1})?(?:${FOLLOWER}(?!['’])\b|a\.m\.|p\.m\.|%)$`, "i");
 const LIST_SPAN = `${SO_NUM}(?:${JOINED})*`;
 const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
 const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;
 // N/M never starts in the middle of a longer number. A fraction after an SO name takes the name with it.
+// (?<!\d) does not change a match the all-or-nothing number already takes whole. It stays so a
+// shorter alternative cannot resume on the second digit of "12/9".
 const RULING_NUM = String.raw`(?<!\d)\d{1,6}\/\d{1,6}(?!\d)`;
 const PROVISION_MENTION = String.raw`\b(?:${PLURAL_INTRO}|${SINGULAR_INTRO})${WS}${RULING_NUM}|\b${PLURAL_INTRO}${WS}${LIST_SPAN}|\b${SINGULAR_INTRO}${WS}${SO_NUM}(?:${JOINED})*|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d{1,6}[a-z]{0,4}|(?:table|part)${WS1}\d{1,6}${WS1}row${WS1}\d{1,6}|note)\b|\bspeakers?'?${WS1}rulings?${WS}${RULING_NUM}|\bs\.?${WS}r\.?${WS}${RULING_NUM}|\b${RULING_NUM}\b`;
 
+let provisionPattern: RegExp | undefined;
 function answerMentionPattern(): RegExp {
-  return new RegExp(PROVISION_MENTION, "gi");
+  provisionPattern ??= new RegExp(PROVISION_MENTION, "gi");
+  provisionPattern.lastIndex = 0;
+  return provisionPattern;
 }
 
 function allowedProvisionForms(label: string): string[] {
@@ -2055,12 +2066,13 @@ export function validateAnswerCitations(input: {
   const allowedLabels = new Set(
     input.authorities.map((authority) => authority.citationLabel),
   );
+  const allowedForms = allowedSet(input.authorities);
 
   const invalidCitations = [
     ...new Set(
       cited.filter(
         (citation) =>
-          !citationIsGrounded(citation, allowedLabels) ||
+          !citationIsGrounded(citation, allowedLabels, allowedForms) ||
           looksLikeEmbeddedAuthorityReference(citation),
       ),
     ),
@@ -2098,10 +2110,11 @@ function isSubstantiveSection(section: string | null): boolean {
 function lineHasAllowedCitation(
   line: string,
   allowedLabels: Set<string>,
+  allowedForms: Set<string>,
 ): boolean {
   const citations = extractInlineCitations(line);
   if (citations.length === 0) return false;
-  return citations.every((citation) => citationIsGrounded(citation, allowedLabels));
+  return citations.every((citation) => citationIsGrounded(citation, allowedLabels, allowedForms));
 }
 
 function isLikelyBestAuthorityLine(line: string): boolean {
@@ -2155,6 +2168,7 @@ export function pruneValidatedAnswerContent(input: {
   const allowedLabels = new Set(
     input.authorities.map((authority) => authority.citationLabel),
   );
+  const allowedForms = allowedSet(input.authorities);
 
   const lines = normalizeAnswerFormatting(input.answerText).split("\n");
   const kept: string[] = [];
@@ -2187,7 +2201,7 @@ export function pruneValidatedAnswerContent(input: {
     }
 
     if (isSubstantiveSection(currentSection)) {
-      if (lineHasAllowedCitation(trimmed, allowedLabels)) {
+      if (lineHasAllowedCitation(trimmed, allowedLabels, allowedForms)) {
         kept.push(line);
       } else {
         const named = extractInlineCitations(trimmed).length === 0
