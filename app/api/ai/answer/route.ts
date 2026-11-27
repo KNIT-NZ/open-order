@@ -987,14 +987,22 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const declined = outcomeState.abstained === true || fallback !== "none";
             return declined ? cited.filter((item) => !item.unconfirmed) : cited;
           };
-          const verifiedMentionCheck = (answerText: string) => validateAnswerAuthorityMentions({
+          const mentionLabels = authorityPayload.map((authority) => ({ citationLabel: authority.citationLabel }));
+          const checkMentions = (answerText: string) => validateAnswerAuthorityMentions({
             answerText,
-            authorities: finalAuthorities.map((authority) => ({
-              citationLabel: authority.citationLabel,
-              sectionContent: authority.sectionContent,
-            })),
-            acceptVerifiedCrossReferences: true,
+            authorities: mentionLabels,
           });
+          const rewriteMentions = (answerText: string) => {
+            if (checkMentions(answerText).ok) return answerText;
+            const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
+            if (rewrite.removedMentions.length > 0) {
+              mentionRewrites += rewrite.removedMentions.length;
+              outcomeState.rewritten = true;
+              const mentionEdit = mentionRewriteEdit(mentionRewrites);
+              if (mentionEdit) answerEdits = [mentionEdit];
+            }
+            return normalizeAnswerFormatting(rewrite.rewrittenText);
+          };
 
           const diagnosticConcepts = [
             ...new Set([
@@ -1321,24 +1329,10 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               return;
             }
 
-            const authorityMentionValidation = validateAnswerAuthorityMentions({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
-
-            if (!authorityMentionValidation.ok) {
-              const rewrite = rewriteForbiddenAuthorityMentions({
-                answerText: finalAnswer,
-                authorities: finalAuthorities.map((authority) => ({
-                  citationLabel: authority.citationLabel,
-                  sectionContent: authority.sectionContent,
-                })),
-              });
-
-              finalAnswer = normalizeAnswerFormatting(rewrite.rewrittenText);
-              mentionRewrites += rewrite.removedMentions.length;
-              const mentionEdit = mentionRewriteEdit(mentionRewrites);
-              if (mentionEdit) answerEdits = [mentionEdit];
+            if (!checkMentions(finalAnswer).ok) {
+              const beforeRewrite = mentionRewrites;
+              finalAnswer = rewriteMentions(finalAnswer);
+              const removedCount = mentionRewrites - beforeRewrite;
 
               const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
@@ -1349,16 +1343,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               noteClaimRemovals(secondPrune.removalCodes);
 
               rewriteNote = clientCheckNote([
-                `rewritten_mentions=${boundedCount(rewrite.removedMentions.length, COUNT_DIGITS)}`,
+                `rewritten_mentions=${boundedCount(removedCount, COUNT_DIGITS)}`,
                 secondPrune.removedLines.length > 0
                   ? `pruned_lines=${boundedCount(secondPrune.removedLines.length, COUNT_DIGITS)}`
                   : null,
               ]);
-              if (rewrite.removedMentions.length > 0) outcomeState.rewritten = true;
+              if (removedCount > 0) outcomeState.rewritten = true;
               if (secondPrune.removedLines.length > 0) outcomeState.pruned = true;
-              if (rewrite.removedMentions.length > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
+              if (removedCount > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
 
-              const recheckMentions = verifiedMentionCheck(finalAnswer);
+              const recheckMentions = checkMentions(finalAnswer);
 
               const recheckCitations = validateAnswerCitations({
                 answerText: finalAnswer,
@@ -1520,12 +1514,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 repairedAnswer = removeEmptyAnswerSections(
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
+                repairedAnswer = rewriteMentions(repairedAnswer);
                 noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = validateAnswerCitations({
                   answerText: repairedAnswer, authorities: authorityPayload,
                 });
-                const repairedMentions = verifiedMentionCheck(repairedAnswer);
+                const repairedMentions = checkMentions(repairedAnswer);
                 const qualificationVetoes = findOmittedSourceQualifications({
                   claims: repairedClaims, authorities: finalAuthorities,
                 });
@@ -1751,7 +1746,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               answerText: finalAnswer,
               authorities: authorityPayload,
             });
-            let finalMentionValidation = verifiedMentionCheck(finalAnswer);
+            let finalMentionValidation = checkMentions(finalAnswer);
 
             let hasBottomLine = answerSectionHasContent(
               finalAnswer,
@@ -1788,7 +1783,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   validate: (value) => { bottomLineRecoverySchema.parse(value); },
                 });
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
-                const line = recovery.bottomLine.trim();
+                const line = rewriteMentions(recovery.bottomLine.trim()).replace(/\s*\n\s*/g, " ").trim();
                 if (line.length >= 20 && !line.includes("\n") &&
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
@@ -1797,7 +1792,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     answerText: candidate,
                     authorities: authorityPayload,
                   }).ok;
-                  const mentionOK = verifiedMentionCheck(candidate).ok;
+                  const mentionOK = checkMentions(candidate).ok;
                   const qualificationOK = findOmittedSourceQualifications({
                     claims: candidateClaims,
                     authorities: finalAuthorities,
@@ -1825,7 +1820,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                         answerText: finalAnswer,
                         authorities: authorityPayload,
                       });
-                      finalMentionValidation = verifiedMentionCheck(finalAnswer);
+                      finalMentionValidation = checkMentions(finalAnswer);
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
                       outcomeState.repairAccepted = true;

@@ -23,37 +23,32 @@ if (!process.env.DATABASE_URL) {
 
 const QUOTE = "The House may suspend the sitting when the Speaker so decides.";
 
-test("a cross-reference quoted from an admitted source keeps its number", () => {
-  const source = "A motion is subject to Standing Order 39(1) before the House decides.";
+test("an unretrieved subsection is rewritten without a dangling fragment", () => {
   const rewritten = rewriteForbiddenAuthorityMentions({
     answerText: "The motion is subject to Standing Order 39(1) [SO 146].",
-    authorities: [{ citationLabel: "SO 146", sectionContent: source }],
+    authorities: [{ citationLabel: "SO 146" }],
   });
-  assert.match(rewritten.rewrittenText, /Standing Order 39\(1\) \(referred to in SO 146; not retrieved\)/);
+  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.equal(rewritten.rewrittenText.includes("39"), false);
+  assert.equal(rewritten.rewrittenText.includes("(1)"), false);
   assert.equal(rewritten.rewrittenText.includes("the retrieved authority"), false);
-  assert.equal(rewritten.rewrittenText.includes("authority (1)"), false);
-  assert.equal(rewritten.removedMentions.length, 1);
+  assert.equal(rewritten.rewrittenText.includes("referred to in"), false);
   assert.equal(validateAnswerAuthorityMentions({
     answerText: rewritten.rewrittenText,
-    authorities: [{ citationLabel: "SO 146", sectionContent: source }],
-    acceptVerifiedCrossReferences: true,
+    authorities: [{ citationLabel: "SO 146" }],
   }).ok, true);
-  assert.equal(validateAnswerAuthorityMentions({
-    answerText: rewritten.rewrittenText,
-    authorities: [{ citationLabel: "SO 146", sectionContent: source }],
-  }).ok, false);
 });
 
 test("a model-written cross-reference suffix does not make an unretrieved provision valid", () => {
   const text = "Standing Order 99 (referred to in SO 1; not retrieved) lets the Speaker adjourn the House [SO 1]";
   const checked = validateAnswerAuthorityMentions({
     answerText: text,
-    authorities: [{ citationLabel: "SO 1", sectionContent: "The House may suspend the sitting when the Speaker so decides." }],
+    authorities: [{ citationLabel: "SO 1" }],
   });
   assert.equal(checked.ok, false);
   const rewritten = rewriteForbiddenAuthorityMentions({
     answerText: text,
-    authorities: [{ citationLabel: "SO 1", sectionContent: "The House may suspend the sitting when the Speaker so decides." }],
+    authorities: [{ citationLabel: "SO 1" }],
   });
   assert.equal(rewritten.rewrittenText.includes("Standing Order 99"), false);
   assert.equal(rewritten.rewrittenText.includes("referred to in SO 1"), false);
@@ -61,7 +56,7 @@ test("a model-written cross-reference suffix does not make an unretrieved provis
 });
 
 test("tolerant provision forms are detected and a range is rewritten as one unit", () => {
-  const admitted = [{ citationLabel: "SO 1", sectionContent: "The House may sit." }];
+  const admitted = [{ citationLabel: "SO 1" }];
   for (const text of [
     "S.O. 99",
     "Standing  Order 99",
@@ -81,16 +76,51 @@ test("tolerant provision forms are detected and a range is rewritten as one unit
   assert.match(range.rewrittenText, /a provision that was not retrieved/);
   const labelled = rewriteForbiddenAuthorityMentions({
     answerText: "Apply SR 2/3 to the sitting.",
-    authorities: [{ citationLabel: "SR 2/3", sectionContent: "The ruling stands." }],
+    authorities: [{ citationLabel: "SR 2/3" }],
   });
   assert.equal(labelled.removedMentions.length, 0);
   assert.match(labelled.rewrittenText, /SR 2\/3/);
+  const bare = rewriteForbiddenAuthorityMentions({
+    answerText: "Apply 2/3 to the sitting.",
+    authorities: [{ citationLabel: "2/3" }],
+  });
+  assert.equal(bare.removedMentions.length, 0);
+  assert.match(bare.rewrittenText, /2\/3/);
+  for (const text of ["SO 1 and 99", "SO 1, 99", "SO 1 to 99", "SO 1-99", "Standing Orders 1, 99, and 100", "SO 1 or 99", "SO 1 & 99", "SO 1 through 99", "SO 1–99", "Standing Order No. 99", "Standing-Order 99"]) {
+    const gap = rewriteForbiddenAuthorityMentions({ answerText: `See ${text} [SO 1].`, authorities: admitted });
+    assert.equal(gap.rewrittenText.includes("99"), false, text);
+    assert.match(gap.rewrittenText, /a provision that was not retrieved/, text);
+  }
+  for (const gap of ["\n", "\u2009", "\u202f", "\u200b"]) {
+    assert.equal(validateAnswerAuthorityMentions({
+      answerText: `Read SO${gap}99 before sitting.`,
+      authorities: admitted,
+    }).ok, false, JSON.stringify(gap));
+  }
+  const ruling = rewriteForbiddenAuthorityMentions({
+    answerText: "Speakers' ruling 2/9 lets the House sit [SO 2].",
+    authorities: [{ citationLabel: "SO 2" }],
+  });
+  assert.equal(ruling.rewrittenText.includes("2/9"), false);
+  assert.match(ruling.rewrittenText, /a provision that was not retrieved/);
+});
+
+test("mention checks stay linear in the number of mentions", () => {
+  const authorities = Array.from({ length: 8 }, (_, index) => ({
+    citationLabel: `SO ${index + 1}`,
+  }));
+  const answerText = Array.from({ length: 4000 }, (_, index) => `See Standing Order ${1000 + index}.`).join(" ");
+  const started = performance.now();
+  const checked = validateAnswerAuthorityMentions({ answerText, authorities });
+  rewriteForbiddenAuthorityMentions({ answerText, authorities });
+  assert.equal(checked.ok, false);
+  assert.ok(performance.now() - started < 500);
 });
 
 test("a bare number in an admitted source is not a provision reference", () => {
   const rewritten = rewriteForbiddenAuthorityMentions({
     answerText: "The motion is subject to Standing Order 39 [SO 1].",
-    authorities: [{ citationLabel: "SO 1", sectionContent: "The debate lasted 39 minutes." }],
+    authorities: [{ citationLabel: "SO 1" }],
   });
   assert.equal(rewritten.rewrittenText.includes("Standing Order 39"), false);
   assert.equal(rewritten.rewrittenText.includes("referred to in SO 1"), false);
@@ -100,7 +130,7 @@ test("a bare number in an admitted source is not a provision reference", () => {
 test("an invented authority number is named as a gap and is not counted as question text", () => {
   const rewritten = rewriteForbiddenAuthorityMentions({
     answerText: "Unlike Standing Order 99(2), the House may sit [SO 1].",
-    authorities: [{ citationLabel: "SO 1", sectionContent: "The House may sit." }],
+    authorities: [{ citationLabel: "SO 1" }],
   });
   assert.equal(rewritten.rewrittenText.includes("99"), false);
   assert.equal(rewritten.rewrittenText.includes("(2)"), false);
@@ -124,6 +154,7 @@ test("only an exact provision form attaches an admitted label", () => {
   assert.equal(kept("and so 1 member may object").includes("[SO 1]"), false);
   assert.equal(kept("a 2/3 majority is required").includes("[2/3]"), false);
   assert.equal(kept("Standing Order 99 (referred to in SO 1; not retrieved) lets the Speaker adjourn.").includes("[SO 1]"), false);
+  assert.equal(kept("Speakers' ruling 2/9 applies to the sitting.").includes("[SO 2]"), false);
 });
 
 test("an uncited uncertain source is named in the qualification section", () => {
@@ -244,11 +275,11 @@ async function loadAnswerRoute(): Promise<RunAnswerRoute> {
   return runAnswerRoute;
 }
 
-function source(sectionContent = QUOTE): ProceduralSearchResult {
+function source(sectionContent = QUOTE, citationLabel = "SO 1"): ProceduralSearchResult {
   return {
     sectionId: "s1",
     sectionKey: "s1",
-    citationLabel: "SO 1",
+    citationLabel,
     heading: "Suspension",
     path: ["Chapter 2", "Sittings of the House"],
     pathText: "Chapter 2 / Sittings of the House",
@@ -273,9 +304,9 @@ function source(sectionContent = QUOTE): ProceduralSearchResult {
 
 async function probe(
   mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source" | "forged_suffix",
-  options?: { sectionContent?: string; draft?: string },
+  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string },
 ) {
-  const admitted = source(options?.sectionContent);
+  const admitted = source(options?.sectionContent, options?.citationLabel);
   const draft = options?.draft ?? (mode === "forged_suffix"
     ? "Bottom line:\nStanding Order 99 (referred to in SO 1; not retrieved) lets the Speaker adjourn the House [SO 1].\n\nWhat this means:\nThe House may suspend the sitting [SO 1].\n\nSettlement: supported"
     : mode === "named_admitted_source"
@@ -293,14 +324,14 @@ async function probe(
         salientTerms: ["suspension"],
         notes: "synthetic",
         situation: {
-          kind: mode === "no_authority_selected" ? "incident" : "procedure",
+          kind: mode === "no_authority_selected" || options?.admit ? "incident" : "procedure",
           actor: "member",
           setting: "the House",
           action: "suspend the sitting",
           affectedPerson: "",
           proceduralMoment: "debate",
           decisionQuestion: "May the House suspend the sitting?",
-          materialFacts: mode === "no_authority_selected" ? ["an occurrence was recorded"] : [],
+          materialFacts: mode === "no_authority_selected" || options?.admit ? ["an occurrence was recorded"] : [],
           verb: "suspend",
           object: "sitting",
         },
@@ -309,8 +340,23 @@ async function probe(
       request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
       return value as T;
     }
+    if (options?.bottomLine && request.systemInstruction.includes("repair a missing Bottom line")) {
+      const value = { bottomLine: options.bottomLine };
+      request.validate?.(value);
+      request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+      return value as T;
+    }
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
-      const value = { selected: [], remainingUncertainties: [], explanation: "none nominated" };
+      const value = options?.admit
+        ? {
+          selected: [{
+            citationLabel: options?.citationLabel ?? "SO 1", role: "governing", exactQuote: QUOTE,
+            actorMatches: true, settingMatches: true, actionMatches: true, stageMatches: true,
+            rationale: "governs the sitting",
+          }],
+          remainingUncertainties: [], explanation: "quoted",
+        }
+        : { selected: [], remainingUncertainties: [], explanation: "none nominated" };
       request.validate?.(value);
       request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
       return value as T;
@@ -327,6 +373,7 @@ async function probe(
   const streamText = async (request: AiStreamTextRequest): Promise<string> => {
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
+    if (options?.repairText && request.systemInstruction.includes("repairing an incomplete")) return options.repairText;
     return draft;
   };
   const response = await (await loadAnswerRoute())(
@@ -381,26 +428,44 @@ test("no_grounded_claims records why every uncited claim was removed", async () 
   assert.equal(trace.shownAuthorities?.count, shown);
 });
 
-test("a genuine cross-reference reaches done with its suffix", async () => {
+test("an unretrieved provision is rewritten even when the source text names it", async () => {
   const meaning = `What this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`;
   const quoted = await probe("named_admitted_source", {
-    sectionContent: "Standing Order 39(1) applies when the House decides.",
     draft: `Bottom line:\nStanding Order 39(1) lets the House sit [SO 1].\n\n${meaning}`,
   });
-  assert.notEqual(quoted.answerState, "not_answered");
-  assert.match(String(quoted.answerText), /Standing Order 39\(1\) \(referred to in SO 1; not retrieved\)/);
-  const alreadyMarked = await probe("named_admitted_source", {
-    sectionContent: "Standing Order 39(1) applies when the House decides.",
-    draft: `Bottom line:\nStanding Order 39(1) (referred to in SO 1; not retrieved) lets the House sit [SO 1].\n\n${meaning}`,
+  assert.notEqual(quoted.answerState, "supported");
+  assert.equal(String(quoted.answerText).includes("Standing Order 39"), false);
+  assert.match(String(quoted.answerText), /a provision that was not retrieved/);
+  assert.equal(String(quoted.answerText).includes("referred to in"), false);
+});
+
+test("a ruling number is not treated as the standing order with the same first digit", async () => {
+  const done = await probe("named_admitted_source", {
+    citationLabel: "SO 2",
+    draft: `Bottom line:\nSpeakers' ruling 2/9 lets the House sit [SO 2].\n\nWhat this means:\n${QUOTE} [SO 2].\n\nSettlement: supported`,
   });
-  assert.notEqual(alreadyMarked.answerState, "not_answered");
-  assert.match(String(alreadyMarked.answerText), /Standing Order 39\(1\) \(referred to in SO 1; not retrieved\)/);
-  const ruling = await probe("named_admitted_source", {
-    sectionContent: "Speakers' ruling 2/3 applies to the sitting.",
-    draft: `Bottom line:\nSpeakers' ruling 2/3 lets the House sit [SO 1].\n\n${meaning}`,
+  assert.notEqual(done.answerState, "supported");
+  assert.equal(String(done.answerText).includes("2/9"), false);
+});
+
+test("repair text and a reconstructed bottom line rewrite an unretrieved standing order", async () => {
+  const repaired = await probe("named_admitted_source", {
+    admit: true,
+    draft: `What this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+    repairText: `Bottom line:\nStanding Order 39 lets the House sit [SO 1].\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
   });
-  assert.notEqual(ruling.answerState, "not_answered");
-  assert.match(String(ruling.answerText), /2\/3 \(referred to in SO 1; not retrieved\)/);
+  assert.equal(String(repaired.answerText).includes("Standing Order 39"), false);
+  assert.ok(
+    String(repaired.answerText).includes("a provision that was not retrieved") || repaired.answerState === "not_answered",
+  );
+  const rebuilt = await probe("named_admitted_source", {
+    draft: `What this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+    bottomLine: "Standing Order 39 lets the House sit [SO 1].",
+  });
+  assert.equal(String(rebuilt.answerText).includes("Standing Order 39"), false);
+  assert.ok(
+    String(rebuilt.answerText).includes("a provision that was not retrieved") || rebuilt.answerState === "not_answered",
+  );
 });
 
 test("a forged cross-reference suffix does not come back as supported", async () => {
