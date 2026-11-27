@@ -1,7 +1,7 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { clientCheckNote } from "@/lib/open-order/client-check-note";
+import { clientCheckNote, publicScenarioAdjudication } from "@/lib/open-order/client-check-note";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
 import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
@@ -849,7 +849,7 @@ export async function POST(request: NextRequest) {
               evidenceAdmission: v40IncidentGate
                 ? v40Diagnostic.status : v517Selection.evidenceAdmission,
               legacyEvidenceAdmission: v517Selection.evidenceAdmission,
-              scenarioAdjudication: v40Diagnostic,
+              scenarioAdjudication: publicScenarioAdjudication(v40Diagnostic),
             },
             inferredConcepts: diagnosticConcepts,
             activeConcepts: selected.activeConceptIds,

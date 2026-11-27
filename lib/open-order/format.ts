@@ -1,3 +1,4 @@
+import { adjudicationNote, clientCheckNote } from "@/lib/open-order/client-check-note";
 import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import type {
   AiDiagnosticTopResult,
@@ -545,23 +546,12 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
 
   const adjudication = selector?.scenarioAdjudication;
   const adjudicationSummary = adjudication ? [
-    `Status: ${adjudication.status}`,
+    `Status: ${/^[a-z0-9_:-]+$/i.test(adjudication.status) ? adjudication.status : "other"}`,
     `Dossier count: ${adjudication.candidateCount}; primary review attempts: ${adjudication.providerAttempts}`,
-    `Dossier: ${adjudication.dossier?.join(", ") || "None reported"}`,
-    `Retrieved outside dossier (bounded): ${adjudication.retrievedOutsideDossier?.join(", ") || "None reported"}`,
-    `Final accepted: ${adjudication.selected.join(", ") || "None"}`,
-    `Primary refusals: ${adjudication.rejected.join(" | ") || "None"}`,
     `Unknown nominations: ${adjudication.unavailableNominations ?? "Not reported"}`,
-    ...(adjudication.dispositions ?? []).map((row) =>
-      `  ${row.corpus}:${row.citationLabel} — ${row.status}; ${row.role ?? "no role"}; ${row.reason}`),
-    `Recovery: ${adjudication.recovery?.status ?? "Not reported"}`,
-    `Recovery candidates: ${adjudication.recovery?.candidates.join(", ") || "None"}`,
-    `Recovery accepted: ${adjudication.recovery?.selected.join(", ") || "None"}`,
-    `Recovery refusals: ${adjudication.recovery?.rejected.join(" | ") || "None"}`,
+    `Adjudication codes: ${adjudicationNote(adjudication) ?? "None"}`,
+    `Recovery: ${/^[a-z0-9_:-]+$/i.test(adjudication.recovery?.status ?? "") ? adjudication.recovery?.status : "other"}`,
     `Recovery unknown nominations: ${adjudication.recovery?.unavailableNominations ?? "Not reported"}`,
-    ...(adjudication.recovery?.dispositions ?? []).map((row) =>
-      `  ${row.corpus}:${row.citationLabel} — ${row.status}; ${row.role ?? "no role"}; ${row.reason}`),
-    `Unresolved facets: ${adjudication.gaps.join(" | ") || "None reported"}`,
   ].join("\n") : "Scenario adjudication: Not received";
 
   const trace = input.pipelineTrace;
@@ -578,17 +568,6 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
       ].join("\n")
     : "Request trace: Not received";
 
-  const clientCheckNote = (parts: Array<string | null | undefined>) => {
-    const kept: string[] = [];
-    for (const part of parts) {
-      for (const piece of String(part ?? "").split(";")) {
-        const token = piece.trim();
-        if (!/^[a-z0-9_.=:+,-]{1,160}$/i.test(token) || kept.includes(token)) continue;
-        kept.push(token);
-      }
-    }
-    return kept.length > 0 ? kept.join(";") : null;
-  };
   const validation = input.terminalValidation;
   const validationSummary = validation
     ? [
