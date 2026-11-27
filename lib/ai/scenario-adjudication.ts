@@ -292,10 +292,6 @@ export function validateV40Proposal<T extends V40Authority>(input: {
     reason: "v40_quoted_source_adjudication", dispositions, unavailableNominations, qualifications, rejectedGoverning };
 }
 
-function sourceNominated(_proposal: V40Adjudication, _unavailable: number): boolean {
-  return true;
-}
-
 /** A second review may reconsider omitted or previously non-governing sources,
  * never any source with a failed deterministic or model scope check. */
 export function v402RecoveryCandidates<T extends V40Authority>(input: {
@@ -365,37 +361,40 @@ export type AdjudicationRouteReason =
   | "narrative_corroborated"
   | "kind_absent";
 
-/** An expressed event in the question. General narrative markers only, not a topic list. */
-export function incidentCorroborated(question: string): boolean {
-  const text = String(question ?? "").toLowerCase();
-  const framed = /\b(?:during|while|when|after|before)\b/.test(text);
-  const enacted = /\b[a-z]{3,}(?:ed|ing)\b/.test(text);
-  return framed && enacted;
+type RoutingSituation = {
+  materialFacts?: string[] | null;
+  affectedPerson?: string | null;
+} | null | undefined;
+
+/** The planner recorded an occurrence. No question-opening list and no framing-word test. */
+export function plannerRecordsEvent(situation: RoutingSituation): boolean {
+  const facts = situation?.materialFacts;
+  const affected = String(situation?.affectedPerson ?? "").trim();
+  return affected.length > 0 || (Array.isArray(facts) && facts.some((fact) => String(fact ?? "").trim().length > 0));
 }
 
 /**
- * Quoted-source adjudication requires corroboration. Planner kind=incident is not enough.
- * A procedure classification, or an uncorroborated incident, stays on the selector.
+ * Quoted-source adjudication requires a structured event from the planner.
+ * kind=incident alone stays on the selector. Adjudication remains the secondary path.
  */
-export function adjudicationRouting(question: string, kind: string | undefined, hasLegacy: boolean): {
+export function adjudicationRouting(_question: string, kind: string | undefined, hasLegacy: boolean,
+  situation?: RoutingSituation): {
   adjudicate: boolean;
   reason: AdjudicationRouteReason;
 } {
   if (!hasLegacy) return { adjudicate: true, reason: "no_legacy_pack" };
   if (kind === "procedure") return { adjudicate: false, reason: "planner_procedure" };
-  const corroborated = incidentCorroborated(question);
+  const recorded = plannerRecordsEvent(situation);
   if (kind === "incident") {
-    return corroborated
+    return recorded
       ? { adjudicate: true, reason: "incident_corroborated" }
       : { adjudicate: false, reason: "incident_uncorroborated" };
   }
-  if (corroborated && /^(?:an?\s|several\s|during\s|in the middle\s|as a\s)/i.test(String(question ?? "").trim())) {
-    return { adjudicate: true, reason: "narrative_corroborated" };
-  }
+  if (recorded) return { adjudicate: true, reason: "narrative_corroborated" };
   return { adjudicate: false, reason: "kind_absent" };
 }
 
 export function v40MustAdjudicate(question: string, kind: V40Situation["kind"] | undefined,
-  hasLegacy: boolean): boolean {
-  return adjudicationRouting(question, kind, hasLegacy).adjudicate;
+  hasLegacy: boolean, situation?: RoutingSituation): boolean {
+  return adjudicationRouting(question, kind, hasLegacy, situation).adjudicate;
 }

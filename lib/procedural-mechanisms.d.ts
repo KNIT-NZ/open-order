@@ -14,6 +14,8 @@ export function errorCorrectionQueries(situation?: { relations?: string[] } | nu
 export function presidingOfficerAppealQuery(situation?: { relations?: string[] } | null): string | null;
 export function actorClassQualificationQuery(actor: string): string | null;
 export function splitActAndObject(action: string): { act: string[]; object: string[] };
+export function suffixStem(word: string): string;
+export function actAttestation(quote: string, action?: string, verb?: string, objectText?: string): "clean" | "unconfirmed";
 export function quoteAttestsActAndObject(quote: string, action?: string, verb?: string, objectText?: string): boolean;
 export function parseSettlement(answerText: string): {
   text: string;

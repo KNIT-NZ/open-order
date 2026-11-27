@@ -59,21 +59,31 @@ type PublicAdjudication = {
     selected: string[];
     rejected: string[];
   };
-  rejectedGoverning?: Array<{ id: string; inDossier: boolean }>;
+  rejectedGoverning?: Array<{ id?: string; inDossier?: boolean }> | number;
+  rejectedInDossier?: number;
+  rejectedOutsideDossier?: number;
 };
 
-const NOMINATION_ID = /^(?:[A-Za-z0-9][A-Za-z0-9_.:-]{0,64}|SO\s+\d+[A-Za-z]*|\d+\/\d+)$/;
-
-function publicNominations(entries: Array<{ id?: string; inDossier?: boolean }> | undefined): Array<{ id: string; inDossier: boolean }> {
-  const seen = new Set<string>();
-  const kept: Array<{ id: string; inDossier: boolean }> = [];
-  for (const entry of entries ?? []) {
-    const id = String(entry?.id ?? "").trim();
-    if (!NOMINATION_ID.test(id) || seen.has(id)) continue;
-    seen.add(id);
-    kept.push({ id, inDossier: entry?.inDossier === true });
+function nominationCounts(input: {
+  rejectedGoverning?: Array<{ inDossier?: boolean }> | number;
+  rejectedInDossier?: number;
+  rejectedOutsideDossier?: number;
+}): { rejectedGoverning: number; rejectedInDossier: number; rejectedOutsideDossier: number } {
+  if (typeof input.rejectedGoverning === "number" || typeof input.rejectedInDossier === "number") {
+    return {
+      rejectedGoverning: Number(input.rejectedGoverning) || 0,
+      rejectedInDossier: Number(input.rejectedInDossier) || 0,
+      rejectedOutsideDossier: Number(input.rejectedOutsideDossier) || 0,
+    };
   }
-  return kept;
+  const rows = Array.isArray(input.rejectedGoverning) ? input.rejectedGoverning : [];
+  let inside = 0;
+  let outside = 0;
+  for (const row of rows) {
+    if (row?.inDossier === true) inside += 1;
+    else outside += 1;
+  }
+  return { rejectedGoverning: inside + outside, rejectedInDossier: inside, rejectedOutsideDossier: outside };
 }
 
 function asRefusalCode(value: string): string | null {
@@ -161,7 +171,7 @@ export function publicScenarioAdjudication(input: PublicAdjudication | null | un
       selected: [],
       rejected: publicRefusals("recovery_refusal", recovery.rejected ?? [], recovery.dispositions),
     },
-    rejectedGoverning: publicNominations(input.rejectedGoverning),
+    ...nominationCounts(input),
   };
 }
 

@@ -4,13 +4,14 @@ import { AiProviderError } from "../lib/ai/errors";
 import { providerAttemptOutcome } from "../lib/ai/gemini";
 import {
   adjudicationRouting,
+  plannerRecordsEvent,
   validateV40Proposal,
   type V40Authority,
   type V40ProposedWitness,
 } from "../lib/ai/scenario-adjudication";
 import { publicScenarioAdjudication } from "../lib/open-order/client-check-note";
 import { buildFallbackAnswer } from "../lib/procedural-reasoning";
-import { forumIdentityMismatch, quoteAttestsActAndObject } from "../lib/procedural-mechanisms";
+import { actAttestation, forumIdentityMismatch, quoteAttestsActAndObject, suffixStem } from "../lib/procedural-mechanisms";
 
 const suspension = "A suspension of the sitting is permitted when the presiding officer so decides.";
 const device = "Carrying a device is permitted when it does not disrupt the forum.";
@@ -66,15 +67,18 @@ test("different act words are admitted with a qualification instead of withheld"
   assert.equal(review.rejectedGoverning.length, 0);
 });
 
-test("a named committee matches a generic committee setting, and the House does not", () => {
-  assert.equal(forumIdentityMismatch("select committee", ["Finance and Expenditure Committee"]), null);
-  assert.equal(forumIdentityMismatch("the House", ["Finance and Expenditure Committee"]), "forum-identity");
+test("forum type matches a generic body and rejects two different names", () => {
+  assert.equal(forumIdentityMismatch("select committee", ["Widget Oversight Committee"]), null);
+  assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Select committees"]), null);
+  assert.equal(forumIdentityMismatch("Widget Oversight Committee", ["Gadget Review Committee"]), "forum-identity");
+  assert.equal(forumIdentityMismatch("the House", ["Widget Oversight Committee"]), "forum-identity");
+  assert.equal(forumIdentityMismatch("the House", ["Committee of the whole House"]), null);
   assert.equal(forumIdentityMismatch("committee of the whole", ["select committees"]), "forum-identity");
   const named = source({
     sectionId: "syn-3",
     citationLabel: "QX 3",
     sectionContent: suspension,
-    path: ["Finance and Expenditure Committee"],
+    path: ["Widget Oversight Committee"],
   });
   const admitted = validateV40Proposal({
     question: "May a select committee suspend its sitting?",
@@ -84,22 +88,36 @@ test("a named committee matches a generic committee setting, and the House does 
     proposal: { selected: [governing("QX 3", suspension)], remainingUncertainties: [], explanation: "" },
   });
   assert.equal(admitted.authorities.length, 1);
-  const house = source({
+  assert.deepEqual(admitted.qualifications, []);
+  const other = source({
     sectionId: "syn-4",
     citationLabel: "QX 4",
     sectionContent: suspension,
-    path: ["Finance and Expenditure Committee"],
+    path: ["Gadget Review Committee"],
   });
   const rejected = validateV40Proposal({
-    question: "May the House suspend its sitting?",
+    question: "May the Widget Oversight Committee suspend its sitting?",
     action: "suspend the sitting",
-    setting: "the House",
-    candidates: [house],
+    setting: "Widget Oversight Committee",
+    candidates: [other],
     proposal: { selected: [governing("QX 4", suspension)], remainingUncertainties: [], explanation: "" },
   });
   assert.equal(rejected.authorities.length, 0);
   assert.ok(rejected.rejected.some((line) => line.includes("forum-identity")));
-  assert.deepEqual(rejected.rejectedGoverning, [{ id: "syn-4", inDossier: true }]);
+  const house = validateV40Proposal({
+    question: "May the House suspend its sitting?",
+    action: "suspend the sitting",
+    setting: "the House",
+    candidates: [source({
+      sectionId: "syn-house",
+      citationLabel: "QX 8",
+      sectionContent: suspension,
+      path: ["Committee of the whole House"],
+    })],
+    proposal: { selected: [governing("QX 8", suspension)], remainingUncertainties: [], explanation: "" },
+  });
+  assert.equal(house.authorities.length, 1);
+  assert.deepEqual(house.qualifications, []);
 });
 
 test("an unverifiable quote is still a hard rejection", () => {
@@ -118,19 +136,42 @@ test("an unverifiable quote is still a hard rejection", () => {
   assert.ok(review.rejected.some((line) => line.includes("unverified-verbatim-witness")));
 });
 
-test("incident routing requires corroboration and reports a reason code", () => {
-  const procedural = "May the House suspend the sitting?";
-  assert.deepEqual(adjudicationRouting(procedural, "incident", true), {
+test("the stemmer keeps report and notice intact and requires verb and object", () => {
+  assert.notEqual(suffixStem("report"), "repor");
+  assert.notEqual(suffixStem("notice"), "not");
+  assert.equal(suffixStem("report"), "report");
+  assert.equal(suffixStem("notice"), "notice");
+  const misses = [
+    ["The House may suspend business of a committee when its chair so decides.", "suspend the sitting"],
+    ["The Speaker may order a member to withdraw.", "speak in the debate"],
+    ["Standing Orders apply to every sitting of the forum.", "order a member to leave"],
+    ["A member may do so.", "may"],
+    ["Carrying a device is permitted when it does not disrupt the forum.", "emit a beacon"],
+    ["The member moved a motion on the paper.", "move an amendment"],
+  ] as const;
+  for (const [quote, action] of misses) {
+    assert.equal(actAttestation(quote, action), "unconfirmed", action);
+    assert.equal(quoteAttestsActAndObject(quote, action), false);
+  }
+  assert.equal(quoteAttestsActAndObject("The actor may emit a beacon.", "may"), false);
+});
+
+test("incident routing uses the planner event slot, not question openings", () => {
+  const question = "When is the House sitting?";
+  assert.equal(plannerRecordsEvent({ materialFacts: [], affectedPerson: "" }), false);
+  assert.deepEqual(adjudicationRouting(question, "incident", true, { materialFacts: [] }), {
     adjudicate: false,
     reason: "incident_uncorroborated",
   });
-  const narrative = "While the sitting was underway, a member asked to suspend it.";
-  assert.deepEqual(adjudicationRouting(narrative, "incident", true), {
+  assert.deepEqual(adjudicationRouting("A member shouted. What can be done?", "incident", true, {
+    materialFacts: ["a member shouted"],
+  }), {
     adjudicate: true,
     reason: "incident_corroborated",
   });
-  assert.equal(adjudicationRouting(procedural, "procedure", true).reason, "planner_procedure");
-  assert.equal(adjudicationRouting(procedural, "incident", false).reason, "no_legacy_pack");
+  assert.equal(adjudicationRouting(question, "procedure", true, { materialFacts: ["ignored"] }).reason, "planner_procedure");
+  assert.equal(adjudicationRouting(question, undefined, true, { affectedPerson: "a visitor" }).reason, "narrative_corroborated");
+  assert.equal(adjudicationRouting(question, undefined, true, {}).reason, "kind_absent");
 });
 
 test("withholding text matches the stage that withheld", () => {
@@ -160,7 +201,7 @@ test("withholding text matches the stage that withheld", () => {
   assert.equal(empty.includes("Retrieval found possible authorities"), false);
 });
 
-test("rejected governing identifiers survive the public filter without prose", () => {
+test("rejected governing nominations are public only as counts", () => {
   const leaked = {
     status: "v40_no_governing_witness",
     candidateCount: 1,
@@ -182,13 +223,17 @@ test("rejected governing identifiers survive the public filter without prose", (
     },
     rejectedGoverning: [
       { id: "syn-9", inDossier: true },
-      { id: "the model quoted a private sentence", inDossier: true },
+      { id: "SO 999", inDossier: false },
     ],
   };
   const once = publicScenarioAdjudication(leaked);
   const twice = publicScenarioAdjudication(once);
+  assert.equal(once?.rejectedGoverning, 2);
+  assert.equal(once?.rejectedInDossier, 1);
+  assert.equal(once?.rejectedOutsideDossier, 1);
   assert.deepEqual(twice?.rejectedGoverning, once?.rejectedGoverning);
-  assert.deepEqual(once?.rejectedGoverning, [{ id: "syn-9", inDossier: true }]);
+  assert.equal(JSON.stringify(once).includes("syn-9"), false);
+  assert.equal(JSON.stringify(once).includes("SO 999"), false);
   assert.equal(JSON.stringify(once).includes("private"), false);
 });
 

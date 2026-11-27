@@ -33,9 +33,12 @@ type Scenario =
   | "no_bodies"
   | "reconstruction"
   | "fallback"
-  | "qualified_act";
+  | "qualified_act"
+  | "wrong_object"
+  | "qualified_fallback";
 
 const DEVICE = "Carrying a device is permitted when it does not disrupt the forum.";
+const WRONG_OBJECT = "The House may suspend business of a committee when its chair so decides.";
 
 function authority(label: string, sectionId: string, sectionContent = QUOTE): ProceduralSearchResult {
   return {
@@ -83,7 +86,7 @@ function plan(kind: "incident" | "procedure") {
       affectedPerson: "",
       proceduralMoment: "debate",
       decisionQuestion: "May the House suspend the sitting?",
-      materialFacts: [],
+      materialFacts: kind === "incident" ? ["an occurrence was recorded"] : [],
       verb: "suspend",
       object: "sitting",
     },
@@ -113,7 +116,7 @@ function draftFor(scenario: Scenario): string {
   if (scenario === "reconstruction" || scenario === "repair") {
     return `${meaning}\n\n${settlement}`;
   }
-  if (scenario === "fallback") {
+  if (scenario === "fallback" || scenario === "qualified_fallback") {
     return `${bottom}\n\n${meaning}\n\nBest authorities to inspect or cite:\n- [SO 99] Not retrieved\n\n${settlement}`;
   }
   return `${bottom}\n\n${meaning}\n\n${settlement}`;
@@ -127,14 +130,17 @@ function claimsIn(prompt: string): Array<{ id: string; text: string }> {
 }
 
 async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
-  const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies" || scenario === "qualified_act";
+  const incident = scenario === "repair" || scenario === "failed_adjudication" || scenario === "no_bodies"
+    || scenario === "qualified_act" || scenario === "wrong_object" || scenario === "qualified_fallback";
   const pack = scenario === "no_bodies"
     ? []
     : scenario === "answer_edits"
       ? [authority("SO 1", "s1"), authority("SO 2", "s2")]
-      : scenario === "qualified_act"
+      : scenario === "qualified_act" || scenario === "qualified_fallback"
         ? [authority("SO 1", "s1", DEVICE)]
-        : [authority("SO 1", "s1")];
+        : scenario === "wrong_object"
+          ? [authority("SO 1", "s1", WRONG_OBJECT)]
+          : [authority("SO 1", "s1")];
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
@@ -151,7 +157,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
         selected: [{
           citationLabel: "SO 1",
           role: "governing",
-          exactQuote: scenario === "qualified_act" ? DEVICE : QUOTE,
+          exactQuote: scenario === "qualified_act" || scenario === "qualified_fallback"
+            ? DEVICE
+            : scenario === "wrong_object"
+              ? WRONG_OBJECT
+              : QUOTE,
           actorMatches: true,
           settingMatches: true,
           actionMatches: true,
@@ -211,11 +221,7 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
   const response = await (await loadAnswerRoute())(
     new NextRequest("http://localhost/api/ai/answer", {
       method: "POST",
-      body: JSON.stringify({
-        question: incident
-          ? "While the sitting was underway, a member asked to suspend it."
-          : "May the House suspend the sitting?",
-      }),
+      body: JSON.stringify({ question: "May the House suspend the sitting?" }),
     }),
     {
       generateJson,
@@ -261,6 +267,7 @@ test("a fully checked draft is supported", async () => {
   const events = await ask("supported");
   const done = doneOf(events);
   assert.equal(done.answerState, "supported");
+  assert.equal(done.route, "semantic_selector");
   assert.equal(done.abstained, false);
   const diagnostics = events.find((item) => item.event === "diagnostics");
   const selector = diagnostics?.data.selectorSummary as {
@@ -276,7 +283,9 @@ test("a fully checked draft is supported", async () => {
   assert.equal(JSON.stringify(events).includes(PRUNED_LABEL), false);
   assert.equal(JSON.stringify(events).includes(LEGACY_LABEL), false);
   assert.equal(done.mixedModels, false);
-  assert.equal((done.stageModels as { "query.plan"?: string })["query.plan"], "gemini-3.5-flash-lite");
+  const stages = done.stageModels as Array<{ task?: string; model?: string; outcome?: string }>;
+  assert.equal(stages.find((item) => item.task === "query.plan")?.model, "gemini-3.5-flash-lite");
+  assert.equal(stages.find((item) => item.task === "query.plan")?.outcome, "ok");
   assert.equal(diagnostics?.data.routingReason, "planner_procedure");
 });
 
@@ -343,7 +352,25 @@ test("a lexical act miss stays a qualified partial answer", async () => {
   const done = doneOf(await ask("qualified_act"));
   assert.equal(done.answerState, "partial");
   assert.equal(done.abstained, false);
-  assert.match(String(done.answerText), /does not confirm the asked act/);
+  assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+  const facets = done.uncertainty as Array<{ class?: string; facet?: string }>;
+  assert.ok(facets.some((item) => item.class === "applicability_uncertainty" && item.facet === "act_attestation_unconfirmed"));
+});
+
+test("the same verb with a different object stays partial and names the authority", async () => {
+  const done = doneOf(await ask("wrong_object"));
+  assert.equal(done.answerState, "partial");
+  assert.notEqual(done.answerState, "supported");
+  assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+});
+
+test("a qualified source is not listed as an authority when the answer is withheld", async () => {
+  const done = doneOf(await ask("qualified_fallback"));
+  assert.equal(done.answerState, "not_answered");
+  assert.match(String(done.answerText), /Possibly relevant, not confirmed to apply/);
+  assert.match(String(done.answerText), /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+  assert.equal(String(done.answerText).includes("Best authorities to inspect or cite:\n- [SO 1]"), false);
+  assert.deepEqual(done.authorities, []);
   const facets = done.uncertainty as Array<{ facet?: string }>;
   assert.ok(facets.some((item) => item.facet === "act_attestation_unconfirmed"));
 });

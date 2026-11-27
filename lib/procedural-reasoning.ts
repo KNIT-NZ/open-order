@@ -2147,6 +2147,7 @@ export function buildFallbackAnswer(input: {
   // evidence was absent merely because selection rejected every candidate.
   failureClass?: "selection" | "provider" | "validation" | "drafting_unavailable" | "validation_unavailable";
   retrievedEvidenceCount?: number;
+  unconfirmedAuthorities?: ProceduralSearchResult[];
 }): string {
   const best = input.authorities.slice(0, 4);
   const citations = best.map((authority) => `[${authority.citationLabel}]`);
@@ -2203,6 +2204,15 @@ export function buildFallbackAnswer(input: {
         ? "- Retrieved candidates were withheld at selection."
         : "- No authorities were retrieved.";
 
+  const unconfirmed = input.unconfirmedAuthorities ?? [];
+  const unconfirmedText = unconfirmed.length > 0
+    ? [
+      "Possibly relevant, not confirmed to apply:",
+      ...unconfirmed.map((authority) =>
+        `- [${authority.citationLabel}] has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`),
+    ].join("\n")
+    : "";
+
   return [
     "Bottom line:",
     bottomLine,
@@ -2224,5 +2234,6 @@ export function buildFallbackAnswer(input: {
     "",
     "Best authorities to inspect or cite:",
     inspect,
+    ...(unconfirmedText ? ["", unconfirmedText] : []),
   ].join("\n");
 }

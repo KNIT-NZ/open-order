@@ -33,7 +33,6 @@ import {
   relationsFromPlanner,
   reasonFromProviderKind,
   resolveServedModel,
-  routeFromPlanner,
   selectOverlookedCandidates,
   stageReopeningQueries,
 } from "@/lib/procedural-mechanisms";
@@ -254,7 +253,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       let answerEdits: string[] = [];
       // `other` is a failed attempt that was not a 429, a 5xx, or a timeout.
       const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
-      const stageModels: Record<string, string> = {};
+      const stageModels: Array<{ task: string; model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
       let openAttemptIndex: number | null = null;
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
@@ -286,11 +285,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         }
         lastAttemptedModel = attempt.model;
         if (task === "query.plan" || task === "answer.generate" || task === "answer.validate") {
-          stageModels[task] = attempt.model;
+          stageModels.push({ task, model: attempt.model, outcome: attempt.outcome });
         }
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
       };
-      const mixedModels = () => new Set(providerAttempts.map((attempt) => attempt.model)).size > 1;
+      // Only models that actually served a stage. A failed attempt does not count.
+      const mixedModels = () => new Set(stageModels.filter((attempt) => attempt.outcome === "ok").map((attempt) => attempt.model)).size > 1;
       // Last model whose attempt started. This does not mean the attempt succeeded;
       // read providerAttempts for each outcome.
       const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
@@ -323,7 +323,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             reason,
             servedModel: servedModel(),
             mixedModels: mixedModels(),
-            stageModels: { ...stageModels },
+            stageModels: stageModels.slice(),
             providerAttempts,
             trace,
           };
@@ -357,7 +357,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             recoveredAuthorities: outcomeState.recoveredAuthorities,
             servedModel: servedModel(),
             mixedModels: mixedModels(),
-            stageModels: { ...stageModels },
+            stageModels: stageModels.slice(),
             providerAttempts,
             answerEdits,
             ...(exposeFirstDraft && firstDraftRecord ? { firstDraft: firstDraftRecord } : {}),
@@ -627,15 +627,36 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           // for natural incidents, adjudicate actual source-body evidence across
           // different actors/forums/stages. A model citation is never trusted
           // without a retrieved source and a verbatim supporting quotation.
-          outcomeState.route = routeFromPlanner(plan.situation?.kind);
           outcomeState.allObligationsComplete = v517Selection.allObligationsComplete;
           outcomeState.obligationCoverage = v517Selection.obligationDetails.map((detail) => detail.coverage);
           outcomeState.partial.push(...obligationPartialFacets(v517Selection.obligationDetails));
           const adjudicationRoute = adjudicationRouting(
-            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0,
+            question, plan.situation?.kind, v517Selection.finalAuthorities.length > 0, plan.situation,
           );
           const v40IncidentGate = adjudicationRoute.adjudicate;
+          outcomeState.route = v40IncidentGate ? "incident_adjudication" : "semantic_selector";
           let actUnconfirmed = false;
+          const unconfirmedLabels = new Set<string>();
+          const noteActQualification = (labels: string[]) => {
+            for (const label of labels) {
+              const text = String(label ?? "").trim();
+              if (text) unconfirmedLabels.add(text);
+            }
+            if (unconfirmedLabels.size === 0) return;
+            actUnconfirmed = true;
+            if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
+              outcomeState.uncertainty.push({ class: "applicability_uncertainty", facet: "act_attestation_unconfirmed" });
+            }
+          };
+          const hiddenLabel = (label: string) => unconfirmedLabels.has(label) || [...unconfirmedLabels].some((item) => item.toLowerCase() === label.toLowerCase());
+          const clientAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
+            list.filter((item) => !hiddenLabel(String(item.citationLabel ?? "")));
+          const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
+            const authorities = input.authorities ?? [];
+            const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
+            const confirmed = authorities.filter((item) => !hiddenLabel(item.citationLabel));
+            return buildFallbackAnswer({ ...input, authorities: confirmed, unconfirmedAuthorities: unconfirmed });
+          };
           let v40AuthoritySet = [...v517Selection.finalAuthorities];
           let v40Diagnostic: {
             status: string; candidateCount: number; selected: string[];
@@ -690,7 +711,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   setting: plan.situation?.setting, action: plan.situation?.action,
                 });
                 v40AuthoritySet = v40Review.authorities;
-                if (v40Review.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
+                noteActQualification(v40Review.dispositions
+                  .filter((row) => row.reason === "act_attestation_unconfirmed")
+                  .map((row) => row.citationLabel));
                 v40Diagnostic = {
                   ...v40Diagnostic,
                   status: v40Review.reason,
@@ -731,7 +754,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                       v40Diagnostic.recovery.selected = review.accepted;
                       v40Diagnostic.recovery.rejected = review.rejected;
                       v40Diagnostic.recovery.status = review.reason;
-                      if (review.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
+                      noteActQualification(review.dispositions
+                        .filter((row) => row.reason === "act_attestation_unconfirmed")
+                        .map((row) => row.citationLabel));
                       v40Diagnostic.qualifications = [...new Set([...v40Diagnostic.qualifications, ...review.qualifications])];
                       v40Diagnostic.rejectedGoverning = [...v40Diagnostic.rejectedGoverning, ...review.rejectedGoverning]
                         .filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index);
@@ -848,7 +873,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...judged.authorities] };
               outcomeState.evidenceRecovery = true;
               outcomeState.recoveredAuthorities = judged.authorities.map((item) => item.citationLabel);
-              if (judged.qualifications.includes("act_attestation_unconfirmed")) actUnconfirmed = true;
+              if (judged.qualifications.includes("act_attestation_unconfirmed")) {
+                noteActQualification(judged.authorities.map((item) => item.citationLabel));
+              }
             }
           }
           const finalAuthorities = selected.finalAuthorities;
@@ -966,7 +993,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
-            const fallbackAnswer = buildFallbackAnswer({
+            const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
@@ -991,7 +1018,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: authorityPayload,
+              authorities: clientAuthorities(authorityPayload),
               fallbackReason: noAuthorityReason,
             });
 
@@ -1052,7 +1079,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               outcomeState.abstained = true;
               const fallbackReason = "The AI draft was empty.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1075,7 +1102,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: clientAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1106,7 +1133,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               const fallbackReason =
                 "The AI draft could not be checked against its sources after pruning unsupported content.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1129,7 +1156,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: clientAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1150,7 +1177,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 `invalid_citations=${citationValidation.invalidCitations.length}`,
               ]);
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1173,7 +1200,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: clientAuthorities(authorityPayload),
                 fallbackReason,
                 claimValidationNote,
                 invalidCitations: [],
@@ -1231,7 +1258,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   recheckCitations.ok ? null : `invalid_citations=${recheckCitations.invalidCitations.length}`,
                 ]);
 
-                const fallbackAnswer = buildFallbackAnswer({
+                const fallbackAnswer = groundedFallback({
                   question,
                   planIntent: plan.intent,
                   authorities: finalAuthorities,
@@ -1254,7 +1281,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   latencyMs: Date.now() - started,
                   plan,
                   answerText: fallbackAnswer,
-                  authorities: authorityPayload,
+                  authorities: clientAuthorities(authorityPayload),
                   fallbackReason,
                   claimValidationNote,
                 });
@@ -1271,7 +1298,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               const fallbackReason =
                 "The AI draft contained no substantive grounded claims after deterministic validation.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1294,7 +1321,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: clientAuthorities(authorityPayload),
                 fallbackReason,
               });
 
@@ -1476,7 +1503,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               outcomeState.abstained = true;
               const fallbackReason =
                 "The cited draft did not demonstrably answer the question asked.";
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question, planIntent: plan.intent, authorities: finalAuthorities,
                 effectiveCorpus, fallbackReason,
               });
@@ -1487,7 +1514,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send(markOperationalTerminal("done"), {
                 ok: true, degraded: true, question, corpus: effectiveCorpus,
                 latencyMs: Date.now() - started, plan, answerText: fallbackAnswer,
-                authorities: authorityPayload, fallbackReason,
+                authorities: clientAuthorities(authorityPayload), fallbackReason,
                 claimValidationNote: clientCheckNote([
                   "responsiveness=withheld",
                   `incident_repair=${v401RepairDiagnostic}`,
@@ -1736,7 +1763,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
                 : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
 
-              const fallbackAnswer = buildFallbackAnswer({
+              const fallbackAnswer = groundedFallback({
                 question,
                 planIntent: plan.intent,
                 authorities: finalAuthorities,
@@ -1759,7 +1786,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 latencyMs: Date.now() - started,
                 plan,
                 answerText: fallbackAnswer,
-                authorities: authorityPayload,
+                authorities: clientAuthorities(authorityPayload),
                 fallbackReason,
                 // v29: existing debug-snapshot field, only for this failure path.
                 claimValidationNote: ooV29FailureTrace,
@@ -1798,10 +1825,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
             if (actUnconfirmed) {
-              if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
-                outcomeState.uncertainty.push({ class: "interpretive_uncertainty", facet: "act_attestation_unconfirmed" });
-              }
-              finalAnswer = `${finalAnswer}\n\nQualification:\nThe admitted source does not confirm the asked act in its own words, so this answer stays partial.`;
+              const named = [...unconfirmedLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
+              finalAnswer = `${finalAnswer}\n\nQualification:\n${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`;
             }
             answerEdits = cited.dropped;
             if (answerEdits.length > 0) noteCheckedWithholding();
@@ -1843,7 +1868,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             outcomeState.fallbackCode = isDraftFailure ? "drafting_unavailable" : "validation_unavailable";
             outcomeState.abstained = true;
             const fallbackReason = publicFailureReason(operationFailure);
-            const fallbackAnswer = buildFallbackAnswer({
+            const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
               authorities: finalAuthorities,
@@ -1867,7 +1892,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               latencyMs: Date.now() - started,
               plan,
               answerText: fallbackAnswer,
-              authorities: authorityPayload,
+              authorities: clientAuthorities(authorityPayload),
               fallbackReason,
               claimValidationNote: clientCheckNote([
                 `operation=${operationFailure.phase}`,

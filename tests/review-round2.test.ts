@@ -115,7 +115,7 @@ test("an accepted bottom-line reconstruction caps the answer state", () => {
   assert.match(window, /noteCheckedWithholding\(\)/);
 });
 
-test("overlooked admission requires a judge and drops a source the judge did not attest", async () => {
+test("overlooked admission requires a judge and qualifies an off-act rubber stamp", async () => {
   const source = readFileSync(new URL("../lib/ai/scenario-adjudication.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /function adjudicateOverlooked|overlooked retrieved candidate/);
   const catering = {
