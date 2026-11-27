@@ -368,7 +368,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         }
         if (event === "done") {
           const outcome = deriveAnswerOutcome({ ...outcomeState, fallbackReason: outcomeState.fallbackCode });
-          const prose = typeof record.fallbackReason === "string" ? record.fallbackReason : null;
           return {
             ...record,
             route: outcome.route,
@@ -379,7 +378,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             repairAccepted: outcome.repairAccepted,
             appealAttempted: outcome.appealAttempted,
             appealAccepted: outcome.appealAccepted,
-            fallbackReason: prose,
+            fallbackReason: outcome.fallbackReason === "none" ? null : outcome.fallbackReason,
             fallbackCode: outcome.fallbackReason,
             partial: outcome.partial,
             abstained: outcome.abstained,
@@ -988,6 +987,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const declined = outcomeState.abstained === true || fallback !== "none";
             return declined ? cited.filter((item) => !item.unconfirmed) : cited;
           };
+          const verifiedMentionCheck = (answerText: string) => validateAnswerAuthorityMentions({
+            answerText,
+            authorities: finalAuthorities.map((authority) => ({
+              citationLabel: authority.citationLabel,
+              sectionContent: authority.sectionContent,
+            })),
+            acceptVerifiedCrossReferences: true,
+          });
 
           const diagnosticConcepts = [
             ...new Set([
@@ -1351,14 +1358,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               if (secondPrune.removedLines.length > 0) outcomeState.pruned = true;
               if (rewrite.removedMentions.length > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
 
-              const recheckMentions = validateAnswerAuthorityMentions({
-                answerText: finalAnswer,
-                authorities: finalAuthorities.map((authority) => ({
-                  citationLabel: authority.citationLabel,
-                  sectionContent: authority.sectionContent,
-                })),
-                acceptVerifiedCrossReferences: true,
-              });
+              const recheckMentions = verifiedMentionCheck(finalAnswer);
 
               const recheckCitations = validateAnswerCitations({
                 answerText: finalAnswer,
@@ -1525,9 +1525,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const repairedCitations = validateAnswerCitations({
                   answerText: repairedAnswer, authorities: authorityPayload,
                 });
-                const repairedMentions = validateAnswerAuthorityMentions({
-                  answerText: repairedAnswer, authorities: authorityPayload,
-                });
+                const repairedMentions = verifiedMentionCheck(repairedAnswer);
                 const qualificationVetoes = findOmittedSourceQualifications({
                   claims: repairedClaims, authorities: finalAuthorities,
                 });
@@ -1753,10 +1751,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               answerText: finalAnswer,
               authorities: authorityPayload,
             });
-            let finalMentionValidation = validateAnswerAuthorityMentions({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
+            let finalMentionValidation = verifiedMentionCheck(finalAnswer);
 
             let hasBottomLine = answerSectionHasContent(
               finalAnswer,
@@ -1802,10 +1797,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     answerText: candidate,
                     authorities: authorityPayload,
                   }).ok;
-                  const mentionOK = validateAnswerAuthorityMentions({
-                    answerText: candidate,
-                    authorities: authorityPayload,
-                  }).ok;
+                  const mentionOK = verifiedMentionCheck(candidate).ok;
                   const qualificationOK = findOmittedSourceQualifications({
                     claims: candidateClaims,
                     authorities: finalAuthorities,
@@ -1833,10 +1825,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                         answerText: finalAnswer,
                         authorities: authorityPayload,
                       });
-                      finalMentionValidation = validateAnswerAuthorityMentions({
-                        answerText: finalAnswer,
-                        authorities: authorityPayload,
-                      });
+                      finalMentionValidation = verifiedMentionCheck(finalAnswer);
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
                       outcomeState.repairAccepted = true;

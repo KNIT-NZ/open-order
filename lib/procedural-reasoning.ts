@@ -1844,31 +1844,81 @@ function normalizeAuthorityMention(text: string): string {
     .toLowerCase();
 }
 
+const GAP = "[\\t \\u00a0]";
+const SO_NUMBER = String.raw`\d+[a-z]*(?:${GAP}*\(\d+[a-z]*\))?`;
+const SO_SPAN = `${SO_NUMBER}(?:${GAP}*(?:and|,|to|-)${GAP}*${SO_NUMBER})*`;
+// One provision-mention form. Detection uses it, and also a bare ruling number, so an
+// unretrieved provision fails safe. Source verification never treats a bare number as a provision.
+const PROVISION_MENTION = String.raw`\b(?:standing${GAP}+orders?|s\.?${GAP}*o\.?)${GAP}*${SO_SPAN}|\bappendix${GAP}+[a-f]${GAP}+(?:cl(?:ause)?\.?${GAP}*\d+[a-z]*|(?:table|part)${GAP}+\d+${GAP}+row${GAP}+\d+|note)\b|\bspeakers?'?${GAP}+rulings?${GAP}+\d+\/\d+|\bs\.?${GAP}*r\.?${GAP}*\d+\/\d+`;
+
+function provisionMentionPattern(): RegExp {
+  return new RegExp(PROVISION_MENTION, "gi");
+}
+
+function answerMentionPattern(): RegExp {
+  return new RegExp(`${PROVISION_MENTION}|\\b\\d+\\/\\d+\\b`, "gi");
+}
+
+function canonicalProvision(text: string): string {
+  const flat = text.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const ruling = flat.match(/^(?:s\.?\s*r\.?|speakers?'?\s+rulings?)\s*(\d+\/\d+)/i);
+  if (ruling) return `sr ${ruling[1]}`;
+  const standing = flat.match(/^(?:standing\s+orders?|s\.?\s*o\.?)\s*(\d+[a-z]*)/i);
+  if (standing) return `so ${standing[1].toLowerCase()}`;
+  const bareRuling = flat.match(/^(\d+\/\d+)$/);
+  if (bareRuling) return bareRuling[1];
+  return normalizeAuthorityMention(flat);
+}
+
+function expandProvisionNumbers(mention: string): string[] {
+  const flat = mention.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const body = flat.replace(/^(?:standing orders?|s\.?\s*o\.?|speakers?'?\s+rulings?|s\.?\s*r\.?)\s*/i, "");
+  const numbers: string[] = [];
+  for (const chunk of body.split(/\s*(?:,|and)\s*/i)) {
+    const range = chunk.match(/^(\d+)\s*(?:to|-)\s*(\d+)$/i);
+    if (range) {
+      const start = Number(range[1]);
+      const end = Number(range[2]);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start > 30) {
+        numbers.push(chunk.replace(/\s+/g, "").toLowerCase());
+      } else {
+        for (let number = start; number <= end; number += 1) numbers.push(String(number));
+      }
+      continue;
+    }
+    const single = chunk.match(/^(\d+[a-z]*(?:\(\d+[a-z]*\))?|\d+\/\d+)/i);
+    if (single) numbers.push(single[1].replace(/\s+/g, "").toLowerCase());
+  }
+  return numbers;
+}
+
+function mentionIsAdmitted(mention: string, allowed: Set<string>): boolean {
+  const canonical = canonicalProvision(mention).replace(/\(\d+[a-z]*\)$/i, "");
+  if (allowed.has(canonical) || allowed.has(canonicalProvision(mention))) return true;
+  const numbers = expandProvisionNumbers(mention);
+  if (numbers.length === 0) return false;
+  return numbers.every((number) => allowed.has(`so ${number}`) || allowed.has(number) || allowed.has(`sr ${number}`));
+}
+
 export function validateAnswerAuthorityMentions(input: {
   answerText: string;
   authorities: Array<{ citationLabel: string; sectionContent?: string }>;
-  // Only the rewrite recheck may accept a suffix, and only when that source
-  // text actually contains the provision. A model-written suffix never does.
+  // Later checks may accept a mention the admitted text actually contains.
+  // The first check leaves this off, so a model-written suffix is not proof.
   acceptVerifiedCrossReferences?: boolean;
 }): { ok: true } | { ok: false; invalidAuthorityMentions: string[] } {
-  const allowed = new Set(
-    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
-  );
+  const allowed = new Set(input.authorities.map((authority) => canonicalProvision(authority.citationLabel)));
 
   const prose = stripBracketedCitations(input.answerText);
-
-  const matches = [
-    ...new Set(
-      prose.match(/\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi) ?? [],
-    ),
-  ];
+  const matches = [...new Set(prose.match(answerMentionPattern()) ?? [])];
 
   const invalid = matches.filter((mention) => {
-    const normalized = normalizeAuthorityMention(mention);
-    if (allowed.has(normalized)) return false;
+    if (mentionIsAdmitted(mention, allowed)) return false;
     if (!input.acceptVerifiedCrossReferences) return true;
     const at = prose.toLowerCase().indexOf(mention.toLowerCase());
-    return !(at >= 0 && verifiedCrossReference(prose, at, mention.length, input.authorities));
+    if (at >= 0 && verifiedCrossReference(prose, at, mention.length, input.authorities)) return false;
+    return !input.authorities.some((authority) =>
+      Boolean(authority.sectionContent) && sourceContainsMention(authority.sectionContent ?? "", mention));
   });
 
   if (invalid.length > 0) {
@@ -1895,35 +1945,26 @@ function verifiedCrossReference(
   return sourceContainsMention(source.sectionContent, text.slice(index, index + length));
 }
 
-function mentionPattern(): RegExp {
-  return /\b(?:standing order|so)\s+\d+[a-z]*(?:\s*\(\d+[a-z]*\))?|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+(?:\s*\(\d+[a-z]*\))?/gi;
-}
-
 /** A provision form in the source. A bare number, such as "39 minutes", is not one. */
 function sourceContainsMention(source: string, mention: string): boolean {
-  const compactMention = mention.replace(/\s+/g, " ").trim();
-  const standing = compactMention.match(/^(?:standing orders?|so)\s+(\d+[a-z]*)\s*(\(\d+[a-z]*\))?$/i);
-  if (standing) {
-    const subsection = standing[2] ? `\\s*\\(${standing[2].slice(1, -1)}\\)` : "";
-    return new RegExp(`\\b(?:standing orders?|so)\\s+${standing[1]}${subsection}(?![0-9])`, "i").test(source);
+  const wanted = expandProvisionNumbers(mention);
+  if (wanted.length === 0) return false;
+  const found = new Set<string>();
+  for (const match of source.matchAll(provisionMentionPattern())) {
+    for (const number of expandProvisionNumbers(match[0])) found.add(number);
   }
-  const ruling = compactMention.match(/^(\d+\/\d+)\s*(\(\d+[a-z]*\))?$/);
-  if (ruling) {
-    const subsection = ruling[2] ? `\\s*\\(${ruling[2].slice(1, -1)}\\)` : "";
-    return new RegExp(`\\b(?:speakers?'?\\s+rulings?|sr)\\s+${ruling[1]}${subsection}(?![0-9])`, "i").test(source);
-  }
-  const escaped = compactMention.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(escaped.replace(/\\ /g, "\\s+"), "i").test(source);
+  return wanted.every((number) => found.has(number));
 }
 
 function referredToForm(mention: string, label: string): string {
-  const standingOrder = mention.match(/^(?:standing order|so)\s+(\d+[a-z]*)\s*(\(\d+[a-z]*\))?/i);
-  if (standingOrder) {
-    const subsection = standingOrder[2] ? standingOrder[2].replace(/\s+/g, "") : "";
-    return `Standing Order ${standingOrder[1]}${subsection} (referred to in ${label}; not retrieved)`;
+  const flat = mention.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const standing = flat.match(/^(?:standing orders?|s\.?\s*o\.?)\s+(.+)$/i);
+  if (standing) {
+    const single = standing[1].match(/^(\d+[a-z]*)(\(\d+[a-z]*\))?$/i);
+    if (single) return `Standing Order ${single[1]}${single[2] ?? ""} (referred to in ${label}; not retrieved)`;
+    return `Standing Orders ${standing[1]} (referred to in ${label}; not retrieved)`;
   }
-  const cleaned = mention.replace(/\s+/g, " ").trim();
-  return `${cleaned} (referred to in ${label}; not retrieved)`;
+  return `${flat} (referred to in ${label}; not retrieved)`;
 }
 
 export function rewriteForbiddenAuthorityMentions(input: {
@@ -1933,16 +1974,14 @@ export function rewriteForbiddenAuthorityMentions(input: {
   rewrittenText: string;
   removedMentions: string[];
 } {
-  const allowed = new Set(
-    input.authorities.map((authority) => normalizeAuthorityMention(authority.citationLabel)),
-  );
+  const allowed = new Set(input.authorities.map((authority) => canonicalProvision(authority.citationLabel)));
   const removed: string[] = [];
   const rewritten = input.answerText.replace(
-    new RegExp(`(?:${mentionPattern().source})(?:\\s*\\(referred to in\\b[^)]*;\\s*not retrieved\\))?`, "gi"),
+    new RegExp(`(?:${answerMentionPattern().source})(?:${GAP}*\\(referred to in\\b[^)]*;\\s*not retrieved\\))?`, "gi"),
     (full) => {
-      const suffix = full.match(/\s*\(referred to in\b[^)]*;\s*not retrieved\)$/i);
+      const suffix = full.match(new RegExp(`${GAP}*\\(referred to in\\b[^)]*;\\s*not retrieved\\)$`, "i"));
       const mention = suffix ? full.slice(0, full.length - suffix[0].length) : full;
-      if (allowed.has(normalizeAuthorityMention(mention))) return mention;
+      if (mentionIsAdmitted(mention, allowed)) return mention;
       removed.push(mention);
       const source = input.authorities.find((authority) =>
         authority.sectionContent && sourceContainsMention(authority.sectionContent, mention));
@@ -2043,11 +2082,12 @@ function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string
   const found: string[] = [];
   for (const mention of mentions) {
     const ruling = mention.match(/(\d+\/\d+)/);
-    const normalized = normalizeAuthorityMention(mention);
+    const normalized = normalizeAuthorityMention(mention).replace(/\(\d+[a-z]*\)$/i, "");
     for (const label of allowedLabels) {
       const labelNorm = normalizeAuthorityMention(label);
       const same = labelNorm === normalized
-        || (ruling !== null && (labelNorm === ruling[1] || labelNorm === `sr ${ruling[1]}`));
+        || canonicalProvision(mention).replace(/\(\d+[a-z]*\)$/i, "") === canonicalProvision(label)
+        || (ruling !== null && (labelNorm === ruling[1] || canonicalProvision(label) === `sr ${ruling[1]}`));
       if (same && !found.includes(label)) found.push(label);
     }
   }
