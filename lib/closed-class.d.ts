@@ -15,6 +15,7 @@ export const ON: string;
 export const FOR: string;
 export const PREPOSITIONS: readonly string[];
 export const CONJUNCTIONS: readonly string[];
+export const RELATIVES: readonly string[];
 export const NUMERALS: readonly string[];
 export const NAMED_NONCONTENT: Set<string>;
 export function isNamedNonContent(word: string): boolean;

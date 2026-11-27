@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 /** Changing the manifest requires editing this constant in the same commit. */
-const MANIFEST_SHA256 = "dbc558a9f9c3270fe3eda7b3af2ae3e139acc5476e62144cf4e29998464bdbdb";
+const MANIFEST_SHA256 = "bec27852a8e0e209f3a2a972c944027e55f82ebd73a1e105f05533e46e2156ff";
 
 const manifestBytes = readFileSync(new URL("./fixture-sha256.json", import.meta.url));
 const manifest = JSON.parse(manifestBytes.toString("utf8")) as { files: Record<string, string> };

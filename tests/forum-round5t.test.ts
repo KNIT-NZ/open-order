@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOSED_CLASS } from "../lib/closed-class.js";
+import { AUXILIARIES, MODALS, NAMED_NONCONTENT, PRONOUNS } from "../lib/closed-class.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms.js";
 import { corpusProceedingHeads } from "../lib/corpus-proceedings-data.js";
 import { headingPrefixes } from "../lib/domain-vocabulary-data.js";
@@ -122,14 +122,26 @@ test("a lone prefix word before a class word is the committee name", () => {
   );
 });
 
-test("closed-class words keep a family phrase inside the family", () => {
+test("non-content words keep a family phrase inside the family", () => {
   const path = ["Chapter 2", "Sittings", "SO 9", "Committee of the whole House"];
   assert.equal(forumIdentityOutcome("the House in committee", path), "match");
-  for (const word of CLOSED_CLASS) {
+  assert.equal(forumIdentityOutcome("these Houses in committee", path), "match");
+  for (const word of NAMED_NONCONTENT) {
     assert.equal(forumIdentityOutcome(`${word} House in committee`, path), "match", word);
     assert.equal(forumIdentityOutcome(`House in committee ${word}`, path), "match", word);
   }
+  for (const word of [...PRONOUNS, ...AUXILIARIES, ...MODALS]) {
+    if (NAMED_NONCONTENT.has(word)) continue;
+    assert.notEqual(forumIdentityOutcome(`${word} House in committee`, path), "match", word);
+    assert.notEqual(forumIdentityOutcome(`House in committee ${word}`, path), "match", word);
+  }
+  assert.notEqual(forumIdentityOutcome("does House in committee", path), "match");
+  assert.notEqual(forumIdentityOutcome("House in committee ourselves", path), "match");
   assert.notEqual(forumIdentityOutcome("lantern House in committee", path), "match");
+  assert.equal(
+    forumIdentityOutcome("this House in committee", ["Chapter 4", "BUSINESS COMMITTEE", "SO 5", "Meetings"]),
+    "reject",
+  );
 });
 
 test("house in committee is the whole-house forum", () => {
