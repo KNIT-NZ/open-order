@@ -1,6 +1,8 @@
 import { EMPTY_REPAIR_REASON, V402_REPAIR_REASONS } from "../ai/scenario-adjudication";
 import { DIAGNOSTIC_KINDS, NONRETRYABLE_CODES, TRANSIENT_CODES } from "../ai/provider-resilience";
-import { COUNT_DIGITS, FORUM_COUNT_WIDTH, RECOVERY_COUNT_DIGITS } from "./emitted-widths";
+import { CLAIM_ID_MAX_LENGTH, COUNT_DIGITS, FORUM_COUNT_WIDTH, RECOVERY_COUNT_DIGITS } from "./emitted-widths";
+
+export { CLAIM_ID_MAX_LENGTH };
 
 const ALLOWED_KEY = /^(?:rewritten_mentions|pruned_lines|invalid_citations|ungrounded_mentions|responsiveness|incident_repair|pruned_unsupported_claims|claim_ids|appeal_attempted|appeal_corroborated|appeal_unavailable|bottom_line_before|bottom_line_after|draft_claims|rejected_claims|remaining_claims|citations_valid|mentions_valid|appeal|bottom_line_recovery|claim_check_attempts|repair|repair_attempts|operation|kind|status|code|provider|retryable|attempts|unresolved_facets|primary_refusal|recovery_refusal|disposition|recovery_candidates|rejected|selector_forum|overlooked_forum|selector_forum_withheld)$/;
 const ALLOWED_BARE = new Set(["v29_semantic_fallback"]);
@@ -32,7 +34,6 @@ const PROVIDER_CODE = new Set<string>([...TRANSIENT_CODES, ...NONRETRYABLE_CODES
 const KIND = new Set<string>(DIAGNOSTIC_KINDS);
 const REPAIR_REASON = new Set<string>([...V402_REPAIR_REASONS, EMPTY_REPAIR_REASON]);
 const REPAIR_PHASE = /^(?:generation|deterministic_checks|independent_validation|independent_verdict_schema)$/;
-export const CLAIM_ID_MAX_LENGTH = 40;
 const COUNT_VALUE = new RegExp(`^\\d{1,${COUNT_DIGITS}}$`);
 const RECOVERY_VALUE = new RegExp(`^\\d{1,${RECOVERY_COUNT_DIGITS}}$`);
 const FORUM_VALUE = new RegExp(`^forum-(?:identity|ambiguous):\\d{1,${FORUM_COUNT_WIDTH}}$`);

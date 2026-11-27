@@ -4,7 +4,7 @@ import test from "node:test";
 import { classifyAiError, DIAGNOSTIC_KINDS, NONRETRYABLE_CODES, TRANSIENT_CODES, TRANSIENT_STATUSES } from "../lib/ai/provider-resilience";
 import { EMPTY_REPAIR_REASON, V402_REPAIR_REASONS, v402RepairRefusals } from "../lib/ai/scenario-adjudication";
 import { CLAIM_ID_MAX_LENGTH } from "../lib/open-order/client-check-note";
-import { COUNT_DIGITS, FORUM_COUNT_WIDTH, RECOVERY_COUNT_DIGITS } from "../lib/open-order/emitted-widths";
+import { COUNT_DIGITS, FORUM_COUNT_WIDTH, RECOVERY_COUNT_DIGITS, countLimit } from "../lib/open-order/emitted-widths";
 import { describeMissingAuthoritySlots } from "../lib/procedural-reasoning";
 import { clientCheckNote, forumCountCodes } from "../lib/open-order/client-check-note";
 import { publicScenarioAdjudication } from "../lib/open-order/public-diagnostics";
@@ -191,6 +191,55 @@ test("every emitted diagnostic survives, and a value the code does not emit is r
   const kept = forumCountCodes("selector_forum", { identity: 25000, ambiguous: 3 });
   assert.equal(kept.some((token) => token.startsWith("selector_forum=forum-identity:")), true);
   assert.equal(clientCheckNote(kept), kept.join(";"));
+  const saturated = countLimit(FORUM_COUNT_WIDTH);
+  const atMax = forumCountCodes("selector_forum", { identity: saturated, ambiguous: 0 });
+  const overMax = forumCountCodes("overlooked_forum", { identity: saturated + 1, ambiguous: saturated + 1 });
+  assert.deepEqual(atMax, [`selector_forum=forum-identity:${saturated}`, "selector_forum=forum-ambiguous:0"]);
+  assert.deepEqual(overMax, [
+    `overlooked_forum=forum-identity:${saturated}`,
+    `overlooked_forum=forum-ambiguous:${saturated}`,
+  ]);
+  assert.equal(clientCheckNote([`selector_forum=forum-identity:${saturated + 1}`]), null);
+  assert.equal(clientCheckNote(atMax), atMax.join(";"));
+});
+
+test("route keys are enumerated and every slot rejects a bad value", () => {
+  const route = source("../app/api/ai/answer/route.ts");
+  const note = source("../lib/open-order/client-check-note.ts");
+  const keys = new Set<string>();
+  for (const match of route.matchAll(/(?:[`";])([a-z][a-z0-9_]*)=/g)) keys.add(match[1] ?? "");
+  for (const match of route.matchAll(/forumCountCodes\("([a-z_]+)"/g)) keys.add(match[1] ?? "");
+  const listed = [...keys].sort();
+  assert.equal(listed.length, 33, listed.join(","));
+  const countBlock = note.slice(note.indexOf("const COUNT_KEY"), note.indexOf("const BOOL_KEY"));
+  const countKeys = new Set(stringsIn(countBlock));
+  const boolBlock = note.slice(note.indexOf("const BOOL_KEY"), note.indexOf("const PROVIDER_CODE"));
+  const boolKeys = new Set(stringsIn(boolBlock));
+  const maxCount = "9".repeat(COUNT_DIGITS);
+  const overCount = "1".repeat(COUNT_DIGITS + 1);
+  const maxRecovery = "9".repeat(RECOVERY_COUNT_DIGITS);
+  const overRecovery = "1".repeat(RECOVERY_COUNT_DIGITS + 1);
+  for (const key of listed) {
+    assert.equal(clientCheckNote([`${key}=`]), null, key);
+    if (countKeys.has(key)) {
+      const width = key === "recovery_candidates" ? maxRecovery : maxCount;
+      const over = key === "recovery_candidates" ? overRecovery : overCount;
+      assert.equal(clientCheckNote([`${key}=${width}`]), `${key}=${width}`, key);
+      assert.equal(clientCheckNote([`${key}=${over}`]), null, key);
+    } else if (boolKeys.has(key)) {
+      assert.equal(clientCheckNote([`${key}=true`]), `${key}=true`, key);
+      assert.equal(clientCheckNote([`${key}=maybe`]), null, key);
+    } else {
+      assert.equal(clientCheckNote([`${key}=NOT_A_VALUE`]), null, key);
+    }
+  }
+  for (const key of ["appeal_attempted", "appeal_corroborated", "appeal_unavailable"]) {
+    assert.equal(clientCheckNote([`${key}=${overCount}`]), null, key);
+  }
+  for (const key of ["bottom_line_before", "bottom_line_after"]) {
+    assert.equal(clientCheckNote([`${key}=maybe`]), null, key);
+    assert.equal(clientCheckNote([`${key}=`]), null, key);
+  }
 });
 
 test("missing-slot gaps are built without planner query text", () => {

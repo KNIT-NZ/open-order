@@ -40,6 +40,55 @@ test("a whole-house setting under a generic plural heading matches", () => {
   );
 });
 
+test("a corpus noun makes a singular committee a named body", () => {
+  assert.equal(
+    forumIdentityOutcome("the Merrow debate", ["Chapter 4", "DAY COMMITTEE", "SO 5", "Merrow debate"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Committee of the whole House", ["DAY COMMITTEE", "SO 5", "Committee of the whole House"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("a committee", ["Chapter 4", "SPEAKER COMMITTEE", "SO 5", "Meetings"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("the Merrow debate", ["Chapter 4", "HEARTHLANE COMMITTEES", "SO 5", "Merrow debate"]),
+    "match",
+  );
+});
+
+test("a class word does not end a real committee name", () => {
+  assert.equal(
+    forumIdentityOutcome("the Merrow debate", ["Chapter 4", "HEARTHLANE SELECT COMMITTEE", "SO 5", "Merrow debate"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Committee of the whole House", ["HEARTHLANE SELECT COMMITTEE", "SO 5", "Committee of the whole House"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Hearthlane Select Committee", ["Select committees", "Marrowfen Select Committee"]),
+    "uncertain",
+  );
+});
+
+test("a singular class heading with a topic tail is named", () => {
+  assert.equal(
+    forumIdentityOutcome("the Merrow debate", ["Chapter 4", "SELECT COMMITTEE ON THE MEASURE", "SO 5", "Merrow debate"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("a committee", ["Chapter 4", "SELECT COMMITTEE ON THE MEASURE", "SO 5", "Meetings"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("the committee", ["Chapter 5", "SO 9", "Select committees on the measure"]),
+    "match",
+  );
+});
+
 test("the pinned pack yields exactly one whole-house phrase", () => {
   const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
     sections: Array<{ section_type?: string; heading?: string; path?: string[] }>;

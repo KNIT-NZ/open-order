@@ -1,9 +1,10 @@
 import type { AiScenarioAdjudication, AiSourceDisposition } from "./types";
+import { COUNT_DIGITS, RECOVERY_COUNT_DIGITS, boundedCount } from "./emitted-widths";
 
 // Public diagnostics are counts and reason codes. Authority labels do not leave
 // this function: selected, dossier, the out-of-dossier list, disposition rows,
 // and recovery candidates and selected are emptied. Counts replace them.
-const COUNTED = /^[a-z0-9_.:,-]{1,64}=\d{1,4}$/i;
+const COUNTED = new RegExp(`^[a-z0-9_.:,-]{1,64}=\\d{1,${COUNT_DIGITS}}$`, "i");
 const SCOPE = /^scope-not-established:(?:actor|setting|action|stage)(?:,(?:actor|setting|action|stage))*$/;
 const REASONS = new Set([
   "verified_source_witness", "model_did_not_nominate", "ambiguous-source-identity", "admission_limit",
@@ -62,12 +63,12 @@ export function rejectionCodes(entries: readonly string[] | undefined): string[]
     total += 1;
   }
   if (total === 0) return passthrough;
-  return [`rejected=${total}`, ...[...counts].map(([code, count]) => `${code}=${count}`)];
+  return [`rejected=${boundedCount(total, COUNT_DIGITS)}`, ...[...counts].map(([code, count]) => `${code}=${boundedCount(count, COUNT_DIGITS)}`)];
 }
 
 function publicDispositionCount(entry: string): string | null {
   const eq = entry.lastIndexOf("=");
-  if (eq < 0 || !/^\d{1,4}$/.test(entry.slice(eq + 1))) return null;
+  if (eq < 0 || !new RegExp(`^\\d{1,${COUNT_DIGITS}}$`).test(entry.slice(eq + 1))) return null;
   const key = entry.slice(0, eq);
   const colon = key.indexOf(":");
   if (colon < 0) return null;
@@ -99,8 +100,8 @@ function nonNegativeInt(value: unknown): number {
 
 function gapCodes(gaps: readonly string[] | undefined): string[] {
   const list = gaps ?? [];
-  if (list.length === 1 && /^unresolved_facets=\d{1,2}$/.test(list[0])) return [...list];
-  return list.length > 0 ? [`unresolved_facets=${list.length}`] : [];
+  if (list.length === 1 && new RegExp(`^unresolved_facets=\\d{1,${COUNT_DIGITS}}$`).test(list[0] ?? "")) return [...list];
+  return list.length > 0 ? [`unresolved_facets=${boundedCount(list.length, COUNT_DIGITS)}`] : [];
 }
 
 type NominationInput = {
@@ -149,9 +150,9 @@ export function publicScenarioAdjudication(input: PublicInput): PublicInput {
   const recovery = input.recovery;
   const nominations = nominationCounts(input);
   const recoveryCandidates = recovery?.candidates ?? [];
-  const recoveryCandidateCode = recoveryCandidates.length === 1 && /^recovery_candidates=\d+$/.test(recoveryCandidates[0] ?? "")
+  const recoveryCandidateCode = recoveryCandidates.length === 1 && new RegExp(`^recovery_candidates=\\d{1,${RECOVERY_COUNT_DIGITS}}$`).test(recoveryCandidates[0] ?? "")
     ? [...recoveryCandidates]
-    : [`recovery_candidates=${recoveryCandidates.length}`];
+    : [`recovery_candidates=${boundedCount(recoveryCandidates.length, RECOVERY_COUNT_DIGITS)}`];
   return {
     status: publicStatus(input.status),
     candidateCount: Number(input.candidateCount) || 0,

@@ -1,7 +1,8 @@
 // app/api/ai/answer/route.ts
 import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
-import { CLAIM_ID_MAX_LENGTH, clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
+import { clientCheckNote, forumCountCodes } from "@/lib/open-order/client-check-note";
+import { CLAIM_ID_MAX_LENGTH, COUNT_DIGITS, FORUM_COUNT_WIDTH, boundedCount } from "@/lib/open-order/emitted-widths";
 import { publicScenarioAdjudication } from "@/lib/open-order/public-diagnostics";
 import { publicRetrievals } from "@/lib/open-order/public-search";
 import { boundedElapsed, operationalRelease, operationalStage, type OperationalOutcome } from "@/lib/open-order/operational-event";
@@ -923,7 +924,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const forumCodes = [
             ...forumCountCodes("selector_forum", tallyForumOutcomes(searches.flatMap((search) => search.results), forumSetting)),
             ...forumCountCodes("overlooked_forum", tallyForumOutcomes(overlookedRecords, forumSetting)),
-            ...clientCheckNote([`selector_forum_withheld=forum-identity:${selectorForumWithheld}`])?.split(";") ?? [],
+            ...clientCheckNote([`selector_forum_withheld=forum-identity:${boundedCount(selectorForumWithheld, FORUM_COUNT_WIDTH)}`])?.split(";") ?? [],
           ];
           const authorityPayload: AuthorityPayload[] =
             buildAuthorityPayload(finalAuthorities);
@@ -1178,7 +1179,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
             finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(initialPrune.prunedText));
             if (initialPrune.removedLines.length > 0) {
-              pruneNote = clientCheckNote([`pruned_lines=${initialPrune.removedLines.length}`]);
+              pruneNote = clientCheckNote([`pruned_lines=${boundedCount(initialPrune.removedLines.length, COUNT_DIGITS)}`]);
               outcomeState.pruned = true;
               noteCheckedWithholding();
             }
@@ -1229,7 +1230,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               // Count only: the unretrieved labels stay off the client payload.
               const fallbackReason = "The AI draft cited authorities that were not retrieved.";
               claimValidationNote = clientCheckNote([
-                `invalid_citations=${citationValidation.invalidCitations.length}`,
+                `invalid_citations=${boundedCount(citationValidation.invalidCitations.length, COUNT_DIGITS)}`,
               ]);
 
               const fallbackAnswer = groundedFallback({
@@ -1284,9 +1285,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
 
               rewriteNote = clientCheckNote([
-                `rewritten_mentions=${rewrite.removedMentions.length}`,
+                `rewritten_mentions=${boundedCount(rewrite.removedMentions.length, COUNT_DIGITS)}`,
                 secondPrune.removedLines.length > 0
-                  ? `pruned_lines=${secondPrune.removedLines.length}`
+                  ? `pruned_lines=${boundedCount(secondPrune.removedLines.length, COUNT_DIGITS)}`
                   : null,
               ]);
               if (rewrite.removedMentions.length > 0) outcomeState.rewritten = true;
@@ -1308,8 +1309,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 outcomeState.abstained = true;
                 const fallbackReason = "The AI draft mentioned or cited authorities that could not be grounded.";
                 claimValidationNote = clientCheckNote([
-                  recheckMentions.ok ? null : `ungrounded_mentions=${recheckMentions.invalidAuthorityMentions.length}`,
-                  recheckCitations.ok ? null : `invalid_citations=${recheckCitations.invalidCitations.length}`,
+                  recheckMentions.ok ? null : `ungrounded_mentions=${boundedCount(recheckMentions.invalidAuthorityMentions.length, COUNT_DIGITS)}`,
+                  recheckCitations.ok ? null : `invalid_citations=${boundedCount(recheckCitations.invalidCitations.length, COUNT_DIGITS)}`,
                 ]);
 
                 const fallbackAnswer = groundedFallback({
@@ -1411,7 +1412,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (claimValidationAttempts > 1) {
               claimValidationNote = clientCheckNote([
                 claimValidationNote,
-                `claim_check_attempts=${claimValidationAttempts}`,
+                `claim_check_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
               ]);
             }
             // V40.1: one bounded repair of an incident answer that omitted the
@@ -1528,7 +1529,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     claimValidationNote = clientCheckNote([
                       claimValidationNote,
                       "repair=accepted",
-                      `repair_attempts=${claimValidationAttempts}`,
+                      `repair_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
                     ]);
                   }
                 }
@@ -1638,11 +1639,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   }
                   outcomeState.appealAttempted = true;
                   outcomeState.appealAccepted = acceptedAppeals.size > 0;
-                  appealDiagnostic = `appeal_attempted=${disputed.length};appeal_corroborated=${acceptedAppeals.size}`;
+                  appealDiagnostic = `appeal_attempted=${boundedCount(disputed.length, COUNT_DIGITS)};appeal_corroborated=${boundedCount(acceptedAppeals.size, COUNT_DIGITS)}`;
                 } catch {
                   // Reviewer errors, malformed JSON, missing or fake quotations
                   // are not a reason to waive the original rejection.
-                  appealDiagnostic = "appeal_unavailable=1";
+                  appealDiagnostic = `appeal_unavailable=${boundedCount(1, COUNT_DIGITS)}`;
                 }
               }
             }
@@ -1671,7 +1672,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 .map((claim) => claim.id)
                 .filter((id) => id.length >= 1 && id.length <= CLAIM_ID_MAX_LENGTH && /^[a-z0-9_.:-]+$/i.test(id));
               claimValidationNote = clientCheckNote([
-                `pruned_unsupported_claims=${semanticPrune.removedClaims.length}`,
+                `pruned_unsupported_claims=${boundedCount(semanticPrune.removedClaims.length, COUNT_DIGITS)}`,
                 claimIds.length > 0 ? `claim_ids=${claimIds.join(",")}` : null,
                 appealDiagnostic,
               ]);
@@ -1801,9 +1802,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 "v29_semantic_fallback",
                 `bottom_line_before=${ooV29BottomLineBeforeSemanticPrune}`,
                 `bottom_line_after=${hasBottomLine}`,
-                `draft_claims=${answerClaims.length}`,
-                `rejected_claims=${unsupportedClaimIds.length}`,
-                `remaining_claims=${remainingClaims.length}`,
+                `draft_claims=${boundedCount(answerClaims.length, COUNT_DIGITS)}`,
+                `rejected_claims=${boundedCount(unsupportedClaimIds.length, COUNT_DIGITS)}`,
+                `remaining_claims=${boundedCount(remainingClaims.length, COUNT_DIGITS)}`,
                 `citations_valid=${finalCitationValidation.ok}`,
                 `mentions_valid=${finalMentionValidation.ok}`,
                 rejectedIds.length > 0 ? `claim_ids=${rejectedIds.join(",")}` : "claim_ids=none",
@@ -1857,7 +1858,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 !(claimValidationNote ?? "").includes("claim_check_attempts=")) {
               claimValidationNote = clientCheckNote([
                 claimValidationNote,
-                `claim_check_attempts=${claimValidationAttempts}`,
+                `claim_check_attempts=${boundedCount(claimValidationAttempts, COUNT_DIGITS)}`,
               ]);
             }
             const trailingSettlement = parseSettlement(finalAnswer);
@@ -1958,7 +1959,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 `code=${operationFailure.code ?? "none"}`,
                 `provider=${operationFailure.provider ?? "none"}`,
                 `retryable=${operationFailure.retryable}`,
-                `attempts=${operationFailure.attempts}`,
+                `attempts=${boundedCount(operationFailure.attempts, COUNT_DIGITS)}`,
               ]),
               operationFailure,
             });
