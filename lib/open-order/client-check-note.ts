@@ -68,9 +68,11 @@ function allowedValue(key: string, value: string): boolean {
     return /^(?:not_needed|attempted_rejected|accepted_after_recheck|unavailable_original_rejection_preserved)$/.test(value);
   }
   if (key === "responsiveness") return /^(?:supported|partial|not_answered|withheld)$/.test(value);
-  if (key === "repair" || key === "appeal" || key === "primary_refusal" || key === "recovery_refusal" || key === "disposition" || key === "recovery_candidates") {
-    return CODE_VALUE.test(value) && !BLOCKED.test(value);
-  }
+  if (key === "repair") return value === "accepted";
+  if (key === "appeal") return value === "not_attempted";
+  if (key === "recovery_candidates") return /^\d{1,4}$/.test(value);
+  if (key === "disposition") return /^(?:admitted|rejected|not_nominated|withheld_no_primary|not_reviewed_limit)$/.test(value);
+  if (key === "primary_refusal" || key === "recovery_refusal") return false;
   return false;
 }
 

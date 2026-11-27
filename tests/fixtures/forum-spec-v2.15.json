@@ -1,6 +1,6 @@
 {
- "version": "forum-spec-v2.14",
- "schema": "see PR15-forum-spec-v2.14-ENGINEER-SAFE.md (which refers to the v2.13 and earlier mds)",
+ "version": "forum-spec-v2.15",
+ "schema": "see PR15-forum-spec-v2.15-ENGINEER-SAFE.md (which refers to the v2.14 and earlier mds)",
  "fixtures": {
   "committeeList": {
    "fixture": [
@@ -4381,7 +4381,7 @@
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "committee",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -4421,7 +4421,7 @@
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "committee",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -4461,7 +4461,7 @@
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "committee",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -4541,7 +4541,7 @@
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "committee",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -4753,7 +4753,7 @@
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "committee",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -4840,12 +4840,12 @@
     },
     {
      "text": "Hollin division",
-     "kind": "proceeding:division",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -4855,15 +4855,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5] R5: same or generic proceeding on the leaf. (A generic proceeding phrase passes.)",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding|proceeding|generic",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-114",
@@ -4978,12 +4980,12 @@
     },
     {
      "text": "Hollin report",
-     "kind": "proceeding:report",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -4993,15 +4995,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5] R5: same or generic proceeding on the leaf. (A generic proceeding phrase passes.)",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding|proceeding|generic",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-117",
@@ -5024,12 +5028,12 @@
     },
     {
      "text": "Hollin sitting",
-     "kind": "proceeding:sitting",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -5039,15 +5043,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5] R5: same or generic proceeding on the leaf. (A generic proceeding phrase passes.)",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding|proceeding|generic",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-118",
@@ -5070,12 +5076,12 @@
     },
     {
      "text": "Hollin stage",
-     "kind": "proceeding:stage",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -5085,15 +5091,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5] R5: same or generic proceeding on the leaf. (A generic proceeding phrase passes.)",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding|proceeding|generic",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-119",
@@ -5116,12 +5124,12 @@
     },
     {
      "text": "Hollin urgency",
-     "kind": "proceeding:urgency",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "generic",
    "committeeList": "fixture",
@@ -5131,15 +5139,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5] R5: same or generic proceeding on the leaf. (A generic proceeding phrase passes.)",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5",
+   "rule": "R4",
    "stratum": "proceeding|proceeding|generic",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-120",
@@ -5150,7 +5160,7 @@
    "path": [
     {
      "text": "HEARINGS IN GENERAL",
-     "kind": "proceeding_broad:hearing",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 0
     },
@@ -5162,12 +5172,12 @@
     },
     {
      "text": "Pōhen hearing",
-     "kind": "proceeding:hearing",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5276,13 +5286,13 @@
    "path": [
     {
      "text": "ADJOURNMENTS IN GENERAL",
-     "kind": "proceeding_broad:adjournment",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 0
     },
     {
      "text": "TARN ADJOURNMENT",
-     "kind": "proceeding:adjournment",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 1
     },
@@ -5294,12 +5304,12 @@
     },
     {
      "text": "Tarn adjournment",
-     "kind": "proceeding:adjournment",
+     "kind": "topic",
      "position": "leaf",
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5334,7 +5344,7 @@
     },
     {
      "text": "ADJOURNMENTS IN GENERAL",
-     "kind": "proceeding_broad:adjournment",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -5351,7 +5361,7 @@
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5361,15 +5371,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule under a broad heading of the same kind.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-125",
@@ -5536,7 +5548,7 @@
     },
     {
      "text": "CONSIDERATION IN GENERAL",
-     "kind": "proceeding_broad:consideration",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -5548,12 +5560,12 @@
     },
     {
      "text": "Tarn consideration",
-     "kind": "proceeding:consideration",
+     "kind": "topic",
      "position": "leaf",
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5594,12 +5606,12 @@
     },
     {
      "text": "Hollin consideration",
-     "kind": "proceeding:consideration",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5816,7 +5828,7 @@
     },
     {
      "text": "DIVISIONS IN GENERAL",
-     "kind": "proceeding_broad:division",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -5833,7 +5845,7 @@
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5843,15 +5855,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule under a broad heading of the same kind.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-135",
@@ -5868,7 +5882,7 @@
     },
     {
      "text": "DIVISIONS IN GENERAL",
-     "kind": "proceeding_broad:division",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -5880,12 +5894,12 @@
     },
     {
      "text": "Tarn division",
-     "kind": "proceeding:division",
+     "kind": "topic",
      "position": "leaf",
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5914,7 +5928,7 @@
    "path": [
     {
      "text": "HOLLIN DIVISION",
-     "kind": "proceeding:division",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -5931,7 +5945,7 @@
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5960,7 +5974,7 @@
    "path": [
     {
      "text": "HOLLIN HEARING",
-     "kind": "proceeding:hearing",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -5972,12 +5986,12 @@
     },
     {
      "text": "Tarn hearing",
-     "kind": "proceeding:hearing",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -5987,15 +6001,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "qualified_partial",
-    "selector": "qualified_partial"
+    "adjudication": "supported",
+    "selector": "supported"
    },
    "principle": "same_body_passes",
-   "reason": "[R7] R7: an ancestor names a different proceeding. (Compare only with the leaf, which is the asked hearing.)",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R7",
+   "rule": "R5/R12",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-138",
@@ -6006,7 +6022,7 @@
    "path": [
     {
      "text": "HOLLIN HEARING",
-     "kind": "proceeding:hearing",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -6023,7 +6039,7 @@
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6052,18 +6068,18 @@
    "path": [
     {
      "text": "Hearings",
-     "kind": "proceeding_broad:hearing",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 0
     },
     {
      "text": "Tarnside hearing",
-     "kind": "proceeding:hearing",
+     "kind": "topic",
      "position": "leaf",
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6098,18 +6114,18 @@
     },
     {
      "text": "Inquiries",
-     "kind": "proceeding:inquiry",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
     {
      "text": "Tarn inquiry",
-     "kind": "proceeding:inquiry",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6144,7 +6160,7 @@
     },
     {
      "text": "INQUIRIES IN GENERAL",
-     "kind": "proceeding_broad:inquiry",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -6161,7 +6177,7 @@
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6171,15 +6187,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule under a broad heading of the same kind.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-142",
@@ -6798,7 +6816,7 @@
     },
     {
      "text": "REPORTS IN GENERAL",
-     "kind": "proceeding_broad:report",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -6815,7 +6833,7 @@
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6825,15 +6843,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule under a broad heading of the same kind.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-156",
@@ -6856,12 +6876,12 @@
     },
     {
      "text": "Hollin report",
-     "kind": "proceeding:report",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6902,12 +6922,12 @@
     },
     {
      "text": "Hollin sitting",
-     "kind": "proceeding:sitting",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6936,7 +6956,7 @@
    "path": [
     {
      "text": "HOLLIN SITTING",
-     "kind": "proceeding:sitting",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -6953,7 +6973,7 @@
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -6988,12 +7008,12 @@
     },
     {
      "text": "Committee stage",
-     "kind": "proceeding:stage",
+     "kind": "topic",
      "position": "leaf",
      "depth": 1
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7034,12 +7054,12 @@
     },
     {
      "text": "Hollin stage",
-     "kind": "proceeding:stage",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7074,7 +7094,7 @@
     },
     {
      "text": "STAGES IN GENERAL",
-     "kind": "proceeding_broad:stage",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -7091,7 +7111,7 @@
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7101,15 +7121,17 @@
    ],
    "softActMiss": false,
    "expected": {
-    "adjudication": "supported",
-    "selector": "supported"
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
    },
    "principle": "generic_passes",
-   "reason": "[R5/R12] R5/R12: neutral or general leaf. (A generic rule under a broad heading of the same kind.)",
+   "reason": "[T-4(1)] T-4(1): a classless name is supported only where the leaf or an ancestor names it. (Re-expected under the r5m scope ruling: classless scope follows the generated proceeding heads.)",
    "policyCall": null,
-   "rule": "R5/R12",
+   "rule": "T-4(1)",
    "stratum": "proceeding|proceeding|unlisted",
-   "deferred": null
+   "deferred": null,
+   "informationOnly": "r5m",
+   "bindingFrom": "r5n"
   },
   {
    "id": "S-162",
@@ -7126,7 +7148,7 @@
     },
     {
      "text": "STAGES IN GENERAL",
-     "kind": "proceeding_broad:stage",
+     "kind": "structural",
      "position": "ancestor",
      "depth": 1
     },
@@ -7138,12 +7160,12 @@
     },
     {
      "text": "Tarn stage",
-     "kind": "proceeding:stage",
+     "kind": "topic",
      "position": "leaf",
      "depth": 3
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7172,7 +7194,7 @@
    "path": [
     {
      "text": "HOLLIN STAGE",
-     "kind": "proceeding:stage",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -7189,7 +7211,7 @@
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7230,12 +7252,12 @@
     },
     {
      "text": "Hollin urgency",
-     "kind": "proceeding:urgency",
+     "kind": "topic",
      "position": "leaf",
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -7264,7 +7286,7 @@
    "path": [
     {
      "text": "HOLLIN URGENCY",
-     "kind": "proceeding:urgency",
+     "kind": "proceeding:proper",
      "position": "ancestor",
      "depth": 0
     },
@@ -7281,7 +7303,7 @@
      "depth": 2
     }
    ],
-   "settingKind": "proceeding",
+   "settingKind": "proceeding_proper_noun",
    "pathClaimKind": "proceeding",
    "specificity": "unlisted",
    "committeeList": "fixture",
@@ -8334,8 +8356,8 @@
     "adjudication": "qualified_partial",
     "selector": "qualified_partial"
    },
-   "rule": "FR20",
-   "reason": "[FR20] FR20: an identity-bearing ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: corpus word, proceeding part.)"
+   "rule": "FR16/R7",
+   "reason": "[FR16/R7] FR16/R7: a corpus-proceeding ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: corpus word, proceeding part.)"
   },
   {
    "settingKind": "proceeding_proper_noun",
@@ -8490,8 +8512,8 @@
     "adjudication": "qualified_partial",
     "selector": "qualified_partial"
    },
-   "rule": "FR20",
-   "reason": "[FR20] FR20: an identity-bearing ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: named setting, proceeding part.)"
+   "rule": "FR16/R7",
+   "reason": "[FR16/R7] FR16/R7: a corpus-proceeding ancestor differs from a classless setting. (D-7 (r5m): a classless setting with a non-self leaf under a conflicting ancestor: named setting, proceeding part.)"
   },
   {
    "settingKind": "proceeding",
@@ -8983,6 +9005,396 @@
    },
    "rule": "R5/R12",
    "reason": "[R5/R12] R5/R12: neutral or general leaf. (R4 (addendum 3): a name-bearing corpus-word leaf that adds only an ordinary corpus word (ruling 4, not ruling 3).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-200",
+   "setting": "the division",
+   "question": "During the division, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 4",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 5",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Ostravel division",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "R4",
+   "reason": "[R4] R4: a name-bearing segment adds a name word or a referent. (scope ruling (r5m) + addendum 3 R4: 'division' is not a generated proceeding head, so the setting is classless; the name-bearing leaf adds a name word.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-201",
+   "setting": "the Pennacombe",
+   "question": "During the Pennacombe, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "PENNACOMBES",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Pennacombe",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (addendum 3 R3: an equal leaf under a plural (prefix-overlapping) ancestor.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-202",
+   "setting": "the Gildersbys",
+   "question": "During the Gildersbys, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "GILDERSBY AND FENWARD",
+     "kind": "proceeding:proper",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 2
+    },
+    {
+     "text": "Gildersbys",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 3
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (addendum 3 R3: an equal leaf (plural name, no plural folding) under a combined ancestor whose part only overlaps by prefix.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-203",
+   "setting": "the ballot",
+   "question": "During the ballot, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Ballots",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "qualified_partial",
+    "selector": "qualified_partial"
+   },
+   "rule": "T-3/T-4(3)",
+   "reason": "[T-3/T-4(3)] T-3/T-4(3): the leaf overlaps the classless setting without equalling it. (r5m review: a corpus-word setting against its plural leaf; the token is matched exactly (R4), so the leaf is not name-bearing and ruling 3 qualifies the overlap.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-204",
+   "setting": "the clerk",
+   "question": "During the clerk, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Clerk papers",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (r5m review: a name-bearing leaf whose only referent is the setting's own word and whose extra word is ordinary (R4 ruling 4 decides, not T-4(2)).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-205",
+   "setting": "the Fernhallow",
+   "question": "During the Fernhallow, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Fernhallow and Quenby",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "bindingFrom": "r5n",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (r5m review: a split leaf whose name part equals the setting; the non-name part is exempt (steer 4 (1), R4).)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-206",
+   "setting": "the second",
+   "question": "During the second, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 2",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "SO 7",
+     "kind": "so_number",
+     "position": "ancestor",
+     "depth": 1
+    },
+    {
+     "text": "Second ballot",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 2
+    }
+   ],
+   "informationOnly": "batch2-log",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (accepted F+ limit (v2.9 limit (1), narrowed by R1): a corpus word used in two senses.)"
+  },
+  {
+   "settingKind": "proceeding_proper_noun",
+   "pathClaimKind": "proceeding",
+   "specificity": "unlisted",
+   "committeeList": "fixture",
+   "routes": [
+    "adjudication",
+    "selector"
+   ],
+   "softActMiss": false,
+   "principle": "different_proceeding_withholds",
+   "policyCall": null,
+   "stratum": "proceeding_proper_noun|proceeding|unlisted",
+   "novelProceeding": null,
+   "deferred": null,
+   "id": "S-207",
+   "setting": "the Quenby division",
+   "question": "During the Quenby division, may the presiding officer suspend the proceedings?",
+   "action": "suspend the proceedings",
+   "body": "The presiding officer may suspend the proceedings.",
+   "path": [
+    {
+     "text": "Chapter 4",
+     "kind": "structural",
+     "position": "ancestor",
+     "depth": 0
+    },
+    {
+     "text": "Quenby sitting",
+     "kind": "topic",
+     "position": "leaf",
+     "depth": 1
+    }
+   ],
+   "informationOnly": "batch2-log",
+   "expected": {
+    "adjudication": "supported",
+    "selector": "supported"
+   },
+   "rule": "R5/R12",
+   "reason": "[R5/R12] R5/R12: neutral or general leaf. (accepted Batch 2 limit AL-division: 'division' is not a generated head, so a named division against a same-named sitting is supported.)"
   }
  ],
  "changelog": [
@@ -9041,6 +9453,7 @@
   "Ruling 4 applies to the name-bearing segments (their name-bearing parts). Ruling 3, overlap without equality, applies to every other segment. Name words take part in the prefix test, which needs a prefix of at least 4 characters. New rows S-182 and S-183 are information only for 5l and binding from r5l.",
   "v2.13 adds rows for the round-5m rulings. D-7: for classless settings the FR16/R7, FR17 and FR20 ancestor checks run whether or not the leaf equals the setting (S-184 to S-189, expected qualified). D-6: a bare proper-noun ancestor that names the setting itself never caps it; only a different proceeding caps, as in S-174 (S-190, expected supported). D-8: a generic committee mention after a generated function word is generic, so a generic committee name against an 'X to select committee' leaf is supported under FR21/FR22 (S-191). These rows are binding from r5m.",
   "Batch-2 log (information only, informationOnly 'batch2-log'): S-192 and S-193 record the current Batch-1 expectation for the plural-fold residue (the w+s/w+es rule stays for Batch 1); S-194 records a name plus a sparse event word that ruling 4 strips (a known F+ limit, no hand list). No existing expectation changed.",
-  "v2.14 encodes rulings addendum 3 (PR15-rulings-r5m-addendum-3-ENGINEER-SAFE.md). R1: for a classless setting T-3 and T-4 decide the result on every route, including the proceeding route (S-195). R2: T-3(b) applies to corpus-word settings (S-196). R3: a leaf equal to the setting, after articles and generated function words are removed with referents kept, beats a mere ruling-3 prefix overlap in an ancestor; the FR16/R7, FR17 and FR20 ancestor conflicts still run (S-197). R4: a segment or split part is name-bearing when it contains the setting's distinguishing token, the name word or for a corpus-word setting its content word, matched exactly; ruling 4 applies to name-bearing segments including the leaf, and ruling 3 to every other segment (S-198, S-199). R5 is covered by S-191. New rows are binding from r5m. No existing expectation changed."
+  "v2.14 encodes rulings addendum 3 (PR15-rulings-r5m-addendum-3-ENGINEER-SAFE.md). R1: for a classless setting T-3 and T-4 decide the result on every route, including the proceeding route (S-195). R2: T-3(b) applies to corpus-word settings (S-196). R3: a leaf equal to the setting, after articles and generated function words are removed with referents kept, beats a mere ruling-3 prefix overlap in an ancestor; the FR16/R7, FR17 and FR20 ancestor conflicts still run (S-197). R4: a segment or split part is name-bearing when it contains the setting's distinguishing token, the name word or for a corpus-word setting its content word, matched exactly; ruling 4 applies to name-bearing segments including the leaf, and ruling 3 to every other segment (S-198, S-199). R5 is covered by S-191. New rows are binding from r5m. No existing expectation changed.",
+  "v2.15 encodes the r5m scope ruling: classless scope follows the corpus-generated classifier (gen:corpus-proceedings heads), not the hand-labelled settingKind. settingKind (and, for classless settings, the proceeding kinds of path parts) is re-derived from the generator for every row; rows whose outcome changes are re-expected, informationOnly 'r5m' and bindingFrom 'r5n'. S-186 and S-189 are relabelled FR16/R7 (outcome unchanged). New rows S-200..S-205 bind from r5n; S-206 and S-207 are batch2-log information-only rows (accepted limits)."
  ]
 }

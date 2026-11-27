@@ -252,9 +252,22 @@ test("code-shaped identifiers do not pass the client note or the adjudication st
     assert.equal(sent.status, "other");
   }
   assert.equal(clientCheckNote(["claim_ids=claim-1,claim-2", "claim_ids=the_member_said"]), "claim_ids=claim-1,claim-2");
-  for (const shape of ["localhost:5432", "sec_48213", "section-48213", "48213", "so-9", "s.o.9", "fe80::1", "claim-1,550e8400-e29b-41d4-a716-446655440000"]) {
-    assert.equal(clientCheckNote([`repair=${shape}`, `appeal=${shape}`]), null, shape);
+  for (const shape of [
+    "localhost:5432", "10.0.0.12:5432", "::ffff:10.0.0.1",
+    "uuid:550e8400-e29b-41d4-a716-446655440000", "none,48213",
+    "dbhost:5", "dbhost:654321", "sec48213", "section_48213", "so_9", "s.o.296a",
+    "sec_48213", "section-48213", "48213", "so-9", "s.o.9", "fe80::1",
+    "claim-1,550e8400-e29b-41d4-a716-446655440000",
+  ]) {
+    assert.equal(clientCheckNote([
+      `repair=${shape}`, `appeal=${shape}`, `primary_refusal=${shape}`,
+      `recovery_refusal=${shape}`, `disposition=${shape}`,
+    ]), null, shape);
+    if (!/^\d{1,4}$/.test(shape)) {
+      assert.equal(clientCheckNote([`recovery_candidates=${shape}`]), null, shape);
+    }
   }
+  assert.equal(clientCheckNote(["repair=accepted", "appeal=not_attempted"]), "repair=accepted;appeal=not_attempted");
   const outside = "standing_orders:QX OUTSIDE DOSSIER";
   const outsideRaw = {
     status: "v40_quoted_source_adjudication",

@@ -56,7 +56,7 @@ test("named committees match only the same body", () => {
     match("Whanau Committee", "Whānau Committee");
     assert.equal(forumIdentityOutcome("the House", ["Committee of the whole House"]), "uncertain");
     match("House of Representatives", "Sittings of the House");
-    assert.equal(forumIdentityOutcome("committee meeting", ["Procedure in committees"]), "uncertain");
+    assert.equal(forumIdentityOutcome("committee meeting", ["Procedure in committees"]), "match");
     assert.equal(forumIdentityOutcome("the House", ["Widget Oversight Committee"]), "uncertain");
     assert.equal(forumIdentityOutcome("committee of the whole", ["select committees"]), "uncertain");
   });

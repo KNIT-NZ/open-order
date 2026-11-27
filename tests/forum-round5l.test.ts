@@ -39,7 +39,12 @@ test("a combined heading is split before the name test, and a referent is not st
   assert.equal(forumIdentityOutcome("the clerk", ["Clerk of the House"]), "uncertain");
   assert.equal(forumIdentityOutcome("the second", ["Ormond rules"]), "uncertain");
   assert.equal(forumIdentityOutcome("the chair", ["CHAIRPERSONS", "The chair"]), "match");
-  assert.equal(forumIdentityOutcome("the division", ["Chapter 4", "SO 5", "Hollin division"]), "match");
+  assert.equal(forumIdentityOutcome("the division", ["Chapter 4", "SO 5", "Hollin division"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the ballot", ["Chapter 2", "SO 7", "Ballots"]), "uncertain");
+  assert.equal(forumIdentityOutcome("the clerk", ["Chapter 2", "SO 7", "Clerk papers"]), "match");
+  assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran and Dunmarrow"]), "match");
+  assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran & Dunmarrow"]), "match");
+  assert.equal(forumIdentityOutcome("the Velloran", ["Chapter 2", "SO 7", "Velloran, Dunmarrow"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["VELLORANDS", "Velloran"]), "match");
   assert.equal(forumIdentityOutcome("the Velloran", ["VELLORAN AND HARROWBY", "Velloran"]), "match");
   assert.equal(forumIdentityOutcome("the ballot", ["Chapter 2", "SO 7", "Ballot budget"]), "uncertain");

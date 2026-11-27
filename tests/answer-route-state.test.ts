@@ -247,9 +247,9 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
     }
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
       const planted = {
-        searchQueries: ["SO 99 suspension", "99/999"],
-        salientTerms: ["Ruling 999 of Gloriana"],
-        notes: "SO 99; 99/999; Ruling 999 of Gloriana",
+        searchQueries: ["SO 999ZZ suspension", "99/999"],
+        salientTerms: ["Gloriana Ceremonial Rule"],
+        notes: "SO 999ZZ; 99/999; Gloriana Ceremonial Rule",
       };
       const value = scenario === "planner_leak"
         ? { ...plan("procedure"), ...planted }
@@ -730,7 +730,7 @@ test("an unretrieved citation falls back and the done answer is not answered", a
 });
 
 test("planner text does not appear in any streamed event or the debug snapshot", async () => {
-  const markers = ["SO 99", "99/999", "Ruling 999 of Gloriana"];
+  const markers = ["SO 999ZZ", "99/999", "Gloriana Ceremonial Rule"];
   for (const scenario of ["planner_leak", "planner_leak_incident"] as const) {
     const events = await ask(scenario);
     const blob = JSON.stringify(events);
