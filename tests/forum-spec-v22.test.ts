@@ -11,8 +11,8 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const specBytes = readFileSync(new URL("./fixtures/forum-spec-v2.28.json", import.meta.url));
-assert.equal(createHash("sha256").update(specBytes).digest("hex"), "1ea941da93af25fd38fc379c9c9858285e32b24f293a88928d338b76f8606c53");
+const specBytes = readFileSync(new URL("./fixtures/forum-spec-v2.31.json", import.meta.url));
+assert.equal(createHash("sha256").update(specBytes).digest("hex"), "46ad813154696873f4456ea57ad964cf465058d72f888fbb2a5c952e45a246cd");
 const spec = JSON.parse(specBytes.toString("utf8"));
 
 type SpecRow = {
@@ -181,12 +181,15 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.28 matches the fixture on either route", async () => {
+test("forum spec v2.31 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;
+  let graded = 0;
   for (const row of spec.rows as SpecRow[]) {
-    if (row.deferred || row.informationOnly === "batch2-log") continue;
+    // 8c-46 makes S-328 binding. The published file still tags it deferred.
+    if ((row.deferred && row.id !== "S-328") || row.informationOnly === "batch2-log") continue;
+    graded += row.routes.filter((route) => route === "selector" || route === "adjudication").length;
     const names = spec.fixtures.committeeList[row.committeeList] as string[];
     await withCorpusCommitteeNames(names, async () => {
       for (const route of row.routes) {
@@ -207,4 +210,5 @@ test("forum spec v2.28 matches the fixture on either route", async () => {
   }
   assert.equal(falseSupported, 0, failures.join("\n"));
   assert.deepEqual(failures, [], JSON.stringify(counts));
+  assert.equal(graded, 655);
 });

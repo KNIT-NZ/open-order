@@ -102,12 +102,14 @@ export type V40Review<T extends V40Authority> = {
 
 function words(input: string): Set<string> {
   const domainStops = new Set<string>(dossierDomainStops);
+  const stopped = (word: string) => CLOSED_CLASS.has(word) || domainStops.has(word);
   return new Set(input.toLowerCase().normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
+    .filter((word) => word.length > 0 && !stopped(word))
     .map((word) => word.replace(/(?:ing|ed|es|s)$/, ""))
-    .filter((word) => word.length >= 3 && !CLOSED_CLASS.has(word) && !domainStops.has(word)));
+    .filter((word) => word.length >= 3 && !stopped(word)));
 }
 function intersection(a: Set<string>, b: Set<string>): number {
   let count = 0;

@@ -41,8 +41,9 @@ test("an unlisted committee matches its own heading", () => {
 });
 
 test("every emitted name seed before a class word names the committee", () => {
-  const seeds = [...new Set([...corpusProceedingHeads, ...headingPrefixes])];
-  assert.ok(seeds.length > 8);
+  const seeds = [...new Set([...headingPrefixes, ...corpusProceedingHeads])];
+  assert.equal(seeds.length, 30);
+  assert.equal(seeds.includes("subject"), false);
   for (const seed of seeds) {
     const heading = `${seed.toUpperCase()} SELECT COMMITTEE`;
     const label = `${seed[0].toUpperCase()}${seed.slice(1)} Select Committee`;
@@ -63,6 +64,48 @@ test("every emitted name seed before a class word names the committee", () => {
   );
   assert.equal(forumIdentityOutcome("a committee", ["HER COMMITTEE", "SO 5", "Meetings"]), "match");
   assert.equal(forumIdentityOutcome("a committee", ["HER SELECT COMMITTEE"]), "match");
+  assert.equal(forumIdentityOutcome("a committee", ["SUBJECT COMMITTEE", "Meetings"]), "match");
+  for (const heading of ["COMMITTEE FOR HER", "COMMITTEE ON HER", "COMMITTEE OF HER"]) {
+    assert.equal(
+      forumIdentityOutcome("a committee", ["Chapter 4", heading, "SO 5", "Meetings"]),
+      "uncertain",
+      heading,
+    );
+  }
+});
+
+test("an own heading under a different named committee is qualified", () => {
+  assert.equal(
+    forumIdentityOutcome("Quarrendon Committee", ["MORLEIGH COMMITTEE", "QUARRENDON COMMITTEE", "Meetings"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Business Committee", ["MORLEIGH COMMITTEE", "BUSINESS COMMITTEE", "Meetings"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Quarrendon Committee", ["QUARRENDON COMMITTEE", "Meetings"]),
+    "match",
+  );
+  assert.equal(
+    forumIdentityOutcome("Quarrendon Committee", ["MORLEIGH COMMITTEE", "QUARRENDON COMMITTEE"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Business Committee", ["MORLEIGH COMMITTEE", "BUSINESS COMMITTEE"]),
+    "uncertain",
+  );
+  assert.equal(
+    forumIdentityOutcome("Quarrendon Committee", ["SELECT COMMITTEES", "QUARRENDON COMMITTEE", "Meetings"]),
+    "match",
+  );
+});
+
+test("a generic setting under a family heading is qualified", () => {
+  assert.equal(
+    forumIdentityOutcome("a committee", ["Chapter 2", "HOUSE IN COMMITTEE", "SO 5", "Time limits"]),
+    "uncertain",
+  );
 });
 
 test("a lone prefix word before a class word is the committee name", () => {

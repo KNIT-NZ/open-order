@@ -1,0 +1,24 @@
+{
+  "files": {
+    "corpus-matrix-v1.1.json": "617750a1257eab29e696aad3de446a937586dfdcf48db811c71c65d3fd0aac0c",
+    "corpus-matrix-v1.2.json": "6c476516abc8f966e0f86f8fd176c496a55bf4d952f90738326ae3273fd9126e",
+    "corpus-referents-v2.9.json": "6a1d636528ea6fd5c019f30d9032ccd71dd5a26ec87082bb142ca7e8f7252040",
+    "corpus-vocab-v2.9.json": "036a81e47ddf7b43c776f145a533f3ce69e481f2deabfe4c74f46b86b3ed5d14",
+    "forum-spec-v2.15.json": "8d27c02d873b3a6fdaf27d1931a1d45556c103358e0a3adb77a3e01b4f1fa1bc",
+    "forum-spec-v2.2.json": "8647776ce3e045f3d97baac607698ef4a24e73a7d11df66f8b1ed4fc097e234d",
+    "forum-spec-v2.20.json": "41c78694ecaf4733b9fcf5853c745de5ae6afca0bf696ec90de3925c0ac8786d",
+    "forum-spec-v2.21.json": "c4360bcb8731c1bf6b7b1469ff5d45e52742ddf20c8e3a3e9dfa88f4d10f964b",
+    "forum-spec-v2.22.json": "8126f230957e4667fa9a9283f37fc756e8683ed4030796f6ca80da14927cb61d",
+    "forum-spec-v2.24.json": "f793fd1add59d9590b0f0e7e719e0cc91ff1c39175c5f3f09d9322b13e476a7f",
+    "forum-spec-v2.25.json": "5d4f39dc6ffb3275590a2629e69cc8f1a0a5cb86d065f9dd912cd90a62091c48",
+    "forum-spec-v2.27.json": "83baf89ab236b77a9b532fa69b3f4d08bd3f80a8527075e8acb570e85f91c5df",
+    "forum-spec-v2.28.json": "1ea941da93af25fd38fc379c9c9858285e32b24f293a88928d338b76f8606c53",
+    "forum-spec-v2.30.json": "2dd7380e32612fbc1ef930a85b6603f726ccc874025c07d2684b3393e94f4a66",
+    "forum-spec-v2.30.md": "50528675f5ba227701d7c9aab2ff30647e7f2054cb127c40b72c678853aac571",
+    "forum-spec-v2.31.json": "46ad813154696873f4456ea57ad964cf465058d72f888fbb2a5c952e45a246cd",
+    "forum-spec-v2.31.md": "15e74353606ec7afe6e2cb9a6796dc317a0169f063c979acdac1f13a3ea8385b",
+    "forum-spec-v2.6.json": "48845dea4e3abb66a19a9cf8c7bfd2ac7fc3084387fe1e4e27d0651fb4d112a3",
+    "self-match-expected.json": "3f109f9ebc1fc7bd6f49e6b578df7b9bf66b63ac3d448dba848ac5c306b92da8",
+    "so-pack.json": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100"
+  }
+}
