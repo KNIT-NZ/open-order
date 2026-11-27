@@ -68,6 +68,8 @@ export type AiAuthority = {
   sourceHref: string | null;
   rank: number;
   canonicalHref?: string;
+  /** True when the source was admitted but the answer is only qualified. */
+  unconfirmed?: boolean;
 };
 
 export type AiDiagnosticTopResult = {

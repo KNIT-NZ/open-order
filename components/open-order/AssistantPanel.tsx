@@ -298,6 +298,11 @@ export function AssistantPanel({
                                 {authority.heading}
                               </span>
                             ) : null}
+                            {authority.unconfirmed ? (
+                              <span className={styles.aiAuthorityHeading}>
+                                Qualified
+                              </span>
+                            ) : null}
                           </div>
 
                           <div className={styles.aiAuthorityPath}>

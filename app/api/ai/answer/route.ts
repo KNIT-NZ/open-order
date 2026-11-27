@@ -670,11 +670,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const has = (set: Set<string>) => set.has(text) || [...set].some((item) => item.toLowerCase() === text.toLowerCase());
             return has(actLabels) || has(forumLabels);
           };
-          // Filter first. Survivors are confirmed, so the flag is false. The client lists this array as authorities.
+          // Every admitted source stays in the citation list. A qualified admission is labelled.
           const listedAuthorities = <T extends { citationLabel?: string }>(list: T[]) =>
-            list
-              .filter((item) => !hiddenLabel(String(item.citationLabel ?? "")))
-              .map((item) => ({ ...item, unconfirmed: false }));
+            list.map((item) => ({
+              ...item,
+              unconfirmed: hiddenLabel(String(item.citationLabel ?? "")),
+            }));
           const groundedFallback = (input: Parameters<typeof buildFallbackAnswer>[0]) => {
             const authorities = input.authorities ?? [];
             const unconfirmed = authorities.filter((item) => hiddenLabel(item.citationLabel));
