@@ -11,8 +11,8 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://localhost/open_order_route_test?sslmode=disable";
 }
 
-const specBytes = readFileSync(new URL("./fixtures/forum-spec-v2.31.json", import.meta.url));
-assert.equal(createHash("sha256").update(specBytes).digest("hex"), "46ad813154696873f4456ea57ad964cf465058d72f888fbb2a5c952e45a246cd");
+const specBytes = readFileSync(new URL("./fixtures/forum-spec-v2.32.json", import.meta.url));
+assert.equal(createHash("sha256").update(specBytes).digest("hex"), "eacb3f208a912e44fb984f3691afc7250965a11bc7c99acb33e200420efb77d0");
 const spec = JSON.parse(specBytes.toString("utf8"));
 
 type SpecRow = {
@@ -181,7 +181,7 @@ function observed(done: Record<string, unknown>, codes: string[]): string {
   return state || "not_answered";
 }
 
-test("forum spec v2.31 matches the fixture on either route", async () => {
+test("forum spec v2.32 matches the fixture on either route", async () => {
   const counts: Record<string, { pass: number; fail: number }> = {};
   const failures: string[] = [];
   let falseSupported = 0;
@@ -210,5 +210,5 @@ test("forum spec v2.31 matches the fixture on either route", async () => {
   }
   assert.equal(falseSupported, 0, failures.join("\n"));
   assert.deepEqual(failures, [], JSON.stringify(counts));
-  assert.equal(graded, 655);
+  assert.equal(graded, 661);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CLOSED_CLASS } from "../lib/closed-class.js";
 import { forumIdentityOutcome } from "../lib/procedural-mechanisms.js";
 import { corpusProceedingHeads } from "../lib/corpus-proceedings-data.js";
 import { headingPrefixes } from "../lib/domain-vocabulary-data.js";
@@ -45,18 +46,20 @@ test("every emitted name seed before a class word names the committee", () => {
   assert.equal(seeds.length, 30);
   assert.equal(seeds.includes("subject"), false);
   for (const seed of seeds) {
-    const heading = `${seed.toUpperCase()} SELECT COMMITTEE`;
-    const label = `${seed[0].toUpperCase()}${seed.slice(1)} Select Committee`;
-    assert.equal(
-      forumIdentityOutcome("a committee", ["Chapter 4", heading, "SO 5", "Meetings"]),
-      "uncertain",
-      heading,
-    );
-    assert.equal(
-      forumIdentityOutcome(label, ["Chapter 4", heading, "SO 5", "Meetings"]),
-      "match",
-      label,
-    );
+    for (const form of ["Select", "Subject"]) {
+      const heading = `${seed.toUpperCase()} ${form.toUpperCase()} COMMITTEE`;
+      const label = `${seed[0].toUpperCase()}${seed.slice(1)} ${form} Committee`;
+      assert.equal(
+        forumIdentityOutcome("a committee", ["Chapter 4", heading, "SO 5", "Meetings"]),
+        "uncertain",
+        heading,
+      );
+      assert.equal(
+        forumIdentityOutcome(label, ["Chapter 4", heading, "SO 5", "Meetings"]),
+        "match",
+        label,
+      );
+    }
   }
   assert.equal(
     forumIdentityOutcome("a committee", ["Chapter 4", "REPORT OF SELECT COMMITTEE", "SO 5", "Meetings"]),
@@ -117,6 +120,16 @@ test("a lone prefix word before a class word is the committee name", () => {
     forumIdentityOutcome("the committee", ["Time Select Committee"]),
     "uncertain",
   );
+});
+
+test("closed-class words keep a family phrase inside the family", () => {
+  const path = ["Chapter 2", "Sittings", "SO 9", "Committee of the whole House"];
+  assert.equal(forumIdentityOutcome("the House in committee", path), "match");
+  for (const word of CLOSED_CLASS) {
+    assert.equal(forumIdentityOutcome(`${word} House in committee`, path), "match", word);
+    assert.equal(forumIdentityOutcome(`House in committee ${word}`, path), "match", word);
+  }
+  assert.notEqual(forumIdentityOutcome("lantern House in committee", path), "match");
 });
 
 test("house in committee is the whole-house forum", () => {
