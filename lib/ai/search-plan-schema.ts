@@ -25,6 +25,7 @@ export const searchPlanSchema = z.object({
     proceduralMoment: z.string().max(180),
     decisionQuestion: z.string().max(260),
     materialFacts: z.array(z.string().max(240)).max(5),
+    subQuestions: z.array(z.string().max(240)).max(4).optional().catch(undefined),
     verb: z.string().max(80).optional().catch(undefined),
     object: z.string().max(120).optional().catch(undefined),
     relations: z.array(z.enum([

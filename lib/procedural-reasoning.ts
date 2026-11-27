@@ -1642,6 +1642,8 @@ export async function selectV517ProductionAuthorities(input: {
     setting?: string;
     action?: string;
     decisionQuestion?: string;
+    materialFacts?: string[];
+    subQuestions?: string[];
   };
 }): Promise<V517SelectionResult> {
   return selectV517AuthorityPack({

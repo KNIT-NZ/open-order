@@ -157,6 +157,7 @@ export async function searchProceduralAuthorities(
         s.id as section_id,
         s.section_key,
         s.citation_label,
+        s.section_type,
         s.heading,
         s.content as section_content,
         s.path,
@@ -334,6 +335,7 @@ export async function searchProceduralAuthorities(
         sc.section_id,
         sc.section_key,
         sc.citation_label,
+        sc.section_type,
         sc.heading,
         sc.section_content,
         sc.path,
@@ -421,8 +423,11 @@ export async function searchProceduralAuthorities(
             else 0
           end +
           case
-            when sc.section_content ~ '\\n[^:\\n]{2,80}:[[:space:]]+\\S'
-              or sc.section_content ~ '\\n\\S+[[:space:]]{2,}\\S+'
+            when sc.section_type = 'appendix_table'
+              and (
+                sc.section_content ~ '\\n[^:\\n]{2,80}:[[:space:]]+\\S'
+                or sc.section_content ~ '\\n\\S+[[:space:]]{2,}\\S+'
+              )
             then sc.path_phrase_rank * 420
             else 0
           end

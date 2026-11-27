@@ -310,6 +310,7 @@ export async function generateJson<T>(
     const response = await fetch(getEndpoint(), {
       method: "POST",
       headers: getHeaders(),
+      signal: request.signal,
       body: JSON.stringify(
         buildRequestBody({
           task: request.task,
@@ -437,6 +438,7 @@ export async function streamText(
       const response = await fetch(getEndpoint(), {
         method: "POST",
         headers: getHeaders(),
+        signal: request.signal,
         body: JSON.stringify(buildRequestBody({
           task: request.task,
           systemInstruction: request.systemInstruction,
@@ -469,6 +471,7 @@ export async function streamText(
       const response = await fetch(getEndpoint(), {
         method: "POST",
         headers: getHeaders(),
+        signal: request.signal,
         body: JSON.stringify(
           buildRequestBody({
             task: request.task,

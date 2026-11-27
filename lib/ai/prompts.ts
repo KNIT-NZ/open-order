@@ -80,6 +80,7 @@ Return this exact shape:
     "proceduralMoment": "speech, debate, voting, committee etc",
     "decisionQuestion": "the decision the user actually asks about",
     "materialFacts": ["up to five facts affecting scope"],
+    "subQuestions": ["each independently asked sub-question, when the user asked more than one"],
     "evidenceQueries": ["up to two additional short source-heading queries"]
   }
 }
@@ -124,7 +125,9 @@ Answer-responsiveness rules:
 - Keep each provision within the actor class it governs.
 - Describe Standing Orders as House rules, not as a statute.
 - Cite a Speaker's ruling with its instrument label, for example "Speakers' ruling NN/N", not a bare number.
-- End with one metadata line "Settlement: settled", "Settlement: partial", or "Settlement: insufficient". When the status is not settled, add "Unresolved:" and short facet labels separated by semicolons.
+- End with one metadata line "Settlement: supported", "Settlement: partial", or "Settlement: not_answered".
+- When the line is not "Settlement: supported", add one "Unresolved:" line. Separate items with semicolons. Each item is "class:facet".
+- class is one of coverage_gap, retrieval_uncertainty, interpretive_uncertainty, authority_conflict, higher_law_tension, facts_incomplete. facet is a short label of at most 48 characters. Do not write corpus_silence.
 - Do not hedge a rule the sources state as a duty.
 - For a conditional sub-issue, state who decides, what discretion applies, and the consequence.
 - For a yes/no question whose answer is supported, begin the first "Bottom line" sentence with "Yes" or "No", immediately followed by the grounded operative rule. Do not leave the user to infer the yes/no answer from a recitation of the rule. For a genuinely conditional rather than binary answer, state the condition directly. When the supplied authority does not settle the question, explicitly say the evidence is insufficient; do not manufacture a prohibition from silence.

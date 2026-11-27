@@ -237,6 +237,7 @@ export async function runGeminiChain<T>(
     onRetry?: () => void;
     signal?: AbortSignal;
     onAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+    onAttemptStart?: (model: string) => void;
   },
 ): Promise<T> {
   const pause = hooks?.sleep ?? sleep;
@@ -244,15 +245,18 @@ export async function runGeminiChain<T>(
   let lastError: AiProviderError | null = null;
   for (const model of chain) {
     if (hooks?.signal?.aborted) {
+      hooks.onAttemptStart?.(model);
       hooks.onAttempt?.({ model, outcome: "timeout" });
       throw new DOMException("The answer deadline elapsed.", "AbortError");
     }
     const attempts = GEMINI_MAX_RETRIES > 0 ? 2 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (hooks?.signal?.aborted) {
+        hooks.onAttemptStart?.(model);
         hooks.onAttempt?.({ model, outcome: "timeout" });
         throw new DOMException("The answer deadline elapsed.", "AbortError");
       }
+      hooks?.onAttemptStart?.(model);
       try {
         const value = await operation(model);
         hooks?.onAttempt?.({ model, outcome: "ok" });
@@ -263,13 +267,14 @@ export async function runGeminiChain<T>(
         if (outcome === "timeout") throw error;
         const classified = classifyError(error);
         lastError = classified;
+        if (classified.kind === "configuration") throw classified;
         const rateLimited = outcome === "429";
         if (classified.retryable && attempt + 1 < attempts) {
           hooks?.onRetry?.();
           await pause(computeBackoffMs(attempt));
           continue;
         }
-        if (rateLimited || classified.retryable) break;
+        if (rateLimited || classified.retryable || outcome === "other") break;
         throw classified;
       }
     }
@@ -288,14 +293,18 @@ export async function generateJson<T>({
   temperature = 0.2,
   onProviderRetry,
   onProviderAttempt,
+  onProviderAttemptStart,
   signal,
+  validate,
 }: {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
   onProviderRetry?: () => void;
   onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
+  validate?: (value: unknown) => void;
 }): Promise<T> {
   return runGeminiChain(async (model) => {
     const gemini = await getClient();
@@ -314,8 +323,9 @@ export async function generateJson<T>({
     const text = response.text ?? "";
     const jsonText = extractLikelyJson(text);
 
+    let parsed: T;
     try {
-      return JSON.parse(jsonText) as T;
+      parsed = JSON.parse(jsonText) as T;
     } catch (error) {
       throw new AiProviderError({
         message: "Failed to parse AI JSON response.",
@@ -326,7 +336,21 @@ export async function generateJson<T>({
         }`,
       });
     }
-  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, signal });
+    if (validate) {
+      try {
+        validate(parsed);
+      } catch (error) {
+        throw new AiProviderError({
+          message: "The model response did not match the required structure.",
+          kind: "parse",
+          retryable: false,
+          rawMessage: error instanceof Error ? error.message : String(error),
+          cause: error,
+        });
+      }
+    }
+    return parsed;
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, onAttemptStart: onProviderAttemptStart, signal });
 }
 
 export async function streamText({
@@ -336,6 +360,7 @@ export async function streamText({
   onChunk,
   onProviderRetry,
   onProviderAttempt,
+  onProviderAttemptStart,
   signal,
 }: {
   systemInstruction: string;
@@ -344,6 +369,7 @@ export async function streamText({
   onChunk?: (text: string) => void;
   onProviderRetry?: () => void;
   onProviderAttempt?: (attempt: { model: string; outcome: ProviderAttemptOutcome }) => void;
+  onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
 }): Promise<string> {
   return runGeminiChain(async (model) => {
@@ -377,5 +403,5 @@ export async function streamText({
     }
 
     return fullText;
-  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, signal });
+  }, { onRetry: onProviderRetry, onAttempt: onProviderAttempt, onAttemptStart: onProviderAttemptStart, signal });
 }

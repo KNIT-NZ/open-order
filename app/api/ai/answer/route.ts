@@ -17,11 +17,11 @@ import {
   authorisingRuleQueries,
   citationLabelsIn,
   collectRejectionKeys,
-  contentTokens,
   deriveAnswerOutcome,
+  deriveAnswerState,
   dropUnreferencedCitationEntries,
   errorCorrectionQueries,
-  expressCrossReferences,
+  followOperatorChain,
   freezeFirstDraft,
   labelBareRulings,
   parseSettlement,
@@ -61,7 +61,7 @@ import {
 } from "@/lib/ai/prompts";
 import { findOmittedSourceQualifications } from "@/lib/ai/qualification-guard";
 import {
-  adjudicateOverlooked, buildV40Dossier, validateV40Proposal,
+  admitJudgedOverlooked, buildV40Dossier, validateV40Proposal,
   v40SourceScopeMismatch,
   v401AcceptIndependentRepair, v402RecoveryCandidates, v402RepairRefusals,
   type V402Disposition, type V40Situation,
@@ -227,16 +227,30 @@ export async function POST(request: NextRequest) {
         abstained: false,
         allObligationsComplete: true,
         obligationCoverage: [] as number[],
+        settlement: null as "supported" | "partial" | "not_answered" | null,
+        uncertainty: [] as Array<{ class: string; facet: string }>,
+        recoveredAuthorities: [] as string[],
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
       let answerEdits: string[] = [];
       const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
+      let openAttemptIndex: number | null = null;
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
       let activeSignal: AbortSignal | undefined;
       const noteRetry = () => { outcomeState.providerRetries += 1; };
+      const beginAttempt = (model: string) => {
+        lastAttemptedModel = model;
+        providerAttempts.push({ model, outcome: "timeout" });
+        openAttemptIndex = providerAttempts.length - 1;
+      };
       const recordAttempt = (task: string, attempt: { model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }) => {
-        providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
+        if (openAttemptIndex !== null && providerAttempts[openAttemptIndex]?.model === attempt.model) {
+          providerAttempts[openAttemptIndex] = { model: attempt.model, outcome: attempt.outcome };
+          openAttemptIndex = null;
+        } else {
+          providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
+        }
         lastAttemptedModel = attempt.model;
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
       };
@@ -293,6 +307,9 @@ export async function POST(request: NextRequest) {
             allObligationsComplete: outcome.allObligationsComplete,
             obligationCoverage: outcome.obligationCoverage,
             degraded: outcome.degraded,
+            answerState: deriveAnswerState(outcomeState),
+            uncertainty: outcomeState.uncertainty,
+            recoveredAuthorities: outcomeState.recoveredAuthorities,
             servedModel: servedModel(),
             providerAttempts,
             answerEdits,
@@ -306,12 +323,13 @@ export async function POST(request: NextRequest) {
       let send = (_event: string, _data?: unknown) => { void _event; void _data; };
       const run = async () => {
         const started = startedAt;
-        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
           generateJson<T>({
             ...request,
             signal: activeSignal,
             onProviderRetry: noteRetry,
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+            onProviderAttemptStart: beginAttempt,
           });
         const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
           streamText({
@@ -319,6 +337,7 @@ export async function POST(request: NextRequest) {
             signal: activeSignal,
             onProviderRetry: noteRetry,
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
+            onProviderAttemptStart: beginAttempt,
           });
 
         try {
@@ -343,6 +362,7 @@ export async function POST(request: NextRequest) {
               headingLabels,
             }),
             temperature: 0.1,
+            validate: (value) => { searchPlanSchema.parse(value); },
           });
 
           const plan = searchPlanSchema.parse(rawPlan);
@@ -601,6 +621,7 @@ export async function POST(request: NextRequest) {
                       candidates: dossier, legacySelected: v40AuthoritySet,
                     }),
                     temperature: 0,
+                    validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
                   }),
                   onRetry: () => send("stage", {
                     key: "selecting", label: "Retrying source adjudication after a transient provider error",
@@ -636,6 +657,7 @@ export async function POST(request: NextRequest) {
                         prompt: buildV40SourceAdjudicationPrompt({ question,
                           situation: plan.situation as V40Situation | undefined,
                           candidates, legacySelected: [] }), temperature: 0,
+                        validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
                       });
                       v40Diagnostic.recovery.status = "invalid_structured_result";
                       const proposal = v40SourceAdjudicationSchema.parse(rawRecovery);
@@ -705,36 +727,61 @@ export async function POST(request: NextRequest) {
             recoveryDispositions: v40Diagnostic.recovery?.dispositions,
             selectorRejections: v517Selection.rejectedAuthorities,
           });
-          const issues = plan.situation?.materialFacts ?? [];
-          const coversIssue = (issue: string, authorities: typeof selected.finalAuthorities) => {
-            const tokens = contentTokens(issue);
-            if (tokens.length === 0) return true;
-            return authorities.some((authority) => {
-              const hay = contentTokens(`${authority.heading ?? ""} ${authority.sectionContent ?? ""}`);
-              const overlap = tokens.filter((token) => hay.includes(token)).length;
-              return overlap >= Math.min(2, tokens.length);
+          const askedAct = [plan.situation?.action, plan.situation?.verb, plan.situation?.object]
+            .some((value) => String(value ?? "").trim().length > 0);
+          if (!recoverySuppressed(v40Diagnostic) && askedAct) {
+            const retrieved = searches.flatMap((search) => search.results);
+            const chain = followOperatorChain({
+              admitted: selected.finalAuthorities,
+              pool: retrieved,
             });
-          };
-          const uncovered = issues.filter((issue) => !coversIssue(issue, selected.finalAuthorities));
-          const crossRefs = selected.finalAuthorities.flatMap((item) => expressCrossReferences(item.sectionContent ?? ""));
-          if (!recoverySuppressed(v40Diagnostic) && (selected.finalAuthorities.length === 0 || crossRefs.length > 0 || uncovered.length > 0)) {
-            const overlooked = selectOverlookedCandidates({
-              pool: searches.flatMap((search) => search.results),
+            if (chain.truncated) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "cross-reference chain truncated" });
+              if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+            }
+            const recoveryPool = selected.finalAuthorities.length === 0 ? retrieved : chain.candidates;
+            const eligible = selectOverlookedCandidates({
+              pool: recoveryPool,
               admittedIds: selected.finalAuthorities.map((item) => item.sectionId),
               rejectedKeys: rejectionKeys,
               action: plan.situation?.action,
               verb: plan.situation?.verb,
               objectText: plan.situation?.object,
-            }).slice(0, 4);
-            const admitted = adjudicateOverlooked({
+            });
+            const overlooked = eligible.slice(0, 4);
+            if (eligible.length > overlooked.length && !outcomeState.uncertainty.some((item) => item.facet === "cross-reference chain truncated")) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "cross-reference chain truncated" });
+              if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+            }
+            const judged = await admitJudgedOverlooked({
               question,
               setting: plan.situation?.setting,
               action: plan.situation?.action,
               candidates: overlooked,
+              judge: async () => {
+                if (activeSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+                const raw = await callJson<unknown>({
+                  task: "answer.validate",
+                  systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
+                  prompt: buildV40SourceAdjudicationPrompt({
+                    question,
+                    situation: plan.situation as V40Situation | undefined,
+                    candidates: overlooked,
+                    legacySelected: [],
+                  }),
+                  temperature: 0,
+                  validate: (value) => { v40SourceAdjudicationSchema.parse(value); },
+                });
+                return v40SourceAdjudicationSchema.parse(raw);
+              },
             });
-            if (admitted.length > 0) {
-              selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...admitted] };
+            if (judged.unavailable) {
+              outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "overlooked_adjudication_unavailable" });
+              if (!outcomeState.partial.includes("evidence_gap")) outcomeState.partial.push("evidence_gap");
+            } else if (judged.authorities.length > 0) {
+              selected = { ...selected, finalAuthorities: [...selected.finalAuthorities, ...judged.authorities] };
               outcomeState.evidenceRecovery = true;
+              outcomeState.recoveredAuthorities = judged.authorities.map((item) => item.citationLabel);
             }
           }
           const finalAuthorities = selected.finalAuthorities;
@@ -921,6 +968,15 @@ export async function POST(request: NextRequest) {
                 authorities: authorityPayload,
               }),
             );
+            const draftedSettlement = parseSettlement(finalAnswer, {
+              sourcesNotHeld: evidenceGaps.length > 0 || v40Diagnostic.status === "no_retrieved_source_bodies",
+            });
+            finalAnswer = draftedSettlement.text;
+            outcomeState.settlement = draftedSettlement.settlement;
+            for (const item of draftedSettlement.uncertainty) outcomeState.uncertainty.push(item);
+            if (draftedSettlement.settlement !== "supported" && !outcomeState.partial.includes("partial")) {
+              outcomeState.partial.push("partial");
+            }
             let rewriteNote: string | null = null;
             let pruneNote: string | null = null;
             let claimValidationNote: string | null = null;
@@ -1188,6 +1244,7 @@ export async function POST(request: NextRequest) {
                   answerText: finalAnswer,
                 }),
                 temperature: 0,
+                validate: (value) => { claimValidationSchema.parse(value); },
               }),
               onRetry: () => {
                 send("stage", {
@@ -1280,6 +1337,7 @@ export async function POST(request: NextRequest) {
                         question, answerText: repairedAnswer,
                       }),
                       temperature: 0,
+                      validate: (value) => { claimValidationSchema.parse(value); },
                     }),
                     onRetry: () => send("stage", {
                       key:"validating", label:"Retrying independent incident-repair validation",
@@ -1408,6 +1466,7 @@ export async function POST(request: NextRequest) {
                       authorities: finalAuthorities,
                     }),
                     temperature: 0,
+                    validate: (value) => { claimAppealSchema.parse(value); },
                   });
                   const reviewed = claimAppealSchema.parse(rawAppeal);
                   for (const claim of disputed) {
@@ -1512,6 +1571,7 @@ export async function POST(request: NextRequest) {
                       })),
                   }),
                   temperature: 0,
+                  validate: (value) => { bottomLineRecoverySchema.parse(value); },
                 });
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
                 const line = recovery.bottomLine.trim();
@@ -1540,6 +1600,7 @@ export async function POST(request: NextRequest) {
                         authorities: finalAuthorities,
                       }),
                       temperature: 0,
+                      validate: (value) => { claimValidationSchema.parse(value); },
                     });
                     const decisions = claimValidationSchema.parse(rawReview);
                     // Require one complete and unambiguous fresh judgement.
@@ -1648,10 +1709,19 @@ export async function POST(request: NextRequest) {
                 `v38.1 validated after ${claimValidationAttempts} provider attempts`]
                 .filter(Boolean).join("; ");
             }
-            const settlement = parseSettlement(finalAnswer);
-            finalAnswer = settlement.text;
-            if (settlement.settlement === "partial" || settlement.settlement === "insufficient") {
-              outcomeState.partial.push(settlement.settlement, ...settlement.unresolved);
+            const trailingSettlement = parseSettlement(finalAnswer, {
+              sourcesNotHeld: evidenceGaps.length > 0,
+            });
+            finalAnswer = trailingSettlement.text;
+            const settlementRank = { supported: 1, partial: 2, not_answered: 3 } as const;
+            if ((settlementRank[trailingSettlement.settlement ?? "supported"] ?? 0) > (settlementRank[outcomeState.settlement ?? "supported"] ?? 0)
+                && trailingSettlement.settlement) {
+              outcomeState.settlement = trailingSettlement.settlement;
+            }
+            for (const item of trailingSettlement.uncertainty) {
+              if (!outcomeState.uncertainty.some((row) => row.class === item.class && row.facet === item.facet)) {
+                outcomeState.uncertainty.push(item);
+              }
             }
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);

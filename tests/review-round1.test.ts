@@ -3,7 +3,6 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ANSWER_ROUTE_MAX_DURATION_SECONDS, ANSWER_STREAM_DEADLINE_MS, ANSWER_STREAM_SAFETY_MARGIN_MS, openGovernedAnswerStream } from "../lib/open-order/answer-stream";
 import { deriveObligations } from "../lib/v5-17-semantic-selector.js";
-import { adjudicateOverlooked } from "../lib/ai/scenario-adjudication";
 import {
   collectRejectionKeys,
   filterDraftNamedAuthorities,
@@ -91,19 +90,19 @@ test("rejected authority is not recovered and abstention blocks recovery", () =>
     dispositions: [
       { status: "rejected", reason: "unverified-verbatim-witness", sectionId: "s-rejected", citationLabel: "QX 1", corpus: "standing_orders" },
       { status: "withheld_no_primary", reason: "missing-primary", sectionId: "s-withheld", citationLabel: "QX 2", corpus: "standing_orders" },
+      { status: "not_nominated", reason: "model_did_not_nominate", sectionId: "s-nominated", citationLabel: "QX 6", corpus: "standing_orders" },
+      { status: "not_reviewed_limit", reason: "admission_limit", sectionId: "s-limit", citationLabel: "QX 7", corpus: "standing_orders" },
     ],
     recoveryDispositions: [
       { status: "rejected", reason: "ambiguous-source-identity", citationLabel: "QX 3", corpus: "speakers_rulings" },
-    ],
-    selectorRejections: [
-      { sectionId: "s-selector", citationLabel: "QX 4", documentCorpus: "standing_orders" },
     ],
   });
   const pool = [
     { sectionId: "s-rejected", citationLabel: "QX 1", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
     { sectionId: "s-withheld", citationLabel: "QX 2", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
     { sectionId: "s-label", citationLabel: "QX 3", documentCorpus: "speakers_rulings", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
-    { sectionId: "s-selector", citationLabel: "QX 4", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
+    { sectionId: "s-nominated", citationLabel: "QX 6", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
+    { sectionId: "s-limit", citationLabel: "QX 7", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
     { sectionId: "s-open", citationLabel: "QX 5", documentCorpus: "standing_orders", path: ["Forum"], sectionContent: "The actor may emit a beacon when the forum allows it expressly." },
   ];
   const overlooked = selectOverlookedCandidates({
@@ -111,15 +110,9 @@ test("rejected authority is not recovered and abstention blocks recovery", () =>
   });
   assert.deepEqual(overlooked.map((item) => item.sectionId), ["s-open"]);
   assert.equal(recoverySuppressed({ status: "v40_no_governing_witness" }), true);
+  assert.equal(recoverySuppressed({ status: "no_retrieved_source_bodies" }), true);
   assert.equal(recoverySuppressed({ status: "adjudication_unavailable:provider_transient" }), true);
   assert.equal(recoverySuppressed({ status: "v40_quoted_source_adjudication" }), false);
-  const admitted = adjudicateOverlooked({
-    question: "May the actor emit a beacon?",
-    action: "emit a beacon",
-    candidates: overlooked,
-  });
-  assert.equal(admitted.length, 1);
-  assert.equal(admitted[0]?.citationLabel, "QX 5");
 });
 
 test("a draft cannot admit an authority that was not already admitted", () => {

@@ -70,5 +70,7 @@ export function selectV517AuthorityPack(input: {
     setting?: string;
     action?: string;
     decisionQuestion?: string;
+    materialFacts?: string[];
+    subQuestions?: string[];
   };
 }): Promise<V517SelectionResult>;

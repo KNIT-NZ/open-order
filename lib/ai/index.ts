@@ -38,7 +38,9 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
         temperature: request.temperature,
         onProviderRetry: request.onProviderRetry,
         onProviderAttempt: request.onProviderAttempt,
+        onProviderAttemptStart: request.onProviderAttemptStart,
         signal: request.signal,
+        validate: request.validate,
       }),
     streamText: (request: AiStreamTextRequest) =>
       gemini.streamText({
@@ -48,6 +50,7 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
         onChunk: request.onChunk,
         onProviderRetry: request.onProviderRetry,
         onProviderAttempt: request.onProviderAttempt,
+        onProviderAttemptStart: request.onProviderAttemptStart,
         signal: request.signal,
       }),
   },

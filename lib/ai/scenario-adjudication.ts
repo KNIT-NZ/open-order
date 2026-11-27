@@ -302,35 +302,28 @@ export function v402RepairRefusals(input: Parameters<typeof v401AcceptIndependen
   return reasons;
 }
 
-/** Deterministic re-check. Overlooked text is not admitted until this passes. */
-export function adjudicateOverlooked<T extends V40Authority>(input: {
+/** Overlooked text is admitted only when an external judge returns a proposal that passes the same witness checks. */
+export async function admitJudgedOverlooked<T extends V40Authority>(input: {
   question: string;
   setting?: string;
   action?: string;
   candidates: T[];
-}): T[] {
-  const selected = input.candidates.flatMap((source) => {
-    const exactQuote = source.sectionContent.replace(/\s+/g, " ").trim().slice(0, 900);
-    if (exactQuote.length < 24) return [];
-    return [{
-      citationLabel: source.citationLabel,
-      role: "governing" as const,
-      exactQuote,
-      actorMatches: true,
-      settingMatches: true,
-      actionMatches: true,
-      stageMatches: true,
-      rationale: "overlooked retrieved candidate",
-    }];
-  });
-  if (selected.length === 0) return [];
-  return validateV40Proposal({
-    question: input.question,
-    setting: input.setting,
-    action: input.action,
-    candidates: input.candidates,
-    proposal: { selected, remainingUncertainties: [], explanation: "deterministic overlooked review" },
-  }).authorities;
+  judge: () => Promise<V40Adjudication>;
+}): Promise<{ authorities: T[]; unavailable: boolean }> {
+  if (input.candidates.length === 0) return { authorities: [], unavailable: false };
+  try {
+    const proposal = await input.judge();
+    const review = validateV40Proposal({
+      question: input.question,
+      setting: input.setting,
+      action: input.action,
+      candidates: input.candidates,
+      proposal,
+    });
+    return { authorities: review.authorities, unavailable: false };
+  } catch {
+    return { authorities: [], unavailable: true };
+  }
 }
 
 export function v40MustAdjudicate(_question: string, kind: V40Situation["kind"] | undefined,

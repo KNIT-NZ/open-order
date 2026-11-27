@@ -82,6 +82,10 @@ test("outcome flags keep fallback separate from partial", () => {
     route: "semantic_selector", fallbackReason: "none", partial: ["sources_do_not_settle"], abstained: false,
   });
   assert.equal(partial.degraded, false);
+  const gap = deriveAnswerOutcome({
+    route: "semantic_selector", fallbackReason: "none", partial: ["evidence_gap"], abstained: false,
+  });
+  assert.equal(gap.degraded, true);
   assert.equal(partial.fallbackReason, "none");
   assert.deepEqual(partial.partial, ["sources_do_not_settle"]);
   const fallback = deriveAnswerOutcome({
@@ -148,6 +152,31 @@ test("free-tier chain is Gemini only unless a non-Gemini fallback is opted in", 
     if (previous.model === undefined) delete process.env.GEMINI_MODEL; else process.env.GEMINI_MODEL = previous.model;
     if (previous.allow === undefined) delete process.env.OPEN_ORDER_ALLOW_NON_GEMINI; else process.env.OPEN_ORDER_ALLOW_NON_GEMINI = previous.allow;
     if (previous.override === undefined) delete process.env.AI_ROUTE_OVERRIDE; else process.env.AI_ROUTE_OVERRIDE = previous.override;
+  }
+});
+
+test("a non-retryable primary error falls back once to flash-lite", async () => {
+  const previous = process.env.OPEN_ORDER_INFERENCE_MODE;
+  const previousModel = process.env.GEMINI_MODEL;
+  process.env.OPEN_ORDER_INFERENCE_MODE = "";
+  delete process.env.GEMINI_MODEL;
+  try {
+    const attempts: Array<{ model: string; outcome: string }> = [];
+    const answered = await runGeminiChain(async (model) => {
+      if (model === "gemini-3.6-flash") {
+        throw new AiProviderError({ message: "bad request", kind: "upstream", statusCode: 400, retryable: false, provider: "gemini" });
+      }
+      return "answered";
+    }, { sleep: async () => undefined, onAttempt: (attempt) => attempts.push(attempt) });
+    assert.equal(answered, "answered");
+    assert.deepEqual(attempts.map((attempt) => attempt.outcome), ["other", "ok"]);
+    assert.equal(attempts[0]?.model, "gemini-3.6-flash");
+    assert.equal(attempts[1]?.model, "gemini-3.5-flash-lite");
+  } finally {
+    if (previous === undefined) delete process.env.OPEN_ORDER_INFERENCE_MODE;
+    else process.env.OPEN_ORDER_INFERENCE_MODE = previous;
+    if (previousModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = previousModel;
   }
 });
 

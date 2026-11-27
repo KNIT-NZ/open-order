@@ -19,7 +19,9 @@ export type AiGenerateJsonRequest = {
   temperature?: number;
   onProviderRetry?: () => void;
   onProviderAttempt?: (attempt: ProviderAttempt) => void;
+  onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
+  validate?: (value: unknown) => void;
 };
 
 export type AiStreamTextRequest = {
@@ -30,5 +32,6 @@ export type AiStreamTextRequest = {
   onChunk?: (text: string) => void;
   onProviderRetry?: () => void;
   onProviderAttempt?: (attempt: ProviderAttempt) => void;
+  onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
 };

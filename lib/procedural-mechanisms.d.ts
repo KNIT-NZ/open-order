@@ -15,7 +15,24 @@ export function presidingOfficerAppealQuery(situation?: { relations?: string[] }
 export function actorClassQualificationQuery(actor: string): string | null;
 export function splitActAndObject(action: string): { act: string[]; object: string[] };
 export function quoteAttestsActAndObject(quote: string, action?: string, verb?: string, objectText?: string): boolean;
-export function parseSettlement(answerText: string): { text: string; settlement: string | null; unresolved: string[] };
+export function parseSettlement(answerText: string, options?: { sourcesNotHeld?: boolean }): {
+  text: string;
+  settlement: "supported" | "partial" | "not_answered" | null;
+  uncertainty: Array<{ class: string; facet: string }>;
+};
+export function canonicalCitationLabel(label: string): string;
+export function operatorCitations(text: string): string[];
+export function isDeclaredDefinitionUnit(section: { heading?: string | null; path?: string[] }): boolean;
+export function followOperatorChain<T extends { sectionId?: string; citationLabel?: string; documentCorpus?: string; sectionContent?: string; heading?: string | null; path?: string[] }>(input: {
+  admitted?: T[];
+  pool?: T[];
+}): { candidates: T[]; truncated: boolean };
+export function deriveAnswerState(state: {
+  abstained?: boolean;
+  settlement?: string | null;
+  uncertainty?: Array<{ class?: string; facet?: string }>;
+  partial?: string[];
+}): "supported" | "partial" | "not_answered";
 export function procedureHomonymMismatch(question: string, heading: string): string | null;
 export function forumIdentityMismatch(setting: string, path: string[]): string | null;
 export function expressCrossReferences(text: string): string[];
