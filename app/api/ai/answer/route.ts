@@ -231,6 +231,8 @@ export async function POST(request: NextRequest) {
         settlement: null as "supported" | "partial" | "not_answered" | null,
         uncertainty: [] as Array<{ class: string; facet: string }>,
         recoveredAuthorities: [] as string[],
+        pruned: false,
+        rewritten: false,
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
       let answerEdits: string[] = [];
@@ -239,7 +241,19 @@ export async function POST(request: NextRequest) {
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
       let activeSignal: AbortSignal | undefined;
-      const noteRetry = () => { outcomeState.providerRetries += 1; };
+        const noteRetry = () => { outcomeState.providerRetries += 1; };
+        const noteCheckedWithholding = () => {
+          if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+          if (outcomeState.uncertainty.length < 6 && !outcomeState.uncertainty.some((item) => item.facet === "claim withheld after checking")) {
+            outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "claim withheld after checking" });
+          }
+        };
+        const noteEvidenceGap = (facet: string) => {
+          if (!outcomeState.partial.includes("evidence_gap")) outcomeState.partial.push("evidence_gap");
+          if (outcomeState.uncertainty.length < 6 && !outcomeState.uncertainty.some((item) => item.facet === facet)) {
+            outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet });
+          }
+        };
       const beginAttempt = (model: string) => {
         lastAttemptedModel = model;
         providerAttempts.push({ model, outcome: "timeout" });
@@ -255,6 +269,8 @@ export async function POST(request: NextRequest) {
         lastAttemptedModel = attempt.model;
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
       };
+      // Last model whose attempt started. This does not mean the attempt succeeded;
+      // read providerAttempts for each outcome.
       const servedModel = () => answerModel ?? lastAttemptedModel;
       const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
         && process.env.VERCEL_ENV !== "production";
@@ -308,7 +324,11 @@ export async function POST(request: NextRequest) {
             allObligationsComplete: outcome.allObligationsComplete,
             obligationCoverage: outcome.obligationCoverage,
             degraded: outcome.degraded,
-            answerState: deriveAnswerState(outcomeState),
+            answerState: deriveAnswerState({
+              ...outcomeState,
+              fallbackReason: outcomeState.fallbackCode,
+              answerEdits,
+            }),
             uncertainty: outcomeState.uncertainty,
             recoveredAuthorities: outcomeState.recoveredAuthorities,
             servedModel: servedModel(),
@@ -650,7 +670,7 @@ export async function POST(request: NextRequest) {
                   v40Diagnostic.recovery.candidates = candidates.map((source) => `${source.documentCorpus}:${source.citationLabel}`);
                   v40Diagnostic.recovery.status = candidates.length === 0 ? "no_eligible_sources" : "time_budget_exhausted";
                   if (candidates.length > 0 && Date.now() - started < 20_000) {
-                    send("stage", { key: "selecting", label: "Independently reviewing eligible governing evidence" });
+                    send("stage", { key: "selecting", label: "Reviewing eligible governing evidence again" });
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
                       const rawRecovery = await callJson<unknown>({
@@ -700,10 +720,12 @@ export async function POST(request: NextRequest) {
                 const failure = failureDiagnostic(adjudicationError, "claim_validation", 1, Date.now() - started);
                 v40Diagnostic.status = `adjudication_unavailable:${failure.kind}`;
                 v40Diagnostic.selected = v40AuthoritySet.map((authority) => authority.citationLabel);
+                noteEvidenceGap("adjudication unavailable");
               }
             } else {
               v40AuthoritySet = [];
               v40Diagnostic.status = "no_retrieved_source_bodies";
+              noteEvidenceGap("no retrieved source body");
             }
           }
           selected = {
@@ -1019,7 +1041,7 @@ export async function POST(request: NextRequest) {
 
             send("stage", {
               key: "validating",
-              label: "Validating grounded claims",
+              label: "Checking claims against cited sources",
             });
             activeAiOperation = "post_validation";
 
@@ -1030,14 +1052,16 @@ export async function POST(request: NextRequest) {
 
             finalAnswer = normalizeAnswerFormatting(initialPrune.prunedText);
             if (initialPrune.removedLines.length > 0) {
-              pruneNote = `Pruned unsupported lines: ${initialPrune.removedLines.length}`;
+              pruneNote = clientCheckNote([`pruned_lines=${initialPrune.removedLines.length}`]);
+              outcomeState.pruned = true;
+              noteCheckedWithholding();
             }
 
             if (!finalAnswer.trim()) {
               outcomeState.fallbackCode = "prune_emptied_draft";
               outcomeState.abstained = true;
               const fallbackReason =
-                "The AI draft could not be validated after pruning unsupported content.";
+                "The AI draft could not be checked against its sources after pruning unsupported content.";
 
               const fallbackAnswer = buildFallbackAnswer({
                 question,
@@ -1140,6 +1164,9 @@ export async function POST(request: NextRequest) {
                   ? `pruned_lines=${secondPrune.removedLines.length}`
                   : null,
               ]);
+              if (rewrite.removedMentions.length > 0) outcomeState.rewritten = true;
+              if (secondPrune.removedLines.length > 0) outcomeState.pruned = true;
+              if (rewrite.removedMentions.length > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
 
               const recheckMentions = validateAnswerAuthorityMentions({
                 answerText: finalAnswer,
@@ -1344,7 +1371,7 @@ export async function POST(request: NextRequest) {
                       validate: (value) => { claimValidationSchema.parse(value); },
                     }),
                     onRetry: () => send("stage", {
-                      key:"validating", label:"Retrying independent incident-repair validation",
+                      key:"validating", label:"Retrying the incident-repair check",
                     }),
                   });
                   claimValidationAttempts += repairedReview.attempts;
@@ -1369,10 +1396,12 @@ export async function POST(request: NextRequest) {
                       citations: citationLabelsIn(finalAnswer),
                     });
                     outcomeState.repairAccepted = true;
+                    outcomeState.settlement = null;
+                    noteCheckedWithholding();
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
                     claimValidation = reviewedRepair;
-                    v401RepairDiagnostic = "accepted_independently_validated";
+                    v401RepairDiagnostic = "accepted_after_recheck";
                     claimValidationNote = clientCheckNote([
                       claimValidationNote,
                       "repair=accepted",
@@ -1388,8 +1417,8 @@ export async function POST(request: NextRequest) {
               }
               incidentRepair = v401RepairDiagnostic;
               send("stage", {key:"validating", label:
-                v401RepairDiagnostic === "accepted_independently_validated"
-                  ? "Incident decision repaired and independently validated"
+                v401RepairDiagnostic === "accepted_after_recheck"
+                  ? "Incident answer repaired and checked again against sources"
                   : "Incident repair not admitted; preserving safety verdict"});
             }
             const validationById = new Map(
@@ -1456,7 +1485,7 @@ export async function POST(request: NextRequest) {
                 qualificationVetoIds,
               }).slice(0, 2);
               if (disputed.length > 0) {
-                send("stage", { key: "validating", label: "Independently reviewing disputed source entailment" });
+                send("stage", { key: "validating", label: "Checking disputed source support again" });
                 try {
                   const rawAppeal = await callJson<unknown>({
                     task: "answer.validate",
@@ -1523,6 +1552,8 @@ export async function POST(request: NextRequest) {
                 claimIds.length > 0 ? `claim_ids=${claimIds.join(",")}` : null,
                 appealDiagnostic,
               ]);
+              outcomeState.pruned = true;
+              noteCheckedWithholding();
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
               if (appealDiagnostic) claimValidationNote = clientCheckNote([appealDiagnostic]);
@@ -1618,7 +1649,7 @@ export async function POST(request: NextRequest) {
                         authorities: authorityPayload,
                       });
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
-                      reconstructionDiagnostic = "accepted_independently_validated";
+                      reconstructionDiagnostic = "accepted_after_recheck";
                     }
                   }
                 }
@@ -1668,7 +1699,7 @@ export async function POST(request: NextRequest) {
 
               send("stage", {
                 key: "validating",
-                label: "Semantic validation rejected the draft; returning fallback",
+                label: "Claim check rejected the draft; returning fallback",
               });
 
               send("answer_delta", { text: fallbackAnswer });
@@ -1722,6 +1753,7 @@ export async function POST(request: NextRequest) {
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
             answerEdits = cited.dropped;
+            if (answerEdits.length > 0) noteCheckedWithholding();
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
             if (claimValidationAttempts > 1) {
               outcomeState.providerRetries = Math.max(outcomeState.providerRetries, claimValidationAttempts - 1);

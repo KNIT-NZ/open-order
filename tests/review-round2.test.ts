@@ -29,14 +29,21 @@ test("settlement trailer uses answer states and uncertainty classes", () => {
     { class: "retrieval_uncertainty", facet: "who decides" },
     { class: "retrieval_uncertainty", facet: "cross-reference chain truncated" },
   ]);
-  assert.doesNotMatch(parsed.text, /Settlement:|Unresolved:/);
+  assert.doesNotMatch(parsed.text, /Settlement:/);
+  assert.match(parsed.text, /this is a long free-text/);
   assert.equal(parseSettlement("Bottom line:\nA rule. [SO 1]").settlement, null);
   assert.equal(deriveAnswerState({ settlement: "supported", uncertainty: parsed.uncertainty }), "partial");
   assert.equal(deriveAnswerState({ abstained: true, settlement: "supported" }), "not_answered");
-  assert.equal(deriveAnswerState({ settlement: "not_answered" }), "not_answered");
+  assert.equal(deriveAnswerState({ settlement: "not_answered" }), "partial");
+  assert.equal(deriveAnswerState({ settlement: "supported", fallbackReason: "empty_draft" }), "not_answered");
   assert.equal(deriveAnswerState({ settlement: null }), "partial");
-  const held = parseSettlement("Unresolved: corpus_silence: missing_practice", { sourcesNotHeld: true });
-  assert.equal(held.uncertainty[0]?.class, "coverage_gap");
+  const held = parseSettlement("Unresolved: corpus_silence: missing_practice");
+  assert.equal(held.uncertainty[0]?.class, "retrieval_uncertainty");
+  const malformed = parseSettlement("Bottom line:\nA rule. [SO 1]\nSettlement: mostly\nUnresolved: the clerk must be consulted first");
+  assert.equal(malformed.settlement, null);
+  assert.equal(malformed.uncertainty.length, 0);
+  assert.match(malformed.text, /the clerk must be consulted/);
+  assert.doesNotMatch(malformed.text, /Settlement:/);
 });
 
 test("prune does not flag a trailer that was already removed", () => {
@@ -71,12 +78,30 @@ test("operator chains stop at three hops and ignore see also", () => {
   assert.deepEqual(chain.candidates.map((item) => item.citationLabel), ["SO 2", "SO 3", "SO 4"]);
   assert.equal(chain.truncated, true);
   assert.deepEqual(operatorCitations("See also SO 9 for another topic."), []);
+  assert.deepEqual(operatorCitations("may be moved despite 2 members objecting"), []);
+  const clause = followOperatorChain({
+    admitted: [unit("1", "SO 1", "A motion is subject to clause 4 of Appendix A.")],
+    pool: [unit("4", "SO 4", "A standing order numbered four."), unit("c", "Appendix A cl 4", "An appendix clause.", "Appendix")],
+  });
+  assert.deepEqual(clause.candidates.map((item) => item.citationLabel), ["Appendix A cl 4"]);
   const definition = unit("8", "SO 8", "Sitting means a period the House is together.", "Interpretation");
+  const otherDefinition = unit("9", "SO 9", "Member means a person elected to the House.", "Definitions");
   const defined = followOperatorChain({
     admitted: [unit("1", "SO 1", "A word is used as defined in SO 8.")],
-    pool: [definition],
+    pool: [definition, otherDefinition],
   });
   assert.deepEqual(defined.candidates.map((item) => item.citationLabel), ["SO 8"]);
+});
+
+test("withheld material, a rewrite and an accepted repair cannot be supported", () => {
+  const supported = { settlement: "supported" as const, abstained: false, partial: [] as string[], uncertainty: [] as Array<{ class: string; facet: string }> };
+  assert.equal(deriveAnswerState(supported), "supported");
+  assert.equal(deriveAnswerState({ ...supported, pruned: true }), "partial");
+  assert.equal(deriveAnswerState({ ...supported, rewritten: true }), "partial");
+  assert.equal(deriveAnswerState({ ...supported, repairAccepted: true, settlement: null }), "partial");
+  assert.equal(deriveAnswerState({ ...supported, answerEdits: ["SO 2"] }), "partial");
+  assert.equal(deriveAnswerState({ ...supported, partial: ["evidence_gap"] }), "partial");
+  assert.equal(deriveAnswerState({ ...supported, uncertainty: [{ class: "retrieval_uncertainty", facet: "claim withheld after checking" }] }), "partial");
 });
 
 test("overlooked admission requires a judge and drops a source the judge did not attest", async () => {

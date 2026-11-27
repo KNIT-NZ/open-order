@@ -274,7 +274,10 @@ export async function runGeminiChain<T>(
           await pause(computeBackoffMs(attempt));
           continue;
         }
-        if (rateLimited || classified.retryable || outcome === "other") break;
+        // 429/5xx move on after the same-model retry. A 400, JSON parse, or schema
+        // mismatch falls through once. 401, 403 and 404 throw this model's error.
+        const structuredFallback = outcome === "other" && (classified.statusCode === 400 || classified.kind === "parse");
+        if (rateLimited || classified.retryable || structuredFallback) break;
         throw classified;
       }
     }

@@ -180,6 +180,34 @@ test("a non-retryable primary error falls back once to flash-lite", async () => 
   }
 });
 
+test("auth and missing-model errors do not fall through to another model", async () => {
+  const previous = process.env.OPEN_ORDER_INFERENCE_MODE;
+  const previousModel = process.env.GEMINI_MODEL;
+  process.env.OPEN_ORDER_INFERENCE_MODE = "";
+  delete process.env.GEMINI_MODEL;
+  try {
+    for (const statusCode of [401, 403, 404]) {
+      const attempts: Array<{ model: string; outcome: string }> = [];
+      await assert.rejects(() => runGeminiChain(async () => {
+        throw new AiProviderError({ message: "denied", kind: "upstream", statusCode, retryable: false, provider: "gemini" });
+      }, { sleep: async () => undefined, onAttempt: (attempt) => attempts.push(attempt) }));
+      assert.deepEqual(attempts.map((attempt) => attempt.model), ["gemini-3.6-flash"]);
+      assert.deepEqual(attempts.map((attempt) => attempt.outcome), ["other"]);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OPEN_ORDER_INFERENCE_MODE;
+    else process.env.OPEN_ORDER_INFERENCE_MODE = previous;
+    if (previousModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = previousModel;
+  }
+});
+
+test("servedModel on a failed path is the last model started, not a success", () => {
+  const attempts = [{ model: "gemini-3.6-flash", outcome: "other" }];
+  assert.equal(servedModelFromAttempts(attempts), "gemini-3.6-flash");
+  assert.notEqual(attempts[0]?.outcome, "ok");
+});
+
 test("planner route ignores opening words and relations come from the situation", () => {
   assert.equal(routeFromPlanner("incident"), "incident_adjudication");
   assert.equal(routeFromPlanner(undefined), "semantic_selector");

@@ -535,7 +535,7 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
         `Candidate authorities evaluated: ${selector.candidateCount}`,
         `Final authorities selected: ${selector.selectedLabels.join(", ") || "None"}`,
         `Minimum obligation coverage: ${selector.minObligationCoverage.toFixed(3)}`,
-        `All semantic obligations complete: ${selector.allObligationsComplete ? "Yes" : "No"}`,
+        `All semantic obligations met by selector: ${selector.allObligationsComplete ? "Yes" : "No"}`,
         "Per-obligation coverage:",
         ...selector.obligationDetails.slice(0, 12).map((detail, index) =>
           `  ${index + 1}. ${detail.coverage.toFixed(3)} (${detail.complete ? "complete" : "incomplete"})`),

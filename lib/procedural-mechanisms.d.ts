@@ -21,7 +21,7 @@ export function parseSettlement(answerText: string, options?: { sourcesNotHeld?:
   uncertainty: Array<{ class: string; facet: string }>;
 };
 export function canonicalCitationLabel(label: string): string;
-export function operatorCitations(text: string): string[];
+export function operatorCitations(text: string): Array<{ kind: string; key: string }>;
 export function isDeclaredDefinitionUnit(section: { heading?: string | null; path?: string[] }): boolean;
 export function followOperatorChain<T extends { sectionId?: string; citationLabel?: string; documentCorpus?: string; sectionContent?: string; heading?: string | null; path?: string[] }>(input: {
   admitted?: T[];
@@ -32,6 +32,12 @@ export function deriveAnswerState(state: {
   settlement?: string | null;
   uncertainty?: Array<{ class?: string; facet?: string }>;
   partial?: string[];
+  answerEdits?: string[];
+  pruned?: boolean;
+  rewritten?: boolean;
+  repairAccepted?: boolean;
+  fallbackReason?: string;
+  fallbackCode?: string;
 }): "supported" | "partial" | "not_answered";
 export function procedureHomonymMismatch(question: string, heading: string): string | null;
 export function forumIdentityMismatch(setting: string, path: string[]): string | null;
