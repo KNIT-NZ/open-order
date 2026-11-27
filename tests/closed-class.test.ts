@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   ARTICLES,
+  ADVERBS,
   AUXILIARIES,
   CLOSED_CLASS,
+  HER,
   CONJUNCTIONS,
   DETERMINERS,
   DEMONSTRATIVES,
@@ -20,7 +22,7 @@ import {
 test("closed classes are complete and pinned", () => {
   const classes = [
     ARTICLES, DEMONSTRATIVES, DETERMINERS, QUANTIFIERS, PRONOUNS, AUXILIARIES,
-    MODALS, NEGATION, WH_ADVERBS, PREPOSITIONS, CONJUNCTIONS,
+    MODALS, NEGATION, WH_ADVERBS, ADVERBS, PREPOSITIONS, CONJUNCTIONS,
   ];
   const union = new Set(classes.flat());
   assert.equal(CLOSED_CLASS.size, union.size);
@@ -31,6 +33,11 @@ test("closed classes are complete and pinned", () => {
   assert.equal(isNamedNonContent("million"), true);
   assert.equal(isNamedNonContent("its"), true);
   assert.equal(isNamedNonContent("may"), false);
+  assert.equal(HER, "her");
+  for (const word of ["never", "there", "then", "only"]) {
+    assert.equal(CLOSED_CLASS.has(word), true, word);
+    assert.equal(isNamedNonContent(word), false, word);
+  }
   assert.equal(CLOSED_CLASS.has("day"), false);
   assert.equal(CLOSED_CLASS.has("committee"), false);
 });

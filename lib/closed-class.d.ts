@@ -1,4 +1,5 @@
 export const THE: string;
+export const HER: string;
 export const ARTICLES: readonly string[];
 export const DEMONSTRATIVES: readonly string[];
 export const DETERMINERS: readonly string[];
@@ -8,6 +9,7 @@ export const AUXILIARIES: readonly string[];
 export const MODALS: readonly string[];
 export const NEGATION: readonly string[];
 export const WH_ADVERBS: readonly string[];
+export const ADVERBS: readonly string[];
 export const OF: string;
 export const ON: string;
 export const FOR: string;
