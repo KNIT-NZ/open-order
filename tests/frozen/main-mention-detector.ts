@@ -1,7 +1,9 @@
 /**
- * Frozen copy of the mention detector on main 2ca3449.
- * The head must flag every text this flags, apart from the explicit keep-list in the differential test.
- * Do not retarget this file at the current detector.
+ * Frozen copy of the mention pattern on main 2ca3449,
+ * lib/procedural-reasoning.ts line 1859 (validateAnswerAuthorityMentions).
+ * The rewrite on that commit uses the same pattern. This is that source text,
+ * including the bare-fraction alternative |\b\d+\/\d+\b.
+ * Do not retarget this file at the head detector.
  */
 
 function normalizeAuthorityMention(text: string): string {
@@ -17,7 +19,7 @@ function stripBracketedCitations(text: string): string {
   return text.replace(/\[[^\]]+\]/g, " ");
 }
 
-const MAIN_MENTION = /\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b/gi;
+const MAIN_MENTION = /\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi;
 
 /** True when main 2ca3449 would treat the prose as naming an unretrieved provision. */
 export function mainFlagsMention(answerText: string, labels: string[]): boolean {

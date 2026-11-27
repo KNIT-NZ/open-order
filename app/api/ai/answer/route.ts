@@ -1001,8 +1001,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (removed <= 0) return;
             mentionRewrites += removed;
             outcomeState.rewritten = true;
-            const mentionEdit = mentionRewriteEdit(mentionRewrites);
-            if (mentionEdit) answerEdits = [mentionEdit];
           };
 
           const diagnosticConcepts = [

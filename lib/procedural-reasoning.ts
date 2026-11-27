@@ -1892,9 +1892,10 @@ const WS1 = `[${WS_CLASS}]+`;
 // All or nothing: a short number cannot stop before another digit or a slash, and a longer number is taken whole.
 const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
-// A joined number is a provision, unless the next word is a quantity. Plural and singular both use this.
-const QUANTITY = String.raw`(?:sitting${WS1}days|members?|days?|minutes?|hours?|seconds?|weeks?|months?|years?|percent|votes?|times?)`;
-const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}${QUANTITY}\b|${WS}%)`;
+// A joined number is a provision unless a curated follower comes next. Any other word stays a provision.
+const FOLLOWER = String.raw`(?:per${WS1}cent|calendar${WS1}days|working${WS1}days|sitting${WS1}days|members?|mps?|people|persons|questions?|bills?|motions|amendments|votes|times|percent|days|hours|hrs|hr|minutes|mins|min|seconds|secs|weeks|months|years|am|pm|o'clock)`;
+const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1})?${FOLLOWER}`;
+const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.)|${WS}%)`;
 const LIST_SPAN = `${SO_NUM}(?:${JOINED})*`;
 const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
 const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;

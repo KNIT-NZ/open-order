@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { validateAnswerAuthorityMentions } from "../lib/procedural-reasoning";
 import { mainFlagsMention } from "./frozen/main-mention-detector";
+
+test("the frozen pattern is main 2ca3449 line 1859, including the bare fraction", () => {
+  const source = readFileSync(new URL("./frozen/main-mention-detector.ts", import.meta.url), "utf8");
+  const pinned = String.raw`\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b`;
+  assert.equal(source.includes("2ca3449"), true);
+  assert.equal(source.includes("1859"), true);
+  assert.equal(source.includes(pinned), true);
+  assert.equal(mainFlagsMention("See 12/9 before the House sits.", ["SO 1"]), true);
+  assert.equal(mainFlagsMention("See 2/3 before the House sits.", ["2/3"]), false);
+});
 
 /**
  * Admitted rulings written "SO 2/3" or "Ruling 2/3", and the N-7 keeps
@@ -84,7 +95,10 @@ test("the head flags every provision main flags, except the explicit keeps", (t)
   const cells = texts.length * LABEL_SETS.length;
   t.diagnostic(`cells ${cells}; texts ${texts.length}; main flags ${mainFlagged}; allow-listed ${kept}; head misses ${headMisses}`);
   assert.ok(texts.some((text) => /12\/9|22\/9|12\/34|123\/4|19\/5/.test(text)), "grid includes multi-digit rulings");
-  assert.ok(mainFlagged > kept, "main flags more than the keep-list");
+  assert.equal(cells, 52304);
+  assert.equal(texts.length, 6538);
+  assert.equal(mainFlagged, 39392);
+  assert.equal(kept, 8);
   assert.equal(headMisses, 0, sample.join("\n"));
 });
 

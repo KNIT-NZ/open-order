@@ -165,11 +165,35 @@ test("a joined number after one name is a provision unless a quantity word follo
     "SO 1 or 5 votes",
     "Standing Orders 1 and 2 members",
     "SOs 1, 40 minutes",
+    "SO 1, 40 MPs",
+    "SO 1, 40 people",
+    "SO 1, 2 questions",
+    "SO 1 and 2 Bills",
+    "SO 1, 20 per cent",
+    "SO 1, 3 calendar days",
+    "SO 1, 2 working days",
+    "SO 1, 5 pm",
+    "SO 1, 2 hrs",
+    "SO 1, 2 or more members",
+    "SO 1, 2 or fewer persons",
+    "SO 1, 2 or less hours",
+    "SO 1, 5 a.m.",
+    "SO 1, 5 p.m.",
+    "SO 1, 5 o'clock",
+    "SO 1 and 2 motions",
+    "SO 1, 3 amendments",
   ]) {
     const kept = rewriteForbiddenAuthorityMentions({ answerText: text, authorities: admitted });
     assert.equal(kept.removedMentions.length, 0, text);
     assert.equal(kept.rewrittenText, text, text);
   }
+  const speaker = "Under SO 1 and 99 the Speaker may sit [SO 1].";
+  const flagged = rewriteForbiddenAuthorityMentions({
+    answerText: speaker,
+    authorities: admitted,
+  });
+  assert.equal(flagged.rewrittenText.includes("99"), false);
+  assert.notEqual(flagged.rewrittenText, speaker);
 });
 
 test("an over-long standing-order number is consumed whole", () => {
@@ -673,6 +697,35 @@ test("a singular standing-order name followed by ordinary words is served unchan
   assert.equal(done.answerState, "supported");
   assert.match(String(done.answerText), /Under SO 1, 40 members may demand a vote \[SO 1\]\./);
   assert.equal(((done.answerEdits as string[] | undefined) ?? []).some((item) => item.startsWith("removed_mentions")), false);
+});
+
+test("a quantity follower is served unchanged, and a bare joined number is not", async () => {
+  const served = [
+    "SO 1, 40 MPs may attend [SO 1].",
+    "SO 1, 40 people may attend [SO 1].",
+    "SO 1, 2 questions may be asked [SO 1].",
+    "SO 1 and 2 Bills may be read [SO 1].",
+    "SO 1, 20 per cent may object [SO 1].",
+    "SO 1, 3 calendar days notice is given [SO 1].",
+    "SO 1, 2 working days notice is given [SO 1].",
+    "SO 1, 5 pm is the deadline [SO 1].",
+    "SO 1, 2 hrs notice is given [SO 1].",
+    "SO 1, 2 or more members may object [SO 1].",
+  ];
+  for (const sentence of served) {
+    const done = await probe("named_admitted_source", {
+      draft: `Bottom line:\n${sentence}\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+    });
+    assert.equal(done.answerState, "supported", sentence);
+    assert.equal(String(done.answerText).includes(sentence), true, sentence);
+    assert.equal(((done.answerEdits as string[] | undefined) ?? []).some((item) => item.startsWith("removed_mentions")), false, sentence);
+  }
+  const joined = "Under SO 1 and 99 the Speaker may sit [SO 1].";
+  const flagged = await probe("named_admitted_source", {
+    draft: `Bottom line:\n${joined}\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+  });
+  assert.equal(String(flagged.answerText).includes("99"), false);
+  assert.equal(String(flagged.answerText).includes(joined), false);
 });
 
 test("a bracket that names an unadmitted label is not a supported citation", async () => {
