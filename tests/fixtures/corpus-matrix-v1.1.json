@@ -2,7 +2,7 @@
  "matrix": "PR15-corpus-matrix-v1.1",
  "pack": {
   "file": "SO 2026 reconciled candidate pack",
-  "sha256": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100",
+  "sha256": "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80",
   "so_sections": 445
  },
  "function": "forumIdentityOutcome(setting, path) -> match | uncertain | reject",
@@ -2078,7 +2078,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
@@ -2096,7 +2096,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 135",
     "[Revoked – see Standing Order 134(5)]"
    ],
@@ -3866,7 +3866,7 @@
    "path": [
     "Chapter 5",
     "Legislative procedures",
-    "FORM OF BILLS",
+    "SINGLE-SUBJECT RULE AND OMNIBUS BILLS",
     "SO 264",
     "Single subject for each bill"
    ],
@@ -3884,7 +3884,7 @@
    "path": [
     "Chapter 5",
     "Legislative procedures",
-    "OMNIBUS BILLS",
+    "SINGLE-SUBJECT RULE AND OMNIBUS BILLS",
     "SO 266",
     "Types of omnibus bills that may be introduced"
    ],
@@ -7607,7 +7607,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
@@ -7625,7 +7625,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 135",
     "[Revoked – see Standing Order 134(5)]"
    ],
@@ -9395,7 +9395,7 @@
    "path": [
     "Chapter 5",
     "Legislative procedures",
-    "FORM OF BILLS",
+    "SINGLE-SUBJECT RULE AND OMNIBUS BILLS",
     "SO 264",
     "Single subject for each bill"
    ],
@@ -9413,7 +9413,7 @@
    "path": [
     "Chapter 5",
     "Legislative procedures",
-    "OMNIBUS BILLS",
+    "SINGLE-SUBJECT RULE AND OMNIBUS BILLS",
     "SO 266",
     "Types of omnibus bills that may be introduced"
    ],
@@ -12036,14 +12036,14 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
    "setting": "interrupt debate",
-   "expected": "match",
+   "expected": "uncertain",
    "accepted": [
-    "match"
+    "uncertain"
    ],
    "rationale_code": "S3_LEAF_NAMES_PROCEEDING",
    "proceeding": "interrupt debate"
@@ -12055,14 +12055,14 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
    "setting": "the interrupt debate",
-   "expected": "match",
+   "expected": "uncertain",
    "accepted": [
-    "match"
+    "uncertain"
    ],
    "rationale_code": "S3_LEAF_NAMES_PROCEEDING",
    "proceeding": "interrupt debate"
@@ -12865,7 +12865,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
@@ -13096,7 +13096,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
@@ -13243,7 +13243,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],
@@ -14104,7 +14104,7 @@
    "path": [
     "Chapter 3",
     "General Procedures",
-    "ADJOURNMENT OF DEBATE",
+    "INTERRUPTION OF DEBATE",
     "SO 134",
     "Motion to interrupt debate"
    ],

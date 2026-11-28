@@ -26,7 +26,7 @@
         "jurisdiction": "New Zealand",
         "institution": "House of Representatives",
         "effectiveDate": "2026-10-02",
-        "candidateSha256": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100",
+        "candidateSha256": "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80",
         "wordSha256": "bd8fb64c2513279debc5f869c94b8f855c6e07e16291d9e3f0677cf7dcef27d0",
         "provenanceFile": "data/sources/standing-orders-2026.provenance.json"
       }

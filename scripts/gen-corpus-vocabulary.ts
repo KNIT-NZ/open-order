@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const PACK_BASENAME = "open_order_so2026_candidate_RECONCILED_v3.json";
-export const PACK_SHA256 = "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100";
+export const PACK_SHA256 = "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80";
 const FOLD_LABEL = "NFD, strip combining, lowercase, [a-z0-9]+";
 
 export type PackSection = {

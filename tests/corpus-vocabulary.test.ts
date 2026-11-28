@@ -27,8 +27,8 @@ test("the pinned pack and the generated vocabulary and referents match the publi
   assert.equal(pack.sections.length, 561);
   const vocabulary = jsonIndent0(vocabularyDocument(pack.sections, pack.sha256));
   const referents = jsonIndent0(referentDocument(pack.sections, pack.sha256));
-  assert.equal(createHash("sha256").update(vocabulary).digest("hex"), "036a81e47ddf7b43c776f145a533f3ce69e481f2deabfe4c74f46b86b3ed5d14");
-  assert.equal(createHash("sha256").update(referents).digest("hex"), "6a1d636528ea6fd5c019f30d9032ccd71dd5a26ec87082bb142ca7e8f7252040");
+  assert.equal(createHash("sha256").update(vocabulary).digest("hex"), "9c8ebb8234e16794b88a571c345ae0844a460dc52a8a9c650ea50a1198fe0c71");
+  assert.equal(createHash("sha256").update(referents).digest("hex"), "f9326a7113183e99c878b7334d96a36d3889d889e860cf14432dbc422f242ee0");
   assert.equal(vocabulary, readFileSync(new URL("./fixtures/corpus-vocab-v2.9.json", import.meta.url), "utf8"));
   assert.equal(referents, readFileSync(new URL("./fixtures/corpus-referents-v2.9.json", import.meta.url), "utf8"));
   const derived = deriveReferents(pack.sections);

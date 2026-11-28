@@ -1,9 +1,9 @@
 {
   "files": {
-    "corpus-matrix-v1.1.json": "617750a1257eab29e696aad3de446a937586dfdcf48db811c71c65d3fd0aac0c",
-    "corpus-matrix-v1.2.json": "6c476516abc8f966e0f86f8fd176c496a55bf4d952f90738326ae3273fd9126e",
-    "corpus-referents-v2.9.json": "6a1d636528ea6fd5c019f30d9032ccd71dd5a26ec87082bb142ca7e8f7252040",
-    "corpus-vocab-v2.9.json": "036a81e47ddf7b43c776f145a533f3ce69e481f2deabfe4c74f46b86b3ed5d14",
+    "corpus-matrix-v1.1.json": "ac56e065d7fbc19b21df625a41e30c3149804a2816ad9a4395c7a795a5ec2e53",
+    "corpus-matrix-v1.2.json": "b179d695ff005279318c0a888ac9bbae32da435095db1b3ca66bc86e4ba24519",
+    "corpus-referents-v2.9.json": "f9326a7113183e99c878b7334d96a36d3889d889e860cf14432dbc422f242ee0",
+    "corpus-vocab-v2.9.json": "9c8ebb8234e16794b88a571c345ae0844a460dc52a8a9c650ea50a1198fe0c71",
     "forum-spec-v2.15.json": "8d27c02d873b3a6fdaf27d1931a1d45556c103358e0a3adb77a3e01b4f1fa1bc",
     "forum-spec-v2.2.json": "8647776ce3e045f3d97baac607698ef4a24e73a7d11df66f8b1ed4fc097e234d",
     "forum-spec-v2.20.json": "41c78694ecaf4733b9fcf5853c745de5ae6afca0bf696ec90de3925c0ac8786d",
@@ -22,7 +22,7 @@
     "forum-spec-v2.33.json": "9146774ae19f056b1cc70914d7a50024c99f3cde74bd8ed73206c61be95e7cfa",
     "forum-spec-v2.33.md": "9beed646a29d42ac3f00176aff8f09a99e941e42d7a545c22f3a86a689906bdc",
     "forum-spec-v2.6.json": "48845dea4e3abb66a19a9cf8c7bfd2ac7fc3084387fe1e4e27d0651fb4d112a3",
-    "self-match-expected.json": "3f109f9ebc1fc7bd6f49e6b578df7b9bf66b63ac3d448dba848ac5c306b92da8",
-    "so-pack.json": "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100"
+    "self-match-expected.json": "d8d424aa2c7a7745416d50ecc9123ee03c0a5ec727bf05027d945660af450974",
+    "so-pack.json": "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80"
   }
 }
