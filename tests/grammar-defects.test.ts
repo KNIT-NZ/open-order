@@ -410,6 +410,34 @@ test("OO-DEF-145 pin-shape fuzz serves no nonexistent label", () => {
   assert.equal(servedFake, 0);
 });
 
+test("OO-DEF-148 a spaced parenthesis after a label is left intact", () => {
+  const section = "The Speaker may—\n(a) name a member; or\n(b) suspend the sitting.";
+  const labels = authorities(["SO 7", "SO 1"], new Map([["SO 7", section], ["SO 1", section]]));
+  const intact = [
+    "Under SO 7 (as amended) the Speaker may name a member [SO 7].",
+    "The Speaker may name a member [SO 7 (as amended)].",
+    "The Speaker may name a member [SO 7(a) (as amended)].",
+    "The Speaker may name a member [SO 7 (emphasis added)].",
+    "Under SO 7 (see note) the Speaker may name a member [SO 7].",
+  ];
+  for (const input of intact) {
+    const assessed = assessCitations(input, labels);
+    const rewritten = rewriteByGrammar(input, assessed);
+    assert.equal(assessed.reasonCode, "served", input);
+    assert.equal(rewritten.text, input, input);
+  }
+  const parenthetical = "Under SO 1 (and SO 99) the House may sit [SO 1].";
+  const parentheticalOut = rewriteByGrammar(parenthetical, assessCitations(parenthetical, labels)).text;
+  assert.equal(parentheticalOut, "Under SO 1 (and a provision that was not retrieved) the House may sit [SO 1].");
+  const attached = "The Speaker may name a member [SO 7(as amended)].";
+  assert.notEqual(assessCitations(attached, labels).reasonCode, "served");
+  const prose = "Under SO 7(as amended) the Speaker may name a member [SO 7].";
+  const proseOut = rewriteByGrammar(prose, assessCitations(prose, labels)).text;
+  assert.equal(proseOut, "Under SO 7 a provision that was not retrieved the Speaker may name a member [SO 7].");
+  assert.equal(/[A-Za-z0-9]a provision that was not retrieved/.test(proseOut), false);
+  assert.equal(proseOut.includes("SO 7 "), true);
+});
+
 test("OO-DEF-146 a quote from another sub-item does not corroborate the cited pin", () => {
   const section = [
     "The Speaker may—",

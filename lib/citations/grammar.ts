@@ -356,12 +356,18 @@ function isUnreadablePinGroup(body: string): boolean {
   return body.length > 2;
 }
 
-/** Any parenthesised group that is not a pin, plus every group after it. */
-function unreadablePinTail(text: string, index: number): number {
+/**
+ * A non-pin group attached to the label, plus every group after it.
+ * A space before the first group is an aside, not residue. The span starts at the bracket.
+ */
+function unreadablePinTail(text: string, index: number): { start: number; end: number } {
   let end = index;
   let started = false;
   for (;;) {
-    const group = /^\s*([(\uFF08][^)\uFF09]*[)\uFF09])/.exec(text.slice(end));
+    const slice = text.slice(end);
+    const group = started
+      ? /^\s*([(\uFF08][^)\uFF09]*[)\uFF09])/.exec(slice)
+      : /^([(\uFF08][^)\uFF09]*[)\uFF09])/.exec(slice);
     if (!group) break;
     if (!started) {
       if (!isUnreadablePinGroup(group[1])) break;
@@ -369,7 +375,7 @@ function unreadablePinTail(text: string, index: number): number {
     }
     end += group[0].length;
   }
-  return end;
+  return { start: index, end };
 }
 
 function pinResidue(text: string, start: number, end: number): Item {
@@ -464,7 +470,7 @@ function readSoNumber(text: string, index: number, allowParen: boolean): { raw: 
   const at = index + (spaced?.[0].length ?? 0);
   const finish = (raw: string, value: number | null, pinEnd: number, pins: string) => {
     const tail = unreadablePinTail(text, pinEnd);
-    return { raw, value, pins, end: tail, residueStart: tail > pinEnd ? pinEnd : null };
+    return { raw, value, pins, end: tail.end, residueStart: tail.end > tail.start ? tail.start : null };
   };
   if (!allowParen && /^\(\d+\)/.test(text.slice(at)) && !/^\(\d{4}\)/.test(text.slice(at))) {
     const paren = /^\((\d+)\)/.exec(text.slice(at));
@@ -644,15 +650,15 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       const cpk = `${base}${pinOnly.pins}`;
       const tail = unreadablePinTail(text, pinOnly.end);
       items.push(makeItem({ kind: "standing_order", ref: cpk, cpk, pins: pinOnly.pins, textStart: skipSpace(text, after), textEnd: pinOnly.end }));
-      if (tail > pinOnly.end) items.push(pinResidue(text, pinOnly.end, tail));
-      cursor = tail;
+      if (tail.end > tail.start) items.push(pinResidue(text, tail.start, tail.end));
+      cursor = tail.end;
       continue;
     }
-    const badPin = unreadablePinTail(text, skipSpace(text, after));
-    if (badPin > skipSpace(text, after)) {
-      const start = skipSpace(text, after);
-      items.push(pinResidue(text, start, badPin));
-      cursor = badPin;
+    const atPin = skipSpace(text, after);
+    const badPin = unreadablePinTail(text, atPin);
+    if (badPin.end > badPin.start) {
+      items.push(pinResidue(text, badPin.start, badPin.end));
+      cursor = badPin.end;
       continue;
     }
     const at = skipSpace(text, after);
@@ -755,9 +761,9 @@ function readRuling(text: string, index: number, numberAt: number, inBracket: bo
   end = pins.end;
   const cpk = `R ${num[1]}/${num[2]}${pins.pins}`;
   const pinTail = unreadablePinTail(text, end);
-  if (pinTail > end) {
+  if (pinTail.end > pinTail.start) {
     const base = makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end });
-    return { plural: false, end: pinTail, items: [base, pinResidue(text, end, pinTail)] };
+    return { plural: false, end: pinTail.end, items: [base, pinResidue(text, pinTail.start, pinTail.end)] };
   }
   const range = rangeAt(text, end);
   if (range) {
@@ -823,8 +829,8 @@ function readAppendix(text: string, index: number): { items: Item[]; end: number
     const cpk = `APP ${clause[1].toUpperCase()} cl ${clause[2]}${pins.pins}`;
     const tail = unreadablePinTail(text, pins.end);
     const clauseItems = [makeItem({ kind: "appendix", ref: cpk, cpk, pins: pins.pins, textStart: index, textEnd: pins.end })];
-    if (tail > pins.end) clauseItems.push(pinResidue(text, pins.end, tail));
-    return { end: tail, items: clauseItems };
+    if (tail.end > tail.start) clauseItems.push(pinResidue(text, tail.start, tail.end));
+    return { end: tail.end, items: clauseItems };
   }
   const ofApp = /^(?:clauses|clause|cl\.?)\s+(\d+[A-Za-z]*)([\s\S]*?)\s+of\s+appendix\s+([a-f])/i.exec(slice);
   if (ofApp && ofApp[0].length < 120) {
@@ -1499,7 +1505,9 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment): {
       next = `${next.slice(0, edit.start)}${stripped}${next.slice(edit.end)}`;
       continue;
     }
-    next = `${next.slice(0, edit.start)}a provision that was not retrieved${next.slice(edit.end)}`;
+    const jammed = edit.start > 0 && !/\s/.test(next[edit.start - 1] ?? "") && /[(\uFF08]/.test(next[edit.start] ?? "");
+    const gap = jammed ? " " : "";
+    next = `${next.slice(0, edit.start)}${gap}a provision that was not retrieved${next.slice(edit.end)}`;
     removed += 1;
   }
   return { text: next, removed };
