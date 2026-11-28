@@ -1957,16 +1957,7 @@ function standingTokens(mention: string): string[] | null {
     }
     tokens.push(token);
   }
-  // A 4-digit year after plural Standing Orders or SR is an edition, never a provision.
-  if (/^(?:standing orders|s\.?\s*o\.?\s*s|s\.?\s*r\.?|sr)\b/i.test(mention.trim())) {
-    return tokens.filter((token) => !/^\d{4}(?:\([^()]+\))?$/i.test(token));
-  }
   return tokens;
-}
-
-function spanIsProvision(mention: string): boolean {
-  const flat = mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim();
-  return !/^(?:standing orders|s\.?\s*o\.?\s*s|s\.?\s*r\.?|sr)\s+\d{4}(?:\([^()]+\))?$/i.test(flat);
 }
 
 function tokenAdmitted(token: string, allowed: Set<string>): boolean {
@@ -2010,7 +2001,6 @@ function mentionSpans(text: string, allowed: Set<string>): MentionSpan[] {
     const start = match.index ?? 0;
     if (start < coveredUntil) continue;
     const mention = match[0];
-    if (!spanIsProvision(mention)) continue;
     const admitted = mentionIsAdmitted(mention, allowed);
     let end = start + mention.length;
     const trailed = text.slice(end).match(suffix);
@@ -2049,46 +2039,21 @@ export function rewriteForbiddenAuthorityMentions(input: {
 }): {
   rewrittenText: string;
   removedMentions: string[];
-  placements: Array<{ lineIndex: number; sentenceIndex: number }>;
 } {
   const allowed = allowedSet(input.authorities);
   const spans = mentionSpans(input.answerText, allowed).filter((span) => !span.admitted || span.suffix);
-  if (spans.length === 0) return { rewrittenText: input.answerText, removedMentions: [], placements: [] };
+  if (spans.length === 0) return { rewrittenText: input.answerText, removedMentions: [] };
   const removed: string[] = [];
-  const placements: Array<{ lineIndex: number; sentenceIndex: number }> = [];
-  const lines = input.answerText.split("\n");
-  const boundsForLine = new Map<number, Array<{ start: number; end: number }>>();
   let cursor = 0;
   let rewritten = "";
-  let scan = 0;
-  let lineIndex = 0;
-  let lineStart = 0;
-  let sentenceCursor = 0;
   for (const span of spans) {
-    const previousLine = lineIndex;
-    while (scan < span.start) {
-      if (input.answerText.charCodeAt(scan) === 10) {
-        lineIndex += 1;
-        lineStart = scan + 1;
-      }
-      scan += 1;
-    }
-    if (lineIndex !== previousLine) sentenceCursor = 0;
-    let bounds = boundsForLine.get(lineIndex);
-    if (!bounds) {
-      bounds = sentenceBounds(lines[lineIndex] ?? "");
-      boundsForLine.set(lineIndex, bounds);
-    }
-    while (sentenceCursor < bounds.length - 1 && span.start - lineStart >= bounds[sentenceCursor].end) sentenceCursor += 1;
-    const place = mentionPlacement(lines, lineIndex, span.start - lineStart, bounds, sentenceCursor);
-    if (place) placements.push(place);
     rewritten += input.answerText.slice(cursor, span.start);
     rewritten += span.admitted ? span.mention : "a provision that was not retrieved";
     removed.push(span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
     cursor = span.end;
   }
   rewritten += input.answerText.slice(cursor);
-  return { rewrittenText: rewritten, removedMentions: [...new Set(removed)], placements };
+  return { rewrittenText: rewritten, removedMentions: [...new Set(removed)] };
 }
 
 export function validateAnswerCitations(input: {
@@ -2294,83 +2259,28 @@ function lineCitesLabel(line: string, label: string): boolean {
   return citationTokensInBrackets(line).some((token) => citationTokenMatchesLabel(token, label));
 }
 
-/** One case-insensitive key. A pinpoint keeps its admitted ancestor. A 4-digit edition year is not a key. */
-function provisionKeys(text: string): string[] {
-  const flat = text.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim();
-  if (!flat) return [];
-  if (/^(?:standing orders|s\.?\s*o\.?\s*s|s\.?\s*r\.?|sr)\s+\d{4}(?:\([^()]+\))?$/i.test(flat)) return [];
-  if (/^appendix\b/i.test(flat)) {
-    const key = normalizeAuthorityMention(flat).replace(/(?:\([^()]+\))+$/, "").trim();
-    return key ? [key] : [];
-  }
-  if (/^(?:standing orders?|s\.?\s*o\.?s)\b/i.test(flat) && /(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/.test(flat)) return [];
-  const ruling = flat.match(/(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/);
-  if (ruling && (/rulings?|s\.?\s*r\.?/i.test(flat) || /^(?:s\.?\s*o\.?|so)\b/i.test(flat) || /^\d+\/\d+$/.test(flat))) {
-    return [`sr ${ruling[0]}`];
-  }
-  const tokens = standingTokens(flat);
-  if (!tokens || tokens.length === 0) return [];
-  return [...new Set(tokens.map((token) => `so ${token.replace(/(?:\([^()]+\))+$/i, "").toLowerCase()}`))];
-}
-
-/** Bracket citations and the same prose mentions the rewriter uses. */
-function authoritiesNamedIn(line: string): string[] {
-  const found = new Set<string>();
-  for (const token of citationTokensInBrackets(line)) {
-    for (const key of provisionKeys(token)) found.add(key);
-  }
-  const prose = line.replace(/\[[^\]]*\]/g, " ");
-  for (const span of mentionSpans(prose, new Set())) {
-    for (const key of provisionKeys(span.mention)) found.add(key);
-  }
-  return [...found];
-}
-
-type ClaimQualificationState = "grounded" | "grounded-with-qualification" | "ungrounded";
-
-function claimQualificationState(line: string, grounded: Set<string>, qualified: Set<string>): ClaimQualificationState {
-  const named = authoritiesNamedIn(line);
-  if (named.some((name) => !grounded.has(name))) return "ungrounded";
-  if (named.some((name) => qualified.has(name))) return "grounded-with-qualification";
-  return "grounded";
-}
-
 /** Put a real uncertainty on the claim it qualifies. Do not brand a settled provision. */
 export function attachClaimQualifications(answerText: string, input: {
   actLabels?: string[];
   forumLabels?: string[];
-  /** Admitted labels. Omit to keep main's add-only behaviour. */
-  groundedLabels?: string[];
 }): string {
   const actLabels = [...new Set((input.actLabels ?? []).map((label) => label.trim()).filter(Boolean))];
   const forumLabels = [...new Set((input.forumLabels ?? []).map((label) => label.trim()).filter(Boolean))];
-  if (actLabels.length === 0 && forumLabels.length === 0 && input.groundedLabels === undefined) return answerText;
-  if (answerText == null || answerText === "") {
-    if (actLabels.length === 0 && forumLabels.length === 0) return answerText ?? "";
-    // Main throws on answerText.includes when the text is null. Empty text must not become a hedge-only answer.
-    if (answerText == null) throw new TypeError("Cannot read properties of null (reading 'includes')");
-    throw new TypeError("Cannot read properties of an empty answer (reading 'includes')");
-  }
-  const grounded = input.groundedLabels === undefined
-    ? null
-    : new Set(input.groundedLabels.flatMap((label) => provisionKeys(label)));
-  const qualified = new Set([...actLabels, ...forumLabels].flatMap((label) => provisionKeys(label)));
+  if (actLabels.length === 0 && forumLabels.length === 0) return answerText;
   const substantive = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
-  const lines = answerText.split("\n");
+  const lines = String(answerText ?? "").split("\n");
   let section: string | null = null;
   const claimIndexes: number[] = [];
   lines.forEach((line, index) => {
     const trimmed = line.trim();
-    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:" || trimmed === "Qualification:") {
+    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:") {
       section = trimmed;
       return;
     }
     if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
   });
-  const stateOf = (index: number): ClaimQualificationState =>
-    grounded === null ? "ungrounded" : claimQualificationState(lines[index] ?? "", grounded, qualified);
   const citing = (label: string): number[] =>
-    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label) && stateOf(index) !== "grounded");
+    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
   const append = (indexes: number[], sentence: string) => {
     for (const index of indexes) {
       if (lines[index].includes(sentence)) continue;
@@ -2378,84 +2288,19 @@ export function attachClaimQualifications(answerText: string, input: {
     }
   };
   const qualificationSection: string[] = [];
-  const consider = (label: string, sentence: string) => {
+  for (const label of actLabels) {
+    const sentence = `[${label}] ${ACT_QUALIFICATION}`;
     const hits = citing(label);
     if (hits.length > 0) append(hits, sentence);
-    else if (!answerText.includes(sentence) && !lines.join("\n").includes(sentence)) qualificationSection.push(sentence);
-  };
-  for (const label of actLabels) consider(label, `[${label}] ${ACT_QUALIFICATION}`);
-  for (const label of forumLabels) consider(label, `[${label}] ${FORUM_QUALIFICATION}`);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
+  }
+  for (const label of forumLabels) {
+    const sentence = `[${label}] ${FORUM_QUALIFICATION}`;
+    const hits = citing(label);
+    if (hits.length > 0) append(hits, sentence);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
+  }
   if (qualificationSection.length > 0) lines.push("", "Qualification:", ...qualificationSection);
-  return lines.join("\n");
-}
-
-export type RemovedMentionPlacement = { lineIndex: number; sentenceIndex: number };
-
-function sentenceBounds(line: string): Array<{ start: number; end: number }> {
-  const bounds: Array<{ start: number; end: number }> = [];
-  let start = 0;
-  for (let index = 0; index < line.length; index += 1) {
-    const mark = line[index];
-    if (mark !== "." && mark !== "!" && mark !== "?") continue;
-    if (mark === "." && /(?:^|[^A-Za-z])(?:cl|no|sr|dr|mr|st|eq|cf|vol|pp|ed|s|o)$/i.test(line.slice(0, index))) continue;
-    const next = line[index + 1];
-    if (next !== undefined && !/\s/.test(next)) continue;
-    let end = index + 1;
-    while (end < line.length && /\s/.test(line[end])) end += 1;
-    bounds.push({ start, end });
-    start = end;
-    index = end - 1;
-  }
-  if (start < line.length || bounds.length === 0) bounds.push({ start, end: line.length });
-  return bounds;
-}
-
-/** Sentence position of a mention. Authorities and qualification lines are not claim positions. */
-function mentionPlacement(
-  lines: string[],
-  lineIndex: number,
-  column: number,
-  bounds: Array<{ start: number; end: number }>,
-  sentenceIndex: number,
-): RemovedMentionPlacement | null {
-  if (lines[lineIndex] === undefined || column < 0) return null;
-  let section: string | null = null;
-  for (let index = 0; index <= lineIndex; index += 1) {
-    const trimmed = lines[index]?.trim() ?? "";
-    if (isStructuralHeading(trimmed) || trimmed === "Possibly relevant, not confirmed to apply:" || trimmed === "Qualification:") {
-      section = trimmed;
-    }
-  }
-  if (section === "Best authorities to inspect or cite:" || section === "Possibly relevant, not confirmed to apply:" || section === "Qualification:") {
-    return null;
-  }
-  const bound = bounds[sentenceIndex];
-  if (!bound || column < bound.start || column >= bound.end) return null;
-  return { lineIndex, sentenceIndex };
-}
-
-/** Put the qualification on the sentence that held the mention. Never search, and never write the label back. */
-export function attachRemovedMentionHedges(text: string, placements: RemovedMentionPlacement[]): string {
-  if (placements.length === 0) return text;
-  const lines = text.split("\n");
-  const used = new Set<string>();
-  for (const place of placements) {
-    const key = `${place.lineIndex}:${place.sentenceIndex}`;
-    if (used.has(key)) continue;
-    const line = lines[place.lineIndex];
-    if (line === undefined) continue;
-    const bound = sentenceBounds(line)[place.sentenceIndex];
-    if (!bound) continue;
-    const sentence = line.slice(bound.start, bound.end);
-    if (sentence.includes(ACT_QUALIFICATION)) {
-      used.add(key);
-      continue;
-    }
-    const trimmed = sentence.replace(/\s+$/, "");
-    const gap = sentence.slice(trimmed.length);
-    lines[place.lineIndex] = `${line.slice(0, bound.start)}${trimmed} ${ACT_QUALIFICATION}${gap}${line.slice(bound.end)}`;
-    used.add(key);
-  }
   return lines.join("\n");
 }
 

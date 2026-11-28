@@ -267,7 +267,9 @@ function choicesContent(value: unknown): Content {
   if (!value || typeof value !== "object") return { kind: "missing" };
   const choices = (value as { choices?: unknown }).choices;
   if (!Array.isArray(choices) || choices.length === 0) return { kind: "missing" };
-  const message = (choices[0] as { message?: unknown }).message;
+  const choice = choices[0];
+  if (!choice || typeof choice !== "object") return { kind: "missing" };
+  const message = (choice as { message?: unknown }).message;
   return contentFromMessage(message);
 }
 
@@ -426,8 +428,8 @@ async function complete(
         rawMessage: "cloudflare_truncated",
       });
     }
-    const record = payload as { success?: unknown };
-    if (record.success === false) {
+    const record = payload && typeof payload === "object" ? payload as { success?: unknown } : null;
+    if (record?.success === false) {
       throw codes.recognised === null && codes.providerCode === null
         ? shapeError()
         : classifyStatus(200, codes.recognised, codes.providerCode);

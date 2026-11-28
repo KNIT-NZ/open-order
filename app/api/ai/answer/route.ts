@@ -77,7 +77,6 @@ import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
   attachClaimQualifications,
-  attachRemovedMentionHedges,
   mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
@@ -996,8 +995,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const rewriteDraft = (answerText: string) => {
             const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
             if (rewrite.removedMentions.length === 0) return { text: answerText, removed: 0 };
-            const hedged = attachRemovedMentionHedges(rewrite.rewrittenText, rewrite.placements);
-            return { text: normalizeAnswerFormatting(hedged), removed: rewrite.removedMentions.length };
+            return { text: normalizeAnswerFormatting(rewrite.rewrittenText), removed: rewrite.removedMentions.length };
           };
           const commitRewrites = (removed: number) => {
             if (removed <= 0) return;
@@ -1951,7 +1949,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = attachClaimQualifications(finalAnswer, {
               actLabels: [...actLabels],
               forumLabels: [...forumLabels],
-              groundedLabels: finalAuthorities.map((authority) => authority.citationLabel),
             });
             const mentionEdit = mentionRewriteEdit(mentionRewrites);
             answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];

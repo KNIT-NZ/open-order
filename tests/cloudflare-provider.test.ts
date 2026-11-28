@@ -399,6 +399,27 @@ test("recognised Cloudflare codes are read from either error shape", async () =>
   }
 });
 
+test("a 200 with a null or malformed choice is a non-retryable parse failure", async () => {
+  process.env.CLOUDFLARE_API_TOKEN = "token";
+  process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
+  const bodies = [null, { choices: null }, { choices: [null] }, { choices: ["nope"] }, { choices: [{ message: null }] }];
+  try {
+    for (const body of bodies) {
+      const error = await generateJson({
+        task: "answer.generate",
+        systemInstruction: "A",
+        prompt: "B",
+      }, async () => jsonResponse(200, body)).catch((caught: unknown) => caught);
+      assert.ok(error instanceof AiProviderError, JSON.stringify(body));
+      assert.equal(error.kind, "parse", JSON.stringify(body));
+      assert.equal(error.retryable, false, JSON.stringify(body));
+    }
+  } finally {
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  }
+});
+
 test("an abort while the Cloudflare body is still open stops the chain", async () => {
   const saved = {
     gemini: process.env.GEMINI_API_KEY,
