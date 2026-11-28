@@ -69,11 +69,20 @@ function apiToken(): string | null {
   return value.length > 0 ? value : null;
 }
 
+let invalidModelWarned = false;
+
+export function resetCloudflareModelWarningForTests(): void {
+  invalidModelWarned = false;
+}
+
 export function cloudflareModel(): string {
   const configured = process.env.CLOUDFLARE_AI_MODEL?.trim() ?? "";
   if (!configured) return CLOUDFLARE_FREE_TIER_MODEL;
   if (!ALLOWED_MODELS.has(configured)) {
-    console.warn("CLOUDFLARE_AI_MODEL is not an allowed Workers AI model.");
+    if (!invalidModelWarned) {
+      invalidModelWarned = true;
+      console.warn("CLOUDFLARE_AI_MODEL is not an allowed Workers AI model.");
+    }
     throw new AiProviderError({
       message: "The configured AI model is not available.",
       kind: "configuration",
@@ -114,9 +123,9 @@ function modelConfigError(status: number, errorCode: number | null): AiProviderE
   });
 }
 
-function classifyStatus(status: number, errorCode: number | null): AiProviderError {
-  const codeNote = errorCode === null ? "" : ` code ${errorCode}`;
-  if (errorCode === 3036) {
+function classifyStatus(status: number, recognised: number | null, providerCode: number | null): AiProviderError {
+  const codeNote = providerCode === null ? "" : ` code ${providerCode}`;
+  if (recognised === 3036) {
     rememberDailyAllocationExhausted();
     return new AiProviderError({
       message: "The AI provider's daily allocation is exhausted.",
@@ -128,23 +137,23 @@ function classifyStatus(status: number, errorCode: number | null): AiProviderErr
       rawMessage: `cloudflare_http_${status}${codeNote}`,
     });
   }
-  if (errorCode === 5028 || status === 410 || errorCode === 3042 || (status === 404 && errorCode === 3042) || errorCode === 5007 || (status === 400 && errorCode === 5007)) {
-    return modelConfigError(status, errorCode);
+  if (recognised === 5028 || status === 410 || recognised === 3042 || (status === 404 && recognised === 3042) || recognised === 5007 || (status === 400 && recognised === 5007)) {
+    return modelConfigError(status, providerCode);
   }
   // 10429 and 971 are not in Cloudflare's own error catalogue. They are kept
   // because third-party reports use them for rate limits.
-  if (errorCode === 10429 || errorCode === 971 || (status === 429 && errorCode !== 3040)) {
+  if (recognised === 10429 || recognised === 971 || (status === 429 && recognised !== 3040)) {
     return new AiProviderError({
       message: "The AI model is temporarily rate limited. Please try again.",
       kind: "rate_limited",
       statusCode: status,
       retryable: true,
       provider: PROVIDER_ID,
-      providerCode: errorCode,
+      providerCode,
       rawMessage: `cloudflare_http_${status}${codeNote}`.trim(),
     });
   }
-  if (errorCode === 3040) {
+  if (recognised === 3040) {
     return new AiProviderError({
       message: "The AI provider is temporarily unavailable.",
       kind: "unavailable",
@@ -162,7 +171,7 @@ function classifyStatus(status: number, errorCode: number | null): AiProviderErr
       statusCode: status,
       retryable: false,
       provider: PROVIDER_ID,
-      providerCode: errorCode,
+      providerCode,
       rawMessage: `cloudflare_http_${status}${codeNote}`.trim(),
     });
   }
@@ -173,7 +182,7 @@ function classifyStatus(status: number, errorCode: number | null): AiProviderErr
       statusCode: status,
       retryable: true,
       provider: PROVIDER_ID,
-      providerCode: errorCode,
+      providerCode,
       rawMessage: `cloudflare_http_${status}${codeNote}`.trim(),
     });
   }
@@ -184,7 +193,7 @@ function classifyStatus(status: number, errorCode: number | null): AiProviderErr
       statusCode: status,
       retryable: false,
       provider: PROVIDER_ID,
-      providerCode: errorCode,
+      providerCode,
       rawMessage: `cloudflare_http_${status}`,
     });
   }
@@ -194,20 +203,13 @@ function classifyStatus(status: number, errorCode: number | null): AiProviderErr
     statusCode: status,
     retryable: false,
     provider: PROVIDER_ID,
-    providerCode: errorCode,
+    providerCode,
     rawMessage: `cloudflare_http_${status}${codeNote}`.trim(),
   });
 }
 
-function numericCode(value: unknown): number | null {
-  if (typeof value === "number" && Number.isInteger(value)) return value;
-  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
-  return null;
-}
-
-/** First recognised CF code from errors[*].code or OpenAI-style error.code / error.type. Codes only. */
-function firstErrorCode(payload: unknown): number | null {
-  if (!payload || typeof payload !== "object") return null;
+function errorCodes(payload: unknown): number[] {
+  if (!payload || typeof payload !== "object") return [];
   const record = payload as {
     errors?: Array<{ code?: unknown }>;
     error?: { code?: unknown; type?: unknown };
@@ -219,10 +221,23 @@ function firstErrorCode(payload: unknown): number | null {
   if (record.error && typeof record.error === "object") {
     candidates.push(record.error.code, record.error.type);
   }
+  const codes: number[] = [];
   for (const candidate of candidates) {
     const code = numericCode(candidate);
-    if (code !== null && RECOGNISED_CF_CODES.has(code)) return code;
+    if (code !== null) codes.push(code);
   }
+  return codes;
+}
+
+function classifiedCode(payload: unknown): { recognised: number | null; providerCode: number | null } {
+  const codes = errorCodes(payload);
+  const recognised = codes.find((code) => RECOGNISED_CF_CODES.has(code)) ?? null;
+  return { recognised, providerCode: recognised ?? codes[0] ?? null };
+}
+
+function numericCode(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
   return null;
 }
 
@@ -283,18 +298,22 @@ function shapeError(): AiProviderError {
   });
 }
 
-function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextRequest["task"], systemInstruction: string, prompt: string, temperature: number | undefined, drafting: boolean): string {
+function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextRequest["task"], systemInstruction: string, prompt: string, temperature: number | undefined, drafting: boolean, model: string): string {
+  const cap = drafting || task === "answer.generate" || task === "answer.repair"
+    ? CLOUDFLARE_ANSWER_MAX_TOKENS
+    : CLOUDFLARE_JSON_MAX_TOKENS;
+  const limit = model === "@cf/openai/gpt-oss-120b"
+    ? { max_tokens: cap }
+    : { max_completion_tokens: cap };
   return JSON.stringify({
-    model: cloudflareModel(),
+    model,
     messages: [
       { role: "system", content: systemInstruction },
       { role: "user", content: prompt },
     ],
     // Gemini's own default is 0.2. A validator call passes 0 and must stay at 0.
     temperature: temperature ?? 0.2,
-    max_completion_tokens: drafting || task === "answer.generate" || task === "answer.repair"
-      ? CLOUDFLARE_ANSWER_MAX_TOKENS
-      : CLOUDFLARE_JSON_MAX_TOKENS,
+    ...limit,
   });
 }
 
@@ -302,10 +321,20 @@ function aborted(error: unknown, signal?: AbortSignal): boolean {
   return Boolean(signal?.aborted || (error instanceof Error && error.name === "AbortError"));
 }
 
-async function readPayload(response: Response, signal?: AbortSignal): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch (error) {
+function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  const size = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+async function readPayload(response: Response, signal: AbortSignal): Promise<unknown> {
+  if (signal.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+  const fail = (error: unknown): never => {
     if (aborted(error, signal)) throw new DOMException("The answer deadline elapsed.", "AbortError");
     throw new AiProviderError({
       message: "The AI provider returned a response that could not be read.",
@@ -314,7 +343,48 @@ async function readPayload(response: Response, signal?: AbortSignal): Promise<un
       retryable: false,
       rawMessage: "cloudflare_parse",
     });
+  };
+  const body = response.body;
+  if (!body) {
+    try {
+      return await response.json();
+    } catch (error) {
+      return fail(error);
+    }
   }
+  const reader = body.getReader();
+  const onAbort = () => { reader.cancel().catch(() => undefined); };
+  signal.addEventListener("abort", onAbort, { once: true });
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      if (signal.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value) chunks.push(next.value);
+    }
+    if (signal.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+  } catch (error) {
+    return fail(error);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(concatBytes(chunks)));
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+let requestTimeoutMs = DEFAULT_TIMEOUT_MS;
+
+export function setCloudflareRequestTimeoutForTests(ms: number): void {
+  requestTimeoutMs = ms;
+}
+
+export function resetCloudflareRequestTimeoutForTests(): void {
+  requestTimeoutMs = DEFAULT_TIMEOUT_MS;
 }
 
 async function complete(
@@ -326,29 +396,48 @@ async function complete(
   fetchImpl: FetchLike,
   onStart: (() => void) | undefined,
   drafting: boolean,
+  model: string,
 ): Promise<Exclude<Content, { kind: "missing" }>> {
   if (cloudflareQuotaSkipped()) throw cloudflareQuotaSkipError();
   if (callerSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
-  const controller = new AbortController();
-  const timer = callerSignal ? null : setTimeout(() => controller.abort(), 30_000);
-  const onCallerAbort = () => controller.abort();
-  callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
-  const signal = controller.signal;
-  let response: Response;
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
+  const signal = callerSignal ? AbortSignal.any([callerSignal, timeout.signal]) : timeout.signal;
   try {
     onStart?.();
-    response = await fetchImpl(endpoint(), {
+    const response = await fetchImpl(endpoint(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiToken() ?? ""}`,
         "Content-Type": "application/json",
       },
-      body: generationBody(task, systemInstruction, prompt, temperature, drafting),
+      body: generationBody(task, systemInstruction, prompt, temperature, drafting, model),
       signal,
     });
+    const payload = await readPayload(response, signal);
+    const codes = classifiedCode(payload);
+    if (!response.ok) throw classifyStatus(response.status, codes.recognised, codes.providerCode);
+    if (finishReason(payload) === "length") {
+      throw new AiProviderError({
+        message: "The AI provider response was truncated.",
+        kind: "parse",
+        provider: PROVIDER_ID,
+        retryable: false,
+        rawMessage: "cloudflare_truncated",
+      });
+    }
+    const record = payload as { success?: unknown };
+    if (record.success === false) {
+      throw codes.recognised === null && codes.providerCode === null
+        ? shapeError()
+        : classifyStatus(200, codes.recognised, codes.providerCode);
+    }
+    const content = cloudflareMessage(payload);
+    if (content.kind === "missing") throw shapeError();
+    return content;
   } catch (error) {
     if (error instanceof AiProviderError) throw error;
-    if (aborted(error, signal) || callerSignal?.aborted) {
+    if (callerSignal?.aborted || timeout.signal.aborted || aborted(error, signal)) {
       throw new DOMException("The answer deadline elapsed.", "AbortError");
     }
     const errno = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
@@ -361,32 +450,21 @@ async function complete(
       cause: { code: errno === "ETIMEDOUT" || errno === "EAI_AGAIN" ? errno : "ECONNRESET" },
     });
   } finally {
-    if (timer) clearTimeout(timer);
-    callerSignal?.removeEventListener("abort", onCallerAbort);
+    clearTimeout(timer);
   }
-  const payload = await readPayload(response, signal);
-  if (!response.ok) throw classifyStatus(response.status, firstErrorCode(payload));
-  if (finishReason(payload) === "length") {
-    throw new AiProviderError({
-      message: "The AI provider response was truncated.",
-      kind: "parse",
-      provider: PROVIDER_ID,
-      retryable: false,
-      rawMessage: "cloudflare_truncated",
-    });
-  }
-  const record = payload as { success?: unknown };
-  if (record.success === false) {
-    const code = firstErrorCode(payload);
-    throw code === null ? shapeError() : classifyStatus(200, code);
-  }
-  const content = cloudflareMessage(payload);
-  if (content.kind === "missing") throw shapeError();
-  return content;
 }
 
-function noteOutcome(request: { onProviderAttempt?: (attempt: ProviderAttempt) => void }, outcome: ProviderAttempt["outcome"]): void {
-  request.onProviderAttempt?.({ model: cloudflareModel(), outcome });
+function noteOutcome(request: { onProviderAttempt?: (attempt: ProviderAttempt) => void }, outcome: ProviderAttempt["outcome"], model: string): void {
+  request.onProviderAttempt?.({ model, outcome });
+}
+
+function resolveModel(request: { onProviderAttempt?: (attempt: ProviderAttempt) => void }): string {
+  try {
+    return cloudflareModel();
+  } catch (error) {
+    request.onProviderAttempt?.({ model: CLOUDFLARE_FREE_TIER_MODEL, outcome: "other" });
+    throw error;
+  }
 }
 
 function parseJsonText(text: string): unknown {
@@ -394,25 +472,26 @@ function parseJsonText(text: string): unknown {
 }
 
 export async function generateJson<T>(request: AiGenerateJsonRequest, fetchImpl: FetchLike = fetch): Promise<T> {
+  const model = resolveModel(request);
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(cloudflareModel()), false,
+      () => request.onProviderAttemptStart?.(model), false, model,
     );
     const parsed = (content.kind === "object" ? content.value : parseJsonText(content.text)) as T;
     request.validate?.(parsed);
-    noteOutcome(request, "ok");
+    noteOutcome(request, "ok", model);
     return parsed;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      noteOutcome(request, "timeout");
+      noteOutcome(request, "timeout", model);
       throw error;
     }
     if (error instanceof AiProviderError) {
-      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other");
+      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
       throw error;
     }
-    noteOutcome(request, "other");
+    noteOutcome(request, "other", model);
     throw new AiProviderError({
       message: "The AI provider returned a response that could not be read.",
       kind: "parse",
@@ -424,25 +503,26 @@ export async function generateJson<T>(request: AiGenerateJsonRequest, fetchImpl:
 }
 
 export async function streamText(request: AiStreamTextRequest, fetchImpl: FetchLike = fetch): Promise<string> {
+  const model = resolveModel(request);
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(cloudflareModel()), true,
+      () => request.onProviderAttemptStart?.(model), true, model,
     );
     const text = content.kind === "text" ? content.text : JSON.stringify(content.value);
     request.onChunk?.(text);
-    noteOutcome(request, "ok");
+    noteOutcome(request, "ok", model);
     return text;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      noteOutcome(request, "timeout");
+      noteOutcome(request, "timeout", model);
       throw error;
     }
     if (error instanceof AiProviderError) {
-      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other");
+      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
       throw error;
     }
-    noteOutcome(request, "other");
+    noteOutcome(request, "other", model);
     throw error;
   }
 }

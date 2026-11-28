@@ -9,6 +9,7 @@ import { formatAiDebugSnapshot } from "../lib/open-order/format";
 import { publicFailureReason } from "../lib/ai/provider-resilience";
 import {
   attachClaimQualifications,
+  attachRemovedMentionHedges,
   firstDraftDebugEnabled,
   pruneValidatedAnswerContent,
   validateAnswerCitations,
@@ -487,6 +488,113 @@ test("null or empty answer text is not turned into a hedge", () => {
   assert.throws(() => attachClaimQualifications("", { actLabels: ["SO 1"] }));
 });
 
+function hedgeRemoved(answerText: string, labels: string[]): string {
+  const rewrite = rewriteForbiddenAuthorityMentions({
+    answerText,
+    authorities: labels.map((citationLabel) => ({ citationLabel })),
+  });
+  return attachRemovedMentionHedges(rewrite.rewrittenText, rewrite.placements);
+}
+
+test("a removed mention is hedged on its own sentence and does not restore the label", () => {
+  const text = hedgeRemoved("Bottom line:\nThe House may sit [SO 1]. See also Standing Order 99.", ["SO 1"]);
+  const first = text.split("\n").find((line) => line.includes("The House may sit")) ?? "";
+  assert.equal(first.split(/(?<=\.)\s+/)[0], "The House may sit [SO 1].");
+  assert.match(first, /See also a provision that was not retrieved\. has not been confirmed to govern the specific act asked about/);
+  assert.equal(text.includes("SO 99"), false);
+  assert.equal(text.includes("[SO 99]"), false);
+  const duplicated = hedgeRemoved([
+    "The House may sit [SO 1]. See note.",
+    "Standing Order 99. See note.",
+  ].join("\n"), ["SO 1"]);
+  assert.equal(duplicated.split("\n")[0], "The House may sit [SO 1]. See note.");
+  assert.equal(duplicated.split("\n")[0].includes("has not been confirmed"), false);
+  assert.match(duplicated.split("\n")[1], /a provision that was not retrieved\. has not been confirmed to govern the specific act asked about/);
+  assert.match(duplicated.split("\n")[1], /See note/);
+  const listed = hedgeRemoved([
+    "Bottom line:",
+    "The House may sit [SO 1]. See note.",
+    "",
+    "Best authorities to inspect or cite:",
+    "Standing Order 99. See note.",
+  ].join("\n"), ["SO 1"]);
+  assert.equal(listed.split("\n").find((line) => line.includes("The House may sit")), "The House may sit [SO 1]. See note.");
+  const authorityLine = listed.split("\n").find((line) => line.includes("See note.") && !line.includes("The House")) ?? "";
+  assert.match(authorityLine, /a provision that was not retrieved/);
+  assert.equal(authorityLine.includes("has not been confirmed"), false);
+  assert.equal(listed.includes("SO 99"), false);
+});
+
+test("canonical keys do not hedge a pinpoint or an edition year", () => {
+  const appendix = attachClaimQualifications("Bottom line:\nThe rule is [Appendix D cl 1(2)].", {
+    groundedLabels: ["Appendix D cl 1"],
+  });
+  assert.equal(appendix.includes("has not been confirmed"), false);
+  const notation = attachClaimQualifications("Bottom line:\nThe rule is [APPENDIX D CLAUSE 1(2)].", {
+    groundedLabels: ["appendix d cl 1"],
+  });
+  assert.equal(notation.includes("has not been confirmed"), false);
+  const year = attachClaimQualifications("Bottom line:\nThe edition is Standing Orders 2026 and the House may sit [SO 1].", {
+    groundedLabels: ["SO 1"],
+  });
+  assert.equal(year.includes("has not been confirmed"), false);
+  assert.equal(year.includes("SO 2026"), false);
+  const kept = rewriteForbiddenAuthorityMentions({
+    answerText: "Under Standing Orders 2026 and SR 2026 the House may sit [SO 1].",
+    authorities: [{ citationLabel: "SO 1" }],
+  });
+  assert.match(kept.rewrittenText, /Standing Orders 2026/);
+  assert.match(kept.rewrittenText, /SR 2026/);
+  assert.equal(kept.removedMentions.length, 0);
+  const days = rewriteForbiddenAuthorityMentions({
+    answerText: "Give 7 days' notice [SO 1].",
+    authorities: [{ citationLabel: "SO 1" }],
+  });
+  assert.match(days.rewrittenText, /7 days/);
+  assert.equal(days.removedMentions.length, 0);
+  const clause = rewriteForbiddenAuthorityMentions({
+    answerText: "See Appendix D clause 2 and Appendix D clause 1.",
+    authorities: [{ citationLabel: "Appendix D cl 1" }],
+  });
+  assert.match(clause.rewrittenText, /Appendix D clause 1/);
+  assert.equal(clause.rewrittenText.includes("clause 2"), false);
+  const pinpoint = validateAnswerAuthorityMentions({
+    answerText: "Standing Order 1(2) applies.",
+    authorities: [{ citationLabel: "SO 1" }],
+  });
+  assert.equal(pinpoint.ok, true);
+  const edition = validateAnswerCitations({
+    answerText: "The edition is [Standing Orders 2026].",
+    authorities: [{ citationLabel: "SO 1" }],
+  });
+  assert.equal(edition.ok, false);
+  const note = validateAnswerAuthorityMentions({
+    answerText: "See Appendix A note.",
+    authorities: [{ citationLabel: "Appendix A note" }],
+  });
+  assert.equal(note.ok, true);
+  const ruling = validateAnswerAuthorityMentions({
+    answerText: "Speakers' ruling 2/3 applies.",
+    authorities: [{ citationLabel: "SR 2/3" }],
+  });
+  assert.equal(ruling.ok, true);
+  const list = rewriteForbiddenAuthorityMentions({
+    answerText: "Standing Orders 1 and 7 both apply.",
+    authorities: [{ citationLabel: "SO 1" }, { citationLabel: "SO 7" }],
+  });
+  assert.match(list.rewrittenText, /Standing Orders 1 and 7/);
+  assert.equal(list.removedMentions.length, 0);
+  const table = validateAnswerAuthorityMentions({
+    answerText: "See Appendix A table 2 row 10.",
+    authorities: [{ citationLabel: "Appendix A table 2 row 10" }],
+  });
+  assert.equal(table.ok, true);
+  const both = attachClaimQualifications("Bottom line:\nStanding Orders 1 and 7 both apply [SO 1].", {
+    groundedLabels: ["SO 1", "SO 7"],
+  });
+  assert.equal(both.includes("has not been confirmed"), false);
+});
+
 test("a qualification stays on the uncertain claim and off the settled provision", () => {
   const attached = attachClaimQualifications([
     "Bottom line:",
@@ -835,8 +943,9 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   const text = String(done.answerText);
   assert.ok(text.includes(`${grounded} ${model}`), text);
   assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
-  assert.match(text, /\[SO 5\] has not been confirmed to govern the specific act asked about/);
   assert.match(text, /a provision that was not retrieved was mentioned beside the sitting \[SO 1\]/);
+  assert.equal(text.includes("[SO 5]"), false);
+  assert.equal(text.includes("SO 5"), false);
   const groundedLine = text.split("\n").find((line) => line.includes(grounded)) ?? "";
   assert.equal(groundedLine.split("has not been confirmed to govern").length - 1, 1);
 });

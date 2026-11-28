@@ -162,6 +162,7 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
       provider, upstreamErrorName, retryable: true,
     };
   }
+  if (providerCode !== null && code === null) code = `CF_${providerCode}`;
   if (httpStatus === 501) {
     return { phase, kind: "provider_nonretryable", httpStatus, code, provider, upstreamErrorName, retryable: false };
   }

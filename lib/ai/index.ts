@@ -118,9 +118,7 @@ export async function generateJson<T>(
     try {
       return await provider.generateJson<T>(request);
     } catch (error) {
-      if (request.signal?.aborted || (error instanceof DOMException && error.name === "AbortError" && request.signal?.aborted)) {
-        throw error;
-      }
+      if (request.signal?.aborted) throw error;
       lastError = preferDiagnosedError(lastError, normalizeAiProviderError(error, providerId));
     }
   }

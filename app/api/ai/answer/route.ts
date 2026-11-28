@@ -76,9 +76,8 @@ import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
-  applyProseHedges,
   attachClaimQualifications,
-  ungroundedProseHedges,
+  attachRemovedMentionHedges,
   mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
@@ -997,7 +996,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const rewriteDraft = (answerText: string) => {
             const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
             if (rewrite.removedMentions.length === 0) return { text: answerText, removed: 0 };
-            return { text: normalizeAnswerFormatting(rewrite.rewrittenText), removed: rewrite.removedMentions.length };
+            const hedged = attachRemovedMentionHedges(rewrite.rewrittenText, rewrite.placements);
+            return { text: normalizeAnswerFormatting(hedged), removed: rewrite.removedMentions.length };
           };
           const commitRewrites = (removed: number) => {
             if (removed <= 0) return;
@@ -1330,10 +1330,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               return;
             }
 
-            const proseHedges = ungroundedProseHedges(
-              finalAnswer,
-              finalAuthorities.map((authority) => authority.citationLabel),
-            );
             if (!checkMentions(finalAnswer).ok) {
               const rewrittenDraft = rewriteDraft(finalAnswer);
               finalAnswer = rewrittenDraft.text;
@@ -1957,7 +1953,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               forumLabels: [...forumLabels],
               groundedLabels: finalAuthorities.map((authority) => authority.citationLabel),
             });
-            finalAnswer = applyProseHedges(finalAnswer, proseHedges);
             const mentionEdit = mentionRewriteEdit(mentionRewrites);
             answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];
             if (answerEdits.length > 0) noteCheckedWithholding();

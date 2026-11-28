@@ -5,11 +5,14 @@ import {
   CLOUDFLARE_FREE_TIER_MODEL,
   generateJson,
   isCloudflareConfigured,
+  resetCloudflareModelWarningForTests,
   resetCloudflareQuotaForTests,
+  resetCloudflareRequestTimeoutForTests,
   setCloudflareClockForTests,
+  setCloudflareRequestTimeoutForTests,
   streamText,
 } from "../lib/ai/cloudflare";
-import { preferDiagnosedError } from "../lib/ai";
+import { generateJson as routeGenerateJson, preferDiagnosedError } from "../lib/ai";
 import { classifyAiError, runClaimValidationWithRetry } from "../lib/ai/provider-resilience";
 import { getAiCandidates } from "../lib/ai/routes";
 
@@ -325,10 +328,124 @@ test("recognised Cloudflare codes are read from either error shape", async () =>
     assert.equal(kept.provider, "gemini");
     assert.equal(kept.kind, "rate_limited");
     assert.equal(kept.retryable, true);
+    delete process.env.CLOUDFLARE_AI_MODEL;
+    resetCloudflareModelWarningForTests();
+    resetCloudflareQuotaForTests();
+    const later = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => jsonResponse(429, { errors: [{ code: 1111, message: secret }, { code: "3036", message: secret }] })).catch((error: unknown) => error);
+    assert.ok(later instanceof AiProviderError);
+    assert.equal(later.providerCode, 3036);
+    assert.equal(later.retryable, false);
+    let skipped = 0;
+    await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => { skipped += 1; return jsonResponse(200, { choices: [{ message: { content: "{\"a\":1}" } }] }); }).catch(() => undefined);
+    assert.equal(skipped, 0);
+    resetCloudflareQuotaForTests();
+    const unknown = await generateJson({
+      task: "answer.validate", systemInstruction: "JSON.", prompt: "check", temperature: 0,
+    }, async () => jsonResponse(400, { error: { code: "1234", message: secret } })).catch((error: unknown) => error);
+    assert.ok(unknown instanceof AiProviderError);
+    assert.equal(unknown.providerCode, 1234);
+    assert.equal(unknown.retryable, false);
+    assert.equal(classifyAiError(unknown, "claim_validation").code, "CF_1234");
+    assert.equal(`${unknown.message} ${unknown.rawMessage ?? ""}`.includes(secret), false);
+    resetCloudflareModelWarningForTests();
+    process.env.CLOUDFLARE_AI_MODEL = "@cf/openai/gpt-oss-120b";
+    await generateJson({
+      task: "answer.validate", systemInstruction: "JSON.", prompt: "check", temperature: 0,
+    }, async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.max_tokens, 1500);
+      assert.equal(body.max_completion_tokens, undefined);
+      return jsonResponse(200, { choices: [{ message: { content: "{\"ok\":true}" } }] });
+    });
+    const warnings: string[] = [];
+    const outcomes: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message?: unknown) => { warnings.push(String(message ?? "")); };
+    process.env.CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await generateJson({
+          task: "answer.generate",
+          systemInstruction: "A",
+          prompt: "B",
+          onProviderAttempt: (item) => { outcomes.push(item.outcome); },
+        }, async () => jsonResponse(200, { choices: [{ message: { content: "no" } }] })).catch(() => undefined);
+      }
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.deepEqual(outcomes, ["other", "other"]);
+    delete process.env.CLOUDFLARE_AI_MODEL;
+    setCloudflareRequestTimeoutForTests(40);
+    const stalled = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => new Response(new ReadableStream({ start() { /* stalled */ } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })).catch((error: unknown) => error);
+    assert.equal(stalled instanceof DOMException && stalled.name === "AbortError", true);
   } finally {
     resetCloudflareQuotaForTests();
+    resetCloudflareModelWarningForTests();
+    resetCloudflareRequestTimeoutForTests();
     delete process.env.CLOUDFLARE_API_TOKEN;
     delete process.env.CLOUDFLARE_ACCOUNT_ID;
     delete process.env.CLOUDFLARE_AI_MODEL;
+  }
+});
+
+test("an abort while the Cloudflare body is still open stops the chain", async () => {
+  const saved = {
+    gemini: process.env.GEMINI_API_KEY,
+    mode: process.env.OPEN_ORDER_INFERENCE_MODE,
+    allow: process.env.OPEN_ORDER_ALLOW_NON_GEMINI,
+    token: process.env.CLOUDFLARE_API_TOKEN,
+    account: process.env.CLOUDFLARE_ACCOUNT_ID,
+    base: process.env.AI_OPENAI_COMPATIBLE_BASE_URL,
+    model: process.env.AI_OPENAI_COMPATIBLE_MODEL,
+  };
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let fetches = 0;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.OPEN_ORDER_INFERENCE_MODE;
+  process.env.OPEN_ORDER_ALLOW_NON_GEMINI = "1";
+  process.env.CLOUDFLARE_API_TOKEN = "token";
+  process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
+  process.env.AI_OPENAI_COMPATIBLE_BASE_URL = "https://example.test/v1";
+  process.env.AI_OPENAI_COMPATIBLE_MODEL = "local";
+  globalThis.fetch = async () => {
+    fetches += 1;
+    return new Response(new ReadableStream({
+      start() { setTimeout(() => controller.abort(), 15); },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const error = await routeGenerateJson({
+      task: "answer.generate",
+      systemInstruction: "A",
+      prompt: "B",
+      signal: controller.signal,
+    }).catch((caught: unknown) => caught);
+    assert.equal(error instanceof DOMException && error.name === "AbortError", true);
+    assert.equal(fetches, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    const restore = (name: string, value: string | undefined) => {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    };
+    restore("GEMINI_API_KEY", saved.gemini);
+    restore("OPEN_ORDER_INFERENCE_MODE", saved.mode);
+    restore("OPEN_ORDER_ALLOW_NON_GEMINI", saved.allow);
+    restore("CLOUDFLARE_API_TOKEN", saved.token);
+    restore("CLOUDFLARE_ACCOUNT_ID", saved.account);
+    restore("AI_OPENAI_COMPATIBLE_BASE_URL", saved.base);
+    restore("AI_OPENAI_COMPATIBLE_MODEL", saved.model);
   }
 });
