@@ -1,3 +1,5 @@
+import { buildProvisionTree } from "@/lib/citations/grammar";
+
 /**
  * v36: Independently corroborate a disputed bottom-line entailment finding.
  * A model cannot reverse its own rejection: an independent affirmative review
@@ -40,32 +42,60 @@ function markerOf(line: string): string | null {
   return match ? match[1].trim().toLowerCase() : null;
 }
 
-function markerDepth(token: string): number {
-  if (/^\d/.test(token)) return 1;
-  if (/^(?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)$/.test(token)) return 3;
-  return 2;
+function childKey(tree: Set<string>, parent: string, token: string): string | null {
+  const wanted = `${parent}(${token})`.toLowerCase();
+  for (const key of tree) {
+    if (key.toLowerCase() === wanted) return key;
+  }
+  return null;
 }
 
-/** Text of the cited pin, including its child markers, or null when that pin is not in the source. */
+/**
+ * Text of the cited pin, including its child markers.
+ * Letter and roman depth come from the provision tree, so (i) after (h) stays a letter.
+ */
 export function citedSubitemText(sectionContent: string, citation: string): string | null {
   const pins = pinGroups(citation);
   if (pins.length === 0) return sectionContent;
-  let lines = sectionContent.split("\n");
-  for (const pin of pins) {
-    const start = lines.findIndex((line) => markerOf(line) === pin);
-    if (start < 0) return null;
-    const depth = markerDepth(pin);
-    let end = lines.length;
-    for (let index = start + 1; index < lines.length; index += 1) {
-      const next = markerOf(lines[index] ?? "");
-      if (next && markerDepth(next) <= depth) {
-        end = index;
+  const treeList = buildProvisionTree(sourceLabel(citation), sectionContent);
+  if (treeList.length === 0) return null;
+  const tree = new Set(treeList);
+  const root = treeList.reduce((best, key) => (key.length < best.length ? key : best));
+  const target = pins.reduce<string | null>((parent, pin) => (parent ? childKey(tree, parent, pin) : null), root);
+  if (!target) return null;
+  const lines = sectionContent.split("\n");
+  const stack = [root];
+  const marked: Array<{ line: number; key: string }> = [];
+  lines.forEach((line, index) => {
+    const token = markerOf(line);
+    if (!token) return;
+    const frames = [...stack];
+    let found: string | null = null;
+    while (frames.length > 0) {
+      const parent = frames[frames.length - 1];
+      const key = parent ? childKey(tree, parent, token) : null;
+      if (key) {
+        found = key;
+        stack.splice(0, stack.length, ...frames, key);
         break;
       }
+      frames.pop();
     }
-    lines = lines.slice(start, end);
+    if (found) marked.push({ line: index, key: found });
+  });
+  const start = marked.find((entry) => entry.key.toLowerCase() === target.toLowerCase());
+  if (!start) return null;
+  let end = lines.length;
+  for (const entry of marked) {
+    if (entry.line <= start.line) continue;
+    const same = entry.key.toLowerCase() === target.toLowerCase();
+    const child = entry.key.toLowerCase().startsWith(`${target.toLowerCase()}(`);
+    if (!same && !child) {
+      end = entry.line;
+      break;
+    }
   }
-  return lines.join("\n");
+  return lines.slice(start.line, end).join("\n");
 }
 function normaliseSourceWhitespace(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim();

@@ -336,30 +336,36 @@ function readPins(text: string, index: number): { pins: string; end: number } {
   return { pins, end };
 }
 
-function isUnreadablePinGroup(body: string): boolean {
-  const inner = body.slice(1, -1);
-  if (/^\s*(?:ibid\.?|op\.?\s*cit\.?|idem|supra|infra|above|note)\s*$/i.test(inner)) return false;
-  if (inner.trim().split(/\s+/).length > 1) return false;
-  const year = /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body);
-  const valid = !year && /^\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\)$/i.test(body);
-  return !valid && !year && inner.trim().length > 0 && inner.trim().length <= 12;
+function isValidPinGroup(body: string): boolean {
+  return /^\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\)$/i.test(body)
+    && !/^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body);
 }
 
-/** A parenthesised group that is not a pin, plus every pin group after it. Years and asides stay put. */
+/** Nested citations, cross-reference suffixes and back-references are not pin residue. */
+function isStructuredGroup(body: string): boolean {
+  if (!body.startsWith("(") || !body.endsWith(")")) return false;
+  const inner = body.slice(1, -1).trim();
+  if (/^(?:ibid\.?|op\.?\s*cit\.?|idem|supra|infra|see above|see below|see note|above|note)$/i.test(inner)) return true;
+  if (/^referred to in\b/i.test(inner)) return true;
+  const rest = inner.replace(/^(?:cf\.?|see also|see|also)\s+/i, "");
+  return /^(?:standing\s+orders?|s\.?\s*o\.?s?|so\b|appendix\b|speakers?'?\s+rulings?|s\.?\s*r\.?|sr\b|\d+\s*\/\s*\d+)/i.test(rest);
+}
+
+function isUnreadablePinGroup(body: string): boolean {
+  if (body.startsWith("(") && (isValidPinGroup(body) || /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body) || isStructuredGroup(body))) return false;
+  return body.length > 2;
+}
+
+/** Any parenthesised group that is not a pin, plus every group after it. */
 function unreadablePinTail(text: string, index: number): number {
   let end = index;
   let started = false;
   for (;;) {
-    const group = /^\s*(\([^)]*\))/.exec(text.slice(end));
+    const group = /^\s*([(\uFF08][^)\uFF09]*[)\uFF09])/.exec(text.slice(end));
     if (!group) break;
-    const body = group[1];
-    const year = /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body);
-    const valid = !year && /^\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\)$/i.test(body);
     if (!started) {
-      if (!isUnreadablePinGroup(body)) break;
+      if (!isUnreadablePinGroup(group[1])) break;
       started = true;
-    } else if (!valid && !isUnreadablePinGroup(body)) {
-      break;
     }
     end += group[0].length;
   }

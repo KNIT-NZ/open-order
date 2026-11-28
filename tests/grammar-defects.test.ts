@@ -367,7 +367,7 @@ test("OO-DEF-143 placeholders keep the separating space", () => {
 test("OO-DEF-145 an unreadable pin group is residue and is not served", () => {
   const section = "The Speaker may—\n(a) name a member; or\n(b) suspend the sitting.";
   const labels = authorities(["SO 7"], new Map([["SO 7", section]]));
-  for (const shape of ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)", "(b)(xyz)", "(-)(iv)"]) {
+  for (const shape of ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)", "(b)(xyz)", "(-)(iv)", "(z y)", "(e f)", "(a)(z w)", "(abcdefghijklmnop)", "(z y)(b)(ⅰ)", "(see a)", "(as amended)", "(a, b)", "(z, y)", "（abc）"]) {
     const assessed = assessCitations(`The Speaker may name a member [SO 7${shape}].`, labels);
     assert.notEqual(assessed.reasonCode, "served", shape);
     assert.equal(assessed.mentions.some((mention) => mention.status === "ungrounded"), true, shape);
@@ -384,9 +384,9 @@ test("OO-DEF-145 pin-shape fuzz serves no nonexistent label", () => {
   const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
     sections: Array<{ citation_label: string; content: string }>;
   };
-  const sections = pack.sections.filter((section) => section.citation_label.startsWith("SO "));
+  const sections = pack.sections.filter((section) => section.citation_label.startsWith("SO ") || / cl \d/.test(section.citation_label));
   const trees = new Map(sections.map((section) => [section.citation_label, new Set(buildProvisionTree(section.citation_label, section.content))]));
-  const garbage = ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)"];
+  const garbage = ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)", "(z y)", "(e f)", "(abcdefghijklmnop)", "(see a)", "(as amended)", "(a, b)", "(z, y)", "（abc）", "(z y)(b)(ⅰ)"];
   let servedFake = 0;
   const rand = rng(145);
   for (let index = 0; index < 5000; index += 1) {
@@ -400,7 +400,7 @@ test("OO-DEF-145 pin-shape fuzz serves no nonexistent label", () => {
     const assessed = assessCitations(input, [{ citationLabel: section.citation_label, sectionContent: section.content }]);
     if (assessed.reasonCode !== "served") continue;
     const shown = assessed.brackets.map((bracket) => bracket.text).join(" ");
-    const missing = [...shown.matchAll(/\(([^)]*)\)/g)].some((match) => {
+    const missing = [...shown.matchAll(/[(\uFF08]([^)\uFF09]*)[)\uFF09]/g)].some((match) => {
       const group = `(${match[1].replace(/\s+/g, "")})`;
       return ![...tree].some((key) => key.includes(group));
     });
@@ -439,6 +439,54 @@ test("OO-DEF-146 a quote from another sub-item does not corroborate the cited pi
     authorities,
   });
   assert.equal(right.accepted, true);
+});
+
+test("OO-DEF-147 letter pins slice at the next letter, and Appendix B cl 5(1)(i) is the letter", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const content = new Map(pack.sections.map((section) => [section.citation_label, section.content]));
+  const checks: Array<[string, string, string]> = [
+    ["SO 190(h)", "(h) reports of Officers of Parliament", "(i)"],
+    ["SO 327(2)(ha)", "(ha) was not published", "(i)"],
+    ["SO 406(1)(h)", "(h) a statement setting out the consultations", "(i)"],
+    ["SO 418(h)", "(h) as a member, knowingly providing false", "(i)"],
+    ["SO 418(u)", "(u) intimidating, preventing, or hindering", "(v)"],
+    ["SO 418(w)", "(w) assaulting, threatening, or disadvantaging", "(x)"],
+    ["Appendix B cl 5(1)(h)", "(h) the name of each retirement scheme", "(i) the name of each managed"],
+    ["Appendix C cl 4(2)(h)", "(h) if the bill affects a charitable trust", "(i)"],
+  ];
+  for (const [pin, own, sibling] of checks) {
+    const parent = pin.replace(/\(.*$/, "");
+    const region = citedSubitemText(content.get(parent) ?? "", pin) ?? "";
+    assert.equal(region.includes(own), true, pin);
+    assert.equal(region.includes(sibling), false, pin);
+  }
+  const appendix = content.get("Appendix B cl 5") ?? "";
+  const letter = citedSubitemText(appendix, "Appendix B cl 5(1)(i)") ?? "";
+  const roman = citedSubitemText(appendix, "Appendix B cl 5(1)(d)(i)") ?? "";
+  assert.equal(letter.includes("managed investment scheme"), true);
+  assert.equal(letter.includes(roman.slice(0, 40)), false);
+  assert.equal(roman.includes("ought reasonably to know"), true);
+});
+
+test("OO-DEF-144 pin regions match the tree snapshot", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const snapshot = JSON.parse(readFileSync(new URL("./fixtures/pin-regions.json", import.meta.url), "utf8")) as Record<string, string>;
+  const built: Record<string, string> = {};
+  for (const section of pack.sections) {
+    const tree = buildProvisionTree(section.citation_label, section.content);
+    if (tree.length === 0) continue;
+    const root = tree.reduce((best, key) => (key.length < best.length ? key : best));
+    for (const node of tree) {
+      if (node === root) continue;
+      const citation = `${section.citation_label}${node.slice(root.length)}`;
+      built[citation] = (citedSubitemText(section.content, citation) ?? "").replace(/\s+/g, " ").trim();
+    }
+  }
+  assert.deepEqual(built, snapshot);
 });
 
 test("OO-DEF-144 an unmappable pin on a categorical claim is rejected", () => {
