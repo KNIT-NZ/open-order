@@ -3,6 +3,7 @@
  * in the reason codes. Trees come from full section text or, in tests, from
  * the corpus provision_tree.
  */
+import { PLACEHOLDER_CITATION, provisionPlaceholder } from "@/lib/citations/placeholder";
 
 export const RULE_CODES = [
   "grounded",
@@ -1668,7 +1669,7 @@ function displayLabel(cpk: string, labels: string[]): string {
   return labels.find((label) => labelToCpk(label) === wanted) ?? cpk;
 }
 
-export function rewriteByGrammar(text: string, assessment: GrammarAssessment): { text: string; removed: number } {
+export function rewriteByGrammar(text: string, assessment: GrammarAssessment, citation = PLACEHOLDER_CITATION): { text: string; removed: number } {
   type Edit = { start: number; end: number; kind: "rewrite" | "strip" };
   const edits: Edit[] = [
     ...assessment.rewriteSpans.map((span) => ({ start: span.start, end: span.end, kind: "rewrite" as const })),
@@ -1688,12 +1689,11 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment): {
       next = `${next.slice(0, edit.start)}${stripped}${next.slice(edit.end)}`;
       continue;
     }
-    const before = next[edit.start - 1] ?? "";
-    const after = next[edit.end] ?? "";
-    let insert = "a provision [citation not verified]";
-    if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
-    if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
-    next = `${next.slice(0, edit.start)}${insert}${next.slice(edit.end)}`;
+    const shaped = provisionPlaceholder(next.slice(Math.max(0, edit.start - 80), edit.start), next.slice(edit.end, edit.end + 8), citation);
+    const replaceStart = edit.start - shaped.consumeBefore;
+    const replaceEnd = edit.end + shaped.consumeAfter;
+    if (replaceStart < 0 || replaceEnd > next.length) continue;
+    next = `${next.slice(0, replaceStart)}${shaped.text}${next.slice(replaceEnd)}`;
     removed += 1;
   }
   return { text: next, removed };

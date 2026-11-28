@@ -76,7 +76,7 @@ test("OO-DEF-129 rewrites only the citation span and keeps later text in order",
   assert.equal(mixedOut.text.includes("[SO 1]"), true);
   assert.equal(mixedOut.text.includes("apply. The House may sit"), true);
   assert.equal(/[A-Za-z]a provision/.test(mixedOut.text), false);
-  assert.equal(keptOutside(mixed, mixedAssessment.rewriteSpans), mixedOut.text.split(prosePlaceholder).join(""));
+  assert.equal(keptOutside(mixed, mixedAssessment.rewriteSpans), mixedOut.text.replace(/[Aa] provision \[citation not verified\]/g, ""));
 });
 
 test("OO-DEF-129 list and range fuzz loses no citation main kept", () => {
@@ -356,11 +356,15 @@ test("OO-DEF-142 an appendix pinpoint keeps the parent authorities entry", () =>
 test("OO-DEF-143 placeholders keep the separating space", () => {
   const admitted = authorities(["SO 1"]);
   const rewrite = (input: string) => rewriteByGrammar(input, assessCitations(input, admitted, { provisionTree: {} })).text;
-  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "a provision [citation not verified] apply [SO 1].");
-  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "a provision [citation not verified] apply [SO 1].");
-  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "a provision [citation not verified] lets the House sit late.");
+  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "A provision [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "A provision [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "A provision [citation not verified] lets the House sit late.");
   assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under a provision [citation not verified] the House may sit late [SO 1].");
   assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and a provision [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("The SO 99 procedure applies [SO 1]."), "The provision [citation not verified] procedure applies [SO 1].");
+  assert.equal(rewrite("An SO 99 applies [SO 1]."), "A provision [citation not verified] applies [SO 1].");
+  assert.equal(rewrite("Read SO 99’s notice rule [SO 1]."), "Read a provision’s [citation not verified] notice rule [SO 1].");
+  assert.equal(rewrite("(see SO 99)."), "(see a provision [citation not verified]).");
   assert.equal(rewrite("Standing Order one hundred and forty-six applies [SO 1].").includes("forty-six"), false);
   assert.equal(/[A-Za-z]a provision|anda provision|SO 1a provision/.test(rewrite("SO 1 et seq. apply [SO 1].")), false);
 });

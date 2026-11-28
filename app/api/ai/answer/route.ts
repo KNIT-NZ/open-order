@@ -75,6 +75,7 @@ import {
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import { applyStructuredHedge, assessCitations, isNumberRangeBracket, rewriteByGrammar } from "@/lib/citations/grammar";
+import { ROUTE_PLACEHOLDER_CITATION, renderRoutePlaceholders } from "@/lib/citations/placeholder";
 import {
   answerSectionHasContent,
   mentionRewriteEdit,
@@ -1006,7 +1007,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           };
           const rewriteDraft = (answerText: string) => {
             const assessed = assessCitations(answerText, grammarAuthorities);
-            const rewrite = rewriteByGrammar(answerText, assessed);
+            const rewrite = rewriteByGrammar(answerText, assessed, ROUTE_PLACEHOLDER_CITATION);
             if (rewrite.text === answerText) return { text: answerText, removed: 0 };
             return { text: normalizeAnswerFormatting(rewrite.text), removed: rewrite.removed };
           };
@@ -1321,11 +1322,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const before = next.slice(-1);
                 const after = answerText[close + 1] ?? "";
                 if (before && /[A-Za-z0-9\]]/.test(before)) next += " ";
-                next += "[citation not verified]";
-                if (after && !/[\s.,;:!?]/.test(after)) next += " ";
+                next += `[${ROUTE_PLACEHOLDER_CITATION}]`;
+                if (after && !/[\s.,;:!?\])]/.test(after)) next += " ";
                 index = close;
               }
-              next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?])/g, "$1");
+              next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?\])])/g, "$1");
               next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
               if (!next.trim() || !citeCheck(next).ok) return null;
               return next;
@@ -1454,6 +1455,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               }
             }
 
+            finalAnswer = renderRoutePlaceholders(finalAnswer);
             let answerClaims = extractAnswerClaims(finalAnswer);
 
             if (answerClaims.length === 0) {
@@ -1570,7 +1572,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
                 const repairedRewrite = rewriteDraft(repairedAnswer);
-                repairedAnswer = repairedRewrite.text;
+                repairedAnswer = renderRoutePlaceholders(repairedRewrite.text);
                 noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = citeCheck(repairedAnswer);
@@ -1844,7 +1846,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const rawLine = recovery.bottomLine.trim();
                 const singleLine = rawLine.length >= 20 && !rawLine.includes("\n") && /\[[^\]]+\]/.test(rawLine);
                 const recoveredRewrite = singleLine ? rewriteDraft(rawLine) : { text: rawLine, removed: 0 };
-                const line = recoveredRewrite.text.trim();
+                const line = renderRoutePlaceholders(recoveredRewrite.text).trim();
                 if (singleLine && line.length >= 20 && !line.includes("\n") &&
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
@@ -1996,6 +1998,23 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             });
             const mentionEdit = mentionRewriteEdit(mentionRewrites);
             answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];
+            const substantiveSections = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
+            let answerSection: string | null = null;
+            let placeholderOnlyLine = false;
+            for (const rawLine of finalAnswer.split("\n")) {
+              const trimmedLine = rawLine.trim();
+              if (substantiveSections.has(trimmedLine)) {
+                answerSection = trimmedLine;
+                continue;
+              }
+              if (!answerSection || !trimmedLine) continue;
+              const lineCitations = [...trimmedLine.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]?.trim().toLowerCase() ?? "");
+              if (lineCitations.length > 0 && lineCitations.every((item) => item === "citation not verified")) placeholderOnlyLine = true;
+            }
+            if (placeholderOnlyLine) {
+              if (!outcomeState.partial.includes("partial")) outcomeState.partial.push("partial");
+              if (outcomeState.settlement === "supported") outcomeState.settlement = "partial";
+            }
             if (answerEdits.length > 0) noteCheckedWithholding();
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
             if (claimValidationAttempts > 1) {

@@ -479,7 +479,7 @@ test("removed mentions, wrapped names, abbreviations and quotes stay on main's r
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. \"Standing Order 99 applies.\"",
-      "Bottom line:\nThe House may sit [SO 1]. \"a provision [citation not verified] applies.\"",
+      "Bottom line:\nThe House may sit [SO 1]. \"A provision [citation not verified] applies.\"",
     ],
   ];
   for (const [input, expected] of cases) {
@@ -507,7 +507,7 @@ test("main's so 7 mention and edition years stay on main's rewrite", () => {
     answerText: "Standing Orders 2026 39 applies [SO 1].",
     authorities: admitted,
   });
-  assert.equal(afterYear.rewrittenText, "a provision [citation not verified] 39 applies [SO 1].");
+  assert.equal(afterYear.rewrittenText, "A provision [citation not verified] 39 applies [SO 1].");
   const kept = rewriteForbiddenAuthorityMentions({
     answerText: "Give 7 days' notice [SO 1].",
     authorities: admitted,
@@ -1099,7 +1099,7 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   // OO-DEF-125: this line is exact. Adding the bare hedge to every placeholder line fails it.
   assert.equal(
     text.split("\n").find((line) => line.includes("[citation not verified]")),
-    "a provision [citation not verified] was mentioned beside the sitting [SO 1].",
+    "A provision [citation not verified] was mentioned beside the sitting [SO 1].",
   );
   assert.equal(text.includes("[SO 5]"), false);
   assert.equal(text.includes("SO 5"), false);
@@ -1292,6 +1292,60 @@ test("a suffix that survives the mention check withholds the answer", async () =
   assert.equal(String(done.answerText).includes("referred to in"), false);
   assert.equal(String(done.answerText).includes("Standing Order 99"), false);
   assert.match(String(done.answerText), /\[citation not verified\]/);
+});
+
+test("a model-authored placeholder is not a grounded citation", async () => {
+  const motion = "(1) A member must not move the motion unless the Speaker has given leave.";
+  const rows = [
+    { admit: false, meaning: true },
+    { admit: false, meaning: false },
+    { admit: true, meaning: true },
+    { admit: true, meaning: false },
+  ];
+  for (const row of rows) {
+    const done = await probe("named_admitted_source", {
+      admit: row.admit,
+      labels: ["SO 7", "SO 80"],
+      bodies: { "SO 7": QUOTE, "SO 80": motion },
+      support: true,
+      draft: [
+        "Bottom line:",
+        "A member must not move the motion [citation not verified].",
+        ...(row.meaning ? ["", "What this means:", "The Speaker may suspend the sitting [SO 7]."] : []),
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    assert.notEqual(done.answerState, "supported", JSON.stringify(row));
+    assert.equal(String(done.answerText).includes("must not move the motion"), false, JSON.stringify(row));
+    assert.equal(done.route, row.admit ? "incident_adjudication" : "semantic_selector", JSON.stringify(row));
+  }
+});
+
+test("a route-inserted placeholder stays partial and keeps the supported line", async () => {
+  const done = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 7"],
+    bodies: {
+      "SO 1": QUOTE,
+      "SO 7": "(1) first duty of the Speaker in the House\n(2) second duty of the Speaker in the House",
+    },
+    support: true,
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "A member must give written notice (see [SO 7(1) to (9)]).",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  const text = String(done.answerText);
+  assert.equal(done.answerState, "partial");
+  assert.match(text, /The House may suspend the sitting \[SO 1\]/);
+  assert.match(text, /\(see \[citation not verified\]\)/);
+  assert.equal(text.includes("[citation not verified] )"), false);
+  assert.equal(text.includes("(9)"), false);
 });
 
 test("an exception stated only in the next sentence is withheld and the rest of the answer stays", async () => {

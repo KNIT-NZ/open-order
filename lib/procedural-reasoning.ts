@@ -13,6 +13,7 @@ import {
   type V517SearchFunction,
   type V517SelectionResult,
 } from "./v5-17-semantic-selector.js";
+import { ROUTE_PLACEHOLDER_CITATION, provisionPlaceholder } from "@/lib/citations/placeholder";
 
 export type QueryProvenance =
   | "planner"
@@ -1841,7 +1842,7 @@ function citationCandidates(prefix: string, part: string): string[] {
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
-  if (cited.trim().toLowerCase() === "citation not verified") return true;
+  if (cited.trim() === ROUTE_PLACEHOLDER_CITATION) return true;
   const normalized = cited
     .replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ")
     .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)/i, "")
@@ -2051,17 +2052,16 @@ export function rewriteForbiddenAuthorityMentions(input: {
   let rewritten = "";
   for (const span of spans) {
     rewritten += input.answerText.slice(cursor, span.start);
+    let consumed = 0;
     if (span.admitted) rewritten += span.mention;
     else {
-      const before = rewritten.slice(-1);
-      const after = input.answerText[span.end] ?? "";
-      let insert = "a provision [citation not verified]";
-      if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
-      if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
-      rewritten += insert;
+      const shaped = provisionPlaceholder(rewritten, input.answerText.slice(span.end, span.end + 8));
+      if (shaped.consumeBefore > 0) rewritten = rewritten.slice(0, -shaped.consumeBefore);
+      rewritten += shaped.text;
+      consumed = shaped.consumeAfter;
     }
     removed.push(span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
-    cursor = span.end;
+    cursor = span.end + consumed;
   }
   rewritten += input.answerText.slice(cursor);
   return { rewrittenText: rewritten, removedMentions: [...new Set(removed)] };
@@ -2182,7 +2182,6 @@ export function pruneValidatedAnswerContent(input: {
     input.authorities.map((authority) => authority.citationLabel),
   );
   const allowedForms = allowedSet(input.authorities);
-
   const lines = normalizeAnswerFormatting(input.answerText).split("\n");
   const kept: string[] = [];
   const removedLines: string[] = [];
