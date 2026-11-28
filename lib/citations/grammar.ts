@@ -1690,7 +1690,7 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment): {
     }
     const before = next[edit.start - 1] ?? "";
     const after = next[edit.end] ?? "";
-    let insert = "[citation not verified]";
+    let insert = "a provision [citation not verified]";
     if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
     if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
     next = `${next.slice(0, edit.start)}${insert}${next.slice(edit.end)}`;

@@ -67,7 +67,8 @@ test("OO-DEF-129 rewrites only the citation span and keeps later text in order",
   const assessed = assessCitations(input, authorities(["SO 1", "SO 2"]), { provisionTree: {} });
   const rewritten = rewriteByGrammar(input, assessed);
   assert.equal(rewritten.text, input);
-  assert.equal(keptOutside(input, assessed.rewriteSpans).split(PLACEHOLDER).join(""), rewritten.text.split(PLACEHOLDER).join(""));
+  const prosePlaceholder = `a provision ${PLACEHOLDER}`;
+  assert.equal(keptOutside(input, assessed.rewriteSpans).split(prosePlaceholder).join(""), rewritten.text.split(prosePlaceholder).join(""));
 
   const mixed = "Standing Orders 98 and 99 and SO 97 apply. The House may sit [SO 1].";
   const mixedAssessment = assessCitations(mixed, authorities(["SO 1"]), { provisionTree: {} });
@@ -75,7 +76,7 @@ test("OO-DEF-129 rewrites only the citation span and keeps later text in order",
   assert.equal(mixedOut.text.includes("[SO 1]"), true);
   assert.equal(mixedOut.text.includes("apply. The House may sit"), true);
   assert.equal(/[A-Za-z]a provision/.test(mixedOut.text), false);
-  assert.equal(keptOutside(mixed, mixedAssessment.rewriteSpans), mixedOut.text.split(PLACEHOLDER).join(""));
+  assert.equal(keptOutside(mixed, mixedAssessment.rewriteSpans), mixedOut.text.split(prosePlaceholder).join(""));
 });
 
 test("OO-DEF-129 list and range fuzz loses no citation main kept", () => {
@@ -355,11 +356,11 @@ test("OO-DEF-142 an appendix pinpoint keeps the parent authorities entry", () =>
 test("OO-DEF-143 placeholders keep the separating space", () => {
   const admitted = authorities(["SO 1"]);
   const rewrite = (input: string) => rewriteByGrammar(input, assessCitations(input, admitted, { provisionTree: {} })).text;
-  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "[citation not verified] apply [SO 1].");
-  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "[citation not verified] apply [SO 1].");
-  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "[citation not verified] lets the House sit late.");
-  assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under [citation not verified] the House may sit late [SO 1].");
-  assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "a provision [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "a provision [citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "a provision [citation not verified] lets the House sit late.");
+  assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under a provision [citation not verified] the House may sit late [SO 1].");
+  assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and a provision [citation not verified] apply [SO 1].");
   assert.equal(rewrite("Standing Order one hundred and forty-six applies [SO 1].").includes("forty-six"), false);
   assert.equal(/[A-Za-z]a provision|anda provision|SO 1a provision/.test(rewrite("SO 1 et seq. apply [SO 1].")), false);
 });
@@ -428,12 +429,12 @@ test("OO-DEF-148 a spaced parenthesis after a label is left intact", () => {
   }
   const parenthetical = "Under SO 1 (and SO 99) the House may sit [SO 1].";
   const parentheticalOut = rewriteByGrammar(parenthetical, assessCitations(parenthetical, labels)).text;
-  assert.equal(parentheticalOut, "Under SO 1 (and [citation not verified]) the House may sit [SO 1].");
+  assert.equal(parentheticalOut, "Under SO 1 (and a provision [citation not verified]) the House may sit [SO 1].");
   const attached = "The Speaker may name a member [SO 7(as amended)].";
   assert.notEqual(assessCitations(attached, labels).reasonCode, "served");
   const prose = "Under SO 7(as amended) the Speaker may name a member [SO 7].";
   const proseOut = rewriteByGrammar(prose, assessCitations(prose, labels)).text;
-  assert.equal(proseOut, "Under SO 7 [citation not verified] the Speaker may name a member [SO 7].");
+  assert.equal(proseOut, "Under SO 7 a provision [citation not verified] the Speaker may name a member [SO 7].");
   assert.equal(/[A-Za-z0-9\]]\[citation not verified\]/.test(proseOut), false);
   assert.equal(proseOut.includes("SO 7 "), true);
 });
@@ -612,18 +613,66 @@ test("G2 a qualification named in another sentence does not cover the cited sent
     "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80].",
     "A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80, 2026 edition].",
   ];
-  let servedFaithful = 0;
-  for (const text of faithful) {
-    const rejected = findOmittedSourceQualifications({
-      claims: [{ id: "keep", text, citations: [...text.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]) }],
-      authorities: admitted,
-    });
-    if (rejected.length === 0) servedFaithful += 1;
-  }
-  console.log(JSON.stringify({ qualificationDrops: drops.length, servedDrops, faithful: faithful.length, servedFaithful }));
+  const nextSentence = [
+    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. That said, the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Unless the Speaker has given leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Except where the Speaker gives leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The exception is where the Speaker gives leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. That rule does not apply where the Speaker has given leave [SO 80].",
+    "However, the Speaker may give leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption.",
+    "However, the Speaker may give leave for an interruption. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave.",
+    "The exception is where the Speaker gives leave. A member must not interrupt another member who is speaking [SO 80].",
+  ];
+  const lookalikes = [
+    "The Speaker has given leave for many things [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker has given leave elsewhere. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker has given leave for a different matter. A member must not interrupt another member who is speaking [SO 80].",
+    "Unless the Speaker has given leave, the House may sit. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker may act [SO 7].",
+    "The Speaker has given leave for other matters [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The House may sit if the Speaker has given leave for many things.",
+    "Leave was discussed earlier. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker may act. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Debate then continues.",
+    "Previously the Speaker acted. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker has given leave [SO 7]. Something else happens. A member must not interrupt another member who is speaking [SO 80].",
+    "However, the Speaker may give leave for an interruption [SO 80]. The House may sit. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker has given leave for many things [SO 7].",
+    "But the House may sit. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker has given leave for an unrelated matter. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must sit [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "That said, the House may sit. A member must not interrupt another member who is speaking [SO 80].",
+    "The exception is where the House may sit. A member must not interrupt another member who is speaking [SO 80].",
+  ];
+  const score = (rows: string[]) => rows.filter((text) => findOmittedSourceQualifications({
+    claims: [{ id: "row", text, citations: [...text.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]) }],
+    authorities: admitted,
+  }).length === 0).length;
+  const servedFaithful = score(faithful);
+  const servedNext = score(nextSentence);
+  const servedLookalikes = score(lookalikes);
+  console.log(JSON.stringify({
+    qualificationDrops: drops.length,
+    servedDrops,
+    faithful: faithful.length,
+    servedFaithful,
+    nextSentence: nextSentence.length,
+    servedNext,
+    lookalikes: lookalikes.length,
+    servedLookalikes,
+  }));
   assert.equal(drops.length, 24);
   assert.equal(servedDrops, 0);
   assert.equal(servedFaithful, faithful.length);
+  assert.equal(nextSentence.length, 12);
+  assert.equal(servedNext, nextSentence.length);
+  assert.equal(lookalikes.length, 20);
+  assert.equal(servedLookalikes, 0);
 });
 
 test("OO-DEF-164 a joined citation is kept only when every label passes", () => {

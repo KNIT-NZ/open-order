@@ -124,6 +124,67 @@ function sentencesForCitation(claim: string, citation: string): string[] {
   return scope.length > 0 ? scope : sentences;
 }
 
+function carriesCitation(sentence: string, citation: string): boolean {
+  const needle = citation.trim();
+  return needle.length > 0 && (sentence.includes(needle) || sentence.includes(`[${needle}]`));
+}
+
+function exceptionLead(sentence: string): boolean {
+  const start = sentence.replace(/^\[[^\]]+\]\s*/, "").trim();
+  return /^(?:however|but|unless|except|that said|that rule|the exception)\b/i.test(start)
+    || /\b(?:does not apply|do not apply|exception is|except where)\b/i.test(start);
+}
+
+function armActor(arm: string): string | null {
+  const match = arm.match(/\b(speaker|clerk|chairperson|committee|house|member)\b/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function armCondition(arm: string): string | null {
+  const match = arm.match(/\b(leave|permission|permits|permit|authorises|authorised|authorizes|authorized|consents|consent|approval)\b/i);
+  return match ? match[1].toLowerCase().replace(/(?:s|ed|ing|ion)$/i, "") : null;
+}
+
+function differentAct(sentence: string, claim: string, arm: string): boolean {
+  const claimNorm = normalise(claim);
+  const armNorm = normalise(arm);
+  const verbs = [...normalise(sentence).matchAll(/\b(?:may|must|shall|can)\s+(\w+)/g)].map((match) => match[1] ?? "");
+  return verbs.some((verb) => {
+    if (!verb || /^(give|grant|permit|authorise|authorize)$/.test(verb)) return false;
+    if (armNorm.includes(verb) || claimNorm.includes(verb)) return false;
+    return true;
+  });
+}
+
+function mentionsClaimAct(sentence: string, claimSentence: string): boolean {
+  const acts = tokens(claimSentence).filter((word) => word.length >= 6);
+  const text = sentence.toLowerCase();
+  return acts.some((act) => text.includes(act.slice(0, 5)));
+}
+
+/** An adjacent sentence may state the source exception. A lookalike about some other act does not. */
+function isAdjacentException(neighbor: string, arm: { kind: string; text: string }, citation: string, claimSentence: string): boolean {
+  const armText = `${arm.kind} ${arm.text}`;
+  const lead = exceptionLead(neighbor);
+  const sameRule = carriesCitation(neighbor, citation) && mentionsClaimAct(neighbor, claimSentence);
+  if (!lead && !sameRule) return false;
+  if (/\b(?:elsewhere|different matter|many things|other matters|unrelated|something else)\b/i.test(neighbor)) return false;
+  const actor = armActor(armText);
+  const condition = armCondition(armText);
+  const text = neighbor.toLowerCase();
+  if (actor && !text.includes(actor)) return false;
+  if (condition && !text.includes(condition)) return false;
+  if (differentAct(neighbor, claimSentence, armText)) return false;
+  return Boolean(actor || condition);
+}
+
+function qualificationStated(sentence: string, sentences: string[], arm: { kind: string; text: string }, citation: string, claim: string): boolean {
+  if (acknowledgesArm(sentence, arm)) return true;
+  const index = sentences.indexOf(sentence);
+  const neighbors = [sentences[index - 1], sentences[index + 1]].filter((item): item is string => Boolean(item));
+  return neighbors.some((neighbor) => isAdjacentException(neighbor, arm, citation, sentence));
+}
+
 function acknowledgesArm(claim: string, arm: {kind: string; text: string}): boolean {
   if (GENERIC_ACKNOWLEDGEMENT.test(claim)) return true;
   const claimNormal = normalise(claim);
@@ -189,9 +250,10 @@ export function findOmittedSourceQualifications(input: {
         const sentenceEndFound = subsection.indexOf(".", modalStart);
         const sentenceEnd = sentenceEndFound < 0 ? subsection.length : sentenceEndFound + 1;
         const restrictionSentence = subsection.slice(sentenceStart, sentenceEnd);
+        const sentences = claimSentences(claim.text);
         const scope = sentencesForCitation(claim.text, citation);
         const missing = arms.filter((arm) => {
-          const stated = scope.every((sentence) => acknowledgesArm(sentence, arm));
+          const stated = scope.every((sentence) => qualificationStated(sentence, sentences, arm, citation, sentence));
           if (arm.kind !== "other than") return !stated;
           const armPhrase = `${arm.kind} ${arm.text}`.toLowerCase();
           const armPosition = subsection.toLowerCase().indexOf(armPhrase);

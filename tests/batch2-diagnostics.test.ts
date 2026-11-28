@@ -459,27 +459,27 @@ test("removed mentions, wrapped names, abbreviations and quotes stay on main's r
   const cases: Array<[string, string]> = [
     [
       "Bottom line:\nThe House may sit [SO 1]. See also Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1]. See also [citation not verified].",
+      "Bottom line:\nThe House may sit [SO 1]. See also a provision [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. See Standing Order 99 and Standing Order 100.",
-      "Bottom line:\nThe House may sit [SO 1]. See [citation not verified] and [citation not verified].",
+      "Bottom line:\nThe House may sit [SO 1]. See a provision [citation not verified] and a provision [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1].\nSee Standing\nOrder 99.",
-      "Bottom line:\nThe House may sit [SO 1].\nSee [citation not verified].",
+      "Bottom line:\nThe House may sit [SO 1].\nSee a provision [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. Read no. Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1]. Read no. [citation not verified].",
+      "Bottom line:\nThe House may sit [SO 1]. Read no. a provision [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1] cf. Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1] cf. [citation not verified].",
+      "Bottom line:\nThe House may sit [SO 1] cf. a provision [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. \"Standing Order 99 applies.\"",
-      "Bottom line:\nThe House may sit [SO 1]. \"[citation not verified] applies.\"",
+      "Bottom line:\nThe House may sit [SO 1]. \"a provision [citation not verified] applies.\"",
     ],
   ];
   for (const [input, expected] of cases) {
@@ -496,18 +496,18 @@ test("main's so 7 mention and edition years stay on main's rewrite", () => {
     answerText: "Bottom line:\nSeven members, so 7 of them, may sit [SO 1].",
     authorities: admitted,
   });
-  assert.equal(so7.rewrittenText, "Bottom line:\nSeven members, [citation not verified] of them, may sit [SO 1].");
+  assert.equal(so7.rewrittenText, "Bottom line:\nSeven members, a provision [citation not verified] of them, may sit [SO 1].");
   assert.equal(attachClaimQualifications(so7.rewrittenText, {}), so7.rewrittenText);
   const title = rewriteForbiddenAuthorityMentions({
     answerText: "The title is Standing Orders 2023 [SO 1].",
     authorities: admitted,
   });
-  assert.equal(title.rewrittenText, "The title is [citation not verified] [SO 1].");
+  assert.equal(title.rewrittenText, "The title is a provision [citation not verified] [SO 1].");
   const afterYear = rewriteForbiddenAuthorityMentions({
     answerText: "Standing Orders 2026 39 applies [SO 1].",
     authorities: admitted,
   });
-  assert.equal(afterYear.rewrittenText, "[citation not verified] 39 applies [SO 1].");
+  assert.equal(afterYear.rewrittenText, "a provision [citation not verified] 39 applies [SO 1].");
   const kept = rewriteForbiddenAuthorityMentions({
     answerText: "Give 7 days' notice [SO 1].",
     authorities: admitted,
@@ -1099,7 +1099,7 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   // OO-DEF-125: this line is exact. Adding the bare hedge to every placeholder line fails it.
   assert.equal(
     text.split("\n").find((line) => line.includes("[citation not verified]")),
-    "[citation not verified] was mentioned beside the sitting [SO 1].",
+    "a provision [citation not verified] was mentioned beside the sitting [SO 1].",
   );
   assert.equal(text.includes("[SO 5]"), false);
   assert.equal(text.includes("SO 5"), false);

@@ -2055,7 +2055,7 @@ export function rewriteForbiddenAuthorityMentions(input: {
     else {
       const before = rewritten.slice(-1);
       const after = input.answerText[span.end] ?? "";
-      let insert = "[citation not verified]";
+      let insert = "a provision [citation not verified]";
       if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
       if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
       rewritten += insert;
