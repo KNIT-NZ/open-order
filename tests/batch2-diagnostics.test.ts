@@ -1294,6 +1294,47 @@ test("a suffix that survives the mention check withholds the answer", async () =
   assert.match(String(done.answerText), /\[citation not verified\]/);
 });
 
+test("an exception stated only in the next sentence is withheld and the rest of the answer stays", async () => {
+  const section = "(1) A member must not interrupt another member who is speaking unless the Speaker has given leave.";
+  const rows = [
+    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. That said, the Speaker may give leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Unless the Speaker has given leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Except where the Speaker gives leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The exception is where the Speaker gives leave for an interruption [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. That rule does not apply where the Speaker has given leave for an interruption [SO 80].",
+    "However, the Speaker may give leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption [SO 80].",
+    "However, the Speaker may give leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave for an interruption [SO 80].",
+    "The exception is where the Speaker gives leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
+  ];
+  assert.equal(rows.length, 12);
+  for (const row of rows) {
+    const done = await probe("named_admitted_source", {
+      labels: ["SO 1", "SO 80"],
+      bodies: { "SO 1": QUOTE, "SO 80": section },
+      support: true,
+      draft: [
+        "Bottom line:",
+        "The House may suspend the sitting [SO 1].",
+        "",
+        "What this means:",
+        row,
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    const text = String(done.answerText);
+    assert.equal(done.answerState, "partial", row);
+    assert.equal(text.includes(row), false, row);
+    assert.match(text, /The House may suspend the sitting \[SO 1\]/, row);
+    assert.notEqual(done.fallbackCode, "prune_emptied_draft", row);
+    assert.notEqual(done.answerState, "not_answered", row);
+  }
+});
+
 test("OO-DEF-141 a letter pin of an excepted rule is not served as supported", async () => {
   const sectionContent = [
     "A member must not disclose evidence taken in private—",

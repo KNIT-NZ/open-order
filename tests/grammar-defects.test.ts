@@ -670,7 +670,8 @@ test("G2 a qualification named in another sentence does not cover the cited sent
   assert.equal(servedDrops, 0);
   assert.equal(servedFaithful, faithful.length);
   assert.equal(nextSentence.length, 12);
-  assert.equal(servedNext, nextSentence.length);
+  // An exception stated only in an adjacent sentence is withheld. The claim is not served.
+  assert.equal(servedNext, 0);
   assert.equal(lookalikes.length, 20);
   assert.equal(servedLookalikes, 0);
 });

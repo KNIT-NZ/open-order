@@ -124,86 +124,6 @@ function sentencesForCitation(claim: string, citation: string): string[] {
   return scope.length > 0 ? scope : sentences;
 }
 
-function carriesCitation(sentence: string, citation: string): boolean {
-  const needle = citation.trim();
-  return needle.length > 0 && (sentence.includes(needle) || sentence.includes(`[${needle}]`));
-}
-
-function armActor(arm: string): string | null {
-  const match = arm.match(/\b(speaker|clerk|chairperson|committee|house|member)\b/i);
-  return match ? match[1].toLowerCase() : null;
-}
-
-function armCondition(arm: string): string | null {
-  const match = arm.match(/\b(leave|permission|permits|permit|authorises|authorised|authorizes|authorized|consents|consent|approval)\b/i);
-  return match ? match[1].toLowerCase().replace(/(?:s|ed|ing|ion)$/i, "") : null;
-}
-
-function differentAct(sentence: string, claim: string, arm: string): boolean {
-  const claimNorm = normalise(claim);
-  const armNorm = normalise(arm);
-  const verbs = [...normalise(sentence).matchAll(/\b(?:may|must|shall|can)\s+(\w+)/g)].map((match) => match[1] ?? "");
-  return verbs.some((verb) => {
-    if (!verb || /^(give|grant|permit|authorise|authorize)$/.test(verb)) return false;
-    if (armNorm.includes(verb) || claimNorm.includes(verb)) return false;
-    return true;
-  });
-}
-
-function permissionNegated(sentence: string): boolean {
-  return /\b(?:may not|shall not|must not|cannot|can't|can not|is not permitted|are not permitted|is not allowed|are not allowed|without(?:\s+the)?\s+leave)\b/i.test(sentence);
-}
-
-function actorIsPositive(sentence: string, actor: string): boolean {
-  if (!sentence.toLowerCase().includes(actor)) return false;
-  const denied = new RegExp(String.raw`\b(?:not|other than|rather than|except|without|neither|nor)\s+(?:the\s+)?${actor}\b`, "i");
-  return !denied.test(sentence);
-}
-
-function ruleActStem(ruleSentence: string): string {
-  const match = ruleSentence.match(/\b(?:must|shall|may|cannot|can't)\s+(?:not\s+)?(\w+)/i);
-  const verb = (match?.[1] ?? "").toLowerCase();
-  if (!verb || /^(?:not|be|have|do|give|grant)$/.test(verb)) return "";
-  return verb.replace(/(?:ing|ion|e)$/i, "");
-}
-
-function governsSameAct(neighbor: string, ruleSentence: string): boolean {
-  const stem = ruleActStem(ruleSentence);
-  if (stem.length < 4) return false;
-  return neighbor.toLowerCase().includes(stem);
-}
-
-function broaderThanSource(sentence: string): boolean {
-  return /\b(?:at any time|at all times|always|whenever|in any case|any member may|any person may|never required|no longer required|leave is not required)\b/i.test(sentence);
-}
-
-/**
- * An adjacent sentence states the source exception only when every guard holds.
- * A However lead-in, a negated permission, or a different act is not enough.
- */
-function isAdjacentException(neighbor: string, arm: { kind: string; text: string }, citation: string, claimSentence: string): boolean {
-  const armText = `${arm.kind} ${arm.text}`;
-  if (!carriesCitation(neighbor, citation)) return false;
-  if (permissionNegated(neighbor)) return false;
-  if (broaderThanSource(neighbor)) return false;
-  if (/\b(?:elsewhere|different matter|many things|other matters|unrelated|something else)\b/i.test(neighbor)) return false;
-  const actor = armActor(armText);
-  const condition = armCondition(armText);
-  if (!actor || !condition) return false;
-  if (!actorIsPositive(neighbor, actor)) return false;
-  if (!neighbor.toLowerCase().includes(condition)) return false;
-  if (!governsSameAct(neighbor, claimSentence)) return false;
-  if (differentAct(neighbor, claimSentence, armText)) return false;
-  return true;
-}
-
-function qualificationStated(sentence: string, sentences: string[], arm: { kind: string; text: string }, citation: string, claim: string): boolean {
-  if (acknowledgesArm(sentence, arm)) return true;
-  const index = sentences.indexOf(sentence);
-  const neighbors = [sentences[index - 1], sentences[index + 1]].filter((item): item is string => Boolean(item));
-  return neighbors.some((neighbor) => isAdjacentException(neighbor, arm, citation, sentence));
-}
-
 function acknowledgesArm(claim: string, arm: {kind: string; text: string}): boolean {
   if (GENERIC_ACKNOWLEDGEMENT.test(claim)) return true;
   const claimNormal = normalise(claim);
@@ -269,10 +189,9 @@ export function findOmittedSourceQualifications(input: {
         const sentenceEndFound = subsection.indexOf(".", modalStart);
         const sentenceEnd = sentenceEndFound < 0 ? subsection.length : sentenceEndFound + 1;
         const restrictionSentence = subsection.slice(sentenceStart, sentenceEnd);
-        const sentences = claimSentences(claim.text);
         const scope = sentencesForCitation(claim.text, citation);
         const missing = arms.filter((arm) => {
-          const stated = scope.every((sentence) => qualificationStated(sentence, sentences, arm, citation, sentence));
+          const stated = scope.every((sentence) => acknowledgesArm(sentence, arm));
           if (arm.kind !== "other than") return !stated;
           const armPhrase = `${arm.kind} ${arm.text}`.toLowerCase();
           const armPosition = subsection.toLowerCase().indexOf(armPhrase);
