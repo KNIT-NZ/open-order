@@ -2259,35 +2259,56 @@ function lineCitesLabel(line: string, label: string): boolean {
   return citationTokensInBrackets(line).some((token) => citationTokenMatchesLabel(token, label));
 }
 
-const BLANKET_HEDGE = /(?:\[[^\]]+\]\s*)?has not been confirmed to (?:govern the specific act asked about|be the body the question is about)\.?/gi;
-
-function labelKey(label: string): string {
+function authorityKey(label: string): string {
+  const standing = label.trim().match(/^(?:standing orders?|s\.?\s*o\.?|so)\s*(\d+[a-z]*)/i);
+  if (standing) return `so ${standing[1].toLowerCase()}`;
   return label.trim().toLowerCase();
+}
+
+/** Bracket citations and prose names such as "Standing Order 5". */
+function authoritiesNamedIn(line: string): string[] {
+  const found = new Set<string>();
+  for (const token of citationTokensInBrackets(line)) {
+    const key = authorityKey(token);
+    if (key) found.add(key);
+  }
+  const prose = line.replace(/\[[^\]]*\]/g, " ");
+  for (const match of prose.matchAll(/\bstanding orders?\s+(\d+[a-z]*)/gi)) found.add(`so ${match[1].toLowerCase()}`);
+  for (const match of prose.matchAll(/\bso\s+(\d+[a-z]*)/gi)) found.add(`so ${match[1].toLowerCase()}`);
+  return [...found];
+}
+
+type ClaimQualificationState = "grounded" | "grounded-with-qualification" | "ungrounded";
+
+function claimQualificationState(line: string, grounded: Set<string>, qualified: Set<string>): ClaimQualificationState {
+  const named = authoritiesNamedIn(line);
+  if (named.some((name) => !grounded.has(name))) return "ungrounded";
+  if (named.some((name) => qualified.has(name))) return "grounded-with-qualification";
+  return "grounded";
 }
 
 /** Put a real uncertainty on the claim it qualifies. Do not brand a settled provision. */
 export function attachClaimQualifications(answerText: string, input: {
   actLabels?: string[];
   forumLabels?: string[];
-  /** Admitted labels whose citation is grounded. Omit to keep the previous add-only behaviour. */
+  /** Admitted labels. Omit to keep main's add-only behaviour. */
   groundedLabels?: string[];
-  /** Provisions that are genuinely discretionary or conditional. Their qualification stays. */
-  discretionaryLabels?: string[];
 }): string {
   const actLabels = [...new Set((input.actLabels ?? []).map((label) => label.trim()).filter(Boolean))];
   const forumLabels = [...new Set((input.forumLabels ?? []).map((label) => label.trim()).filter(Boolean))];
+  if (actLabels.length === 0 && forumLabels.length === 0 && input.groundedLabels === undefined) return answerText;
+  if (answerText == null || answerText === "") {
+    if (actLabels.length === 0 && forumLabels.length === 0) return answerText ?? "";
+    // Main throws on answerText.includes when the text is null. Empty text must not become a hedge-only answer.
+    if (answerText == null) throw new TypeError("Cannot read properties of null (reading 'includes')");
+    throw new TypeError("Cannot read properties of an empty answer (reading 'includes')");
+  }
   const grounded = input.groundedLabels === undefined
     ? null
-    : new Set(input.groundedLabels.map(labelKey).filter(Boolean));
-  const discretionary = new Set((input.discretionaryLabels ?? []).map(labelKey).filter(Boolean));
-  const needsHedge = (label: string) => {
-    const key = labelKey(label);
-    if (discretionary.has(key)) return true;
-    if (grounded === null) return true;
-    return !grounded.has(key);
-  };
+    : new Set(input.groundedLabels.map(authorityKey).filter(Boolean));
+  const qualified = new Set([...actLabels, ...forumLabels].map(authorityKey));
   const substantive = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
-  const lines = String(answerText ?? "").split("\n");
+  const lines = answerText.split("\n");
   let section: string | null = null;
   const claimIndexes: number[] = [];
   lines.forEach((line, index) => {
@@ -2298,17 +2319,10 @@ export function attachClaimQualifications(answerText: string, input: {
     }
     if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
   });
-  if (grounded !== null) {
-    for (const index of claimIndexes) {
-      const tokens = citationTokensInBrackets(lines[index] ?? "");
-      const ungrounded = tokens.some((token) => !grounded.has(labelKey(token)));
-      const keepsQualification = tokens.some((token) => discretionary.has(labelKey(token)));
-      if (ungrounded || keepsQualification) continue;
-      lines[index] = lines[index].replace(BLANKET_HEDGE, " ").replace(/[ \t]{2,}/g, " ").trimEnd();
-    }
-  }
+  const stateOf = (index: number): ClaimQualificationState =>
+    grounded === null ? "ungrounded" : claimQualificationState(lines[index] ?? "", grounded, qualified);
   const citing = (label: string): number[] =>
-    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
+    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label) && stateOf(index) !== "grounded");
   const append = (indexes: number[], sentence: string) => {
     for (const index of indexes) {
       if (lines[index].includes(sentence)) continue;
@@ -2317,14 +2331,51 @@ export function attachClaimQualifications(answerText: string, input: {
   };
   const qualificationSection: string[] = [];
   const consider = (label: string, sentence: string) => {
-    if (!needsHedge(label)) return;
     const hits = citing(label);
     if (hits.length > 0) append(hits, sentence);
-    else if (!lines.join("\n").includes(sentence)) qualificationSection.push(sentence);
+    else if (!answerText.includes(sentence) && !lines.join("\n").includes(sentence)) qualificationSection.push(sentence);
   };
   for (const label of actLabels) consider(label, `[${label}] ${ACT_QUALIFICATION}`);
   for (const label of forumLabels) consider(label, `[${label}] ${FORUM_QUALIFICATION}`);
+  if (grounded !== null) {
+    for (const index of claimIndexes) {
+      if (stateOf(index) !== "ungrounded") continue;
+      for (const name of authoritiesNamedIn(lines[index] ?? "")) {
+        if (grounded.has(name) || qualified.has(name)) continue;
+        const sentence = `[${name.startsWith("so ") ? `SO ${name.slice(3).toUpperCase()}` : name}] ${ACT_QUALIFICATION}`;
+        if (!lines[index].includes(sentence)) lines[index] = `${lines[index]} ${sentence}`;
+      }
+    }
+  }
   if (qualificationSection.length > 0) lines.push("", "Qualification:", ...qualificationSection);
+  return lines.join("\n");
+}
+
+/** Prose names that a later mention rewrite would remove, with the line tail that survives. */
+export function ungroundedProseHedges(answerText: string, groundedLabels: string[]): Array<{ marker: string; sentence: string }> {
+  const grounded = new Set(groundedLabels.map(authorityKey));
+  const anchors: Array<{ marker: string; sentence: string }> = [];
+  for (const line of String(answerText ?? "").split("\n")) {
+    for (const match of line.matchAll(/\bstanding orders?\s+(\d+[a-z]*)/gi)) {
+      const key = `so ${match[1].toLowerCase()}`;
+      if (grounded.has(key)) continue;
+      const marker = line.slice((match.index ?? 0) + match[0].length).trim();
+      const sentence = `[SO ${match[1].toUpperCase()}] ${ACT_QUALIFICATION}`;
+      if (marker && !anchors.some((item) => item.sentence === sentence && item.marker === marker)) {
+        anchors.push({ marker, sentence });
+      }
+    }
+  }
+  return anchors;
+}
+
+export function applyProseHedges(answerText: string, anchors: Array<{ marker: string; sentence: string }>): string {
+  if (anchors.length === 0) return answerText;
+  const lines = answerText.split("\n");
+  for (const anchor of anchors) {
+    const index = lines.findIndex((line) => line.includes(anchor.marker) && !line.includes(anchor.sentence));
+    if (index >= 0) lines[index] = `${lines[index]} ${anchor.sentence}`;
+  }
   return lines.join("\n");
 }
 

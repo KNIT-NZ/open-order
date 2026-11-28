@@ -429,12 +429,15 @@ test("an uncited uncertain source is named in the qualification section", () => 
   assert.match(attached, /Qualification:\n\[SO 2\] has not been confirmed to govern the specific act asked about/);
 });
 
-test("a fully grounded answer has no blanket hedge", () => {
-  const attached = attachClaimQualifications([
+test("a fully grounded answer is not given a blanket hedge", () => {
+  const text = [
     "Bottom line:",
-    "The House may sit [SO 1]. [SO 1] has not been confirmed to govern the specific act asked about.",
-  ].join("\n"), { actLabels: ["SO 1"], groundedLabels: ["SO 1"] });
-  assert.equal(attached.includes("has not been confirmed"), false);
+    "The House may sit [SO 1].",
+  ].join("\n");
+  const attached = attachClaimQualifications(text, { actLabels: ["SO 2"], groundedLabels: ["SO 1"] });
+  const bottom = attached.split("\n").find((line) => line.includes("[SO 1]")) ?? "";
+  assert.equal(bottom, "The House may sit [SO 1].");
+  assert.equal(bottom.includes("has not been confirmed"), false);
 });
 
 test("a mixed answer hedges only the ungrounded claim", () => {
@@ -444,25 +447,44 @@ test("a mixed answer hedges only the ungrounded claim", () => {
     "",
     "What this means:",
     "A different step applies [SO 2].",
-  ].join("\n"), { actLabels: ["SO 1", "SO 2"], groundedLabels: ["SO 1"] });
-  const bottom = attached.split("\n").find((line) => line.includes("[SO 1]")) ?? "";
-  const other = attached.split("\n").find((line) => line.includes("[SO 2]")) ?? "";
-  assert.equal(bottom.includes("has not been confirmed"), false);
+  ].join("\n"), { actLabels: ["SO 2"], groundedLabels: ["SO 1"] });
+  const bottom = attached.split("\n").find((line) => line.includes("The House may sit")) ?? "";
+  const other = attached.split("\n").find((line) => line.includes("different step")) ?? "";
+  assert.equal(bottom, "The House may sit [SO 1].");
   assert.match(other, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
 });
 
-test("a discretionary provision keeps its qualification", () => {
-  const attached = attachClaimQualifications(
-    "Bottom line:\nThe Speaker may suspend the sitting [SO 1].",
-    { actLabels: ["SO 1"], groundedLabels: ["SO 1"], discretionaryLabels: ["SO 1"] },
-  );
+test("a qualified admission keeps its own qualification on the grounded claim", () => {
+  const text = "Bottom line:\nThe House may sit [SO 1].";
+  const attached = attachClaimQualifications(text, { actLabels: ["SO 1"], groundedLabels: ["SO 1"] });
+  assert.equal(attached.startsWith(text), true);
   assert.match(attached, /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+  const forum = attachClaimQualifications("What this means:\nThe committee considers it [SO 3].", {
+    forumLabels: ["SO 3"],
+    groundedLabels: ["SO 3"],
+  });
+  assert.match(forum, /\[SO 3\] has not been confirmed to be the body the question is about/);
+  assert.equal(forum.includes("has not been confirmed to govern"), false);
 });
 
-test("an ungrounded claim does not lose an existing hedge", () => {
-  const text = "What this means:\nThe other step applies [SO 99]. [SO 99] has not been confirmed to govern the specific act asked about.";
-  const attached = attachClaimQualifications(text, { groundedLabels: ["SO 1"] });
-  assert.match(attached, /\[SO 99\] has not been confirmed to govern the specific act asked about/);
+test("model hedge text is kept verbatim, including prose and citation wording", () => {
+  const samples = [
+    "Bottom line:\nA member may object. This has not been confirmed to govern the specific act asked about.",
+    "Bottom line:\nThe House may sit [SO 1]. Standing Order 5 has not been confirmed to govern the specific act asked about.",
+    "Bottom line:\nThe House may sit [SO 1]. THIS HAS NOT BEEN CONFIRMED TO GOVERN THE SPECIFIC ACT ASKED ABOUT, although it.",
+    "Bottom line:\nThe power to suspend the sitting [SO 1] has not been confirmed to govern the specific act asked about.",
+    "What this means:\nWhether the House may sit [SO 1] has not been confirmed to govern the specific act asked about by the Committee.",
+  ];
+  for (const text of samples) {
+    const attached = attachClaimQualifications(text, { groundedLabels: ["SO 1"] });
+    assert.equal(attached.includes(text), true, text);
+    assert.equal(attached.includes("[SO 1]"), text.includes("[SO 1]"), text);
+  }
+});
+
+test("null or empty answer text is not turned into a hedge", () => {
+  assert.throws(() => attachClaimQualifications(null as unknown as string, { actLabels: ["SO 1"] }));
+  assert.throws(() => attachClaimQualifications("", { actLabels: ["SO 1"] }));
 });
 
 test("a qualification stays on the uncertain claim and off the settled provision", () => {
@@ -602,11 +624,11 @@ function source(sectionContent = QUOTE, citationLabel = "SO 1"): ProceduralSearc
 
 async function probe(
   mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source" | "forged_suffix",
-  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean },
+  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean; bodies?: Record<string, string> },
 ) {
   const labels = options?.labels ?? [options?.citationLabel ?? "SO 1"];
   const pack = labels.map((label, index) => ({
-    ...source(options?.sectionContent, label),
+    ...source(options?.bodies?.[label] ?? options?.sectionContent, label),
     sectionId: `s${index + 1}`,
     sectionKey: `s${index + 1}`,
   }));
@@ -652,11 +674,11 @@ async function probe(
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
       const value = options?.admit
         ? {
-          selected: [{
-            citationLabel: options?.citationLabel ?? "SO 1", role: "governing", exactQuote: QUOTE,
+          selected: pack.map((item) => ({
+            citationLabel: item.citationLabel, role: "governing", exactQuote: item.sectionContent,
             actorMatches: true, settingMatches: true, actionMatches: true, stageMatches: true,
             rationale: "governs the sitting",
-          }],
+          })),
           remainingUncertainties: [], explanation: "quoted",
         }
         : { selected: [], remainingUncertainties: [], explanation: "none nominated" };
@@ -796,6 +818,27 @@ test("a singular standing-order name followed by ordinary words is served unchan
   assert.equal(done.answerState, "supported");
   assert.match(String(done.answerText), /Under SO 1, 40 members may demand a vote \[SO 1\]\./);
   assert.equal(((done.answerEdits as string[] | undefined) ?? []).some((item) => item.startsWith("removed_mentions")), false);
+});
+
+test("the route qualifies only the ungrounded and specially qualified claims", async () => {
+  const device = "Carrying a device is permitted when it does not disrupt the forum.";
+  const grounded = "The House may suspend the sitting [SO 1].";
+  const model = "The power to suspend the sitting [SO 1] has not been confirmed to govern the specific act asked about.";
+  const qualified = "A device rule applies [SO 2].";
+  const prose = "Standing Order 5 was mentioned beside the sitting [SO 1].";
+  const done = await probe("named_admitted_source", {
+    admit: true,
+    labels: ["SO 1", "SO 2"],
+    bodies: { "SO 1": QUOTE, "SO 2": device },
+    draft: `Bottom line:\n${grounded} ${model}\n\nWhat this means:\n${qualified}\n\nRisks or constraints:\n${prose}\n\nSettlement: supported`,
+  });
+  const text = String(done.answerText);
+  assert.ok(text.includes(`${grounded} ${model}`), text);
+  assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
+  assert.match(text, /\[SO 5\] has not been confirmed to govern the specific act asked about/);
+  assert.match(text, /a provision that was not retrieved was mentioned beside the sitting \[SO 1\]/);
+  const groundedLine = text.split("\n").find((line) => line.includes(grounded)) ?? "";
+  assert.equal(groundedLine.split("has not been confirmed to govern").length - 1, 1);
 });
 
 test("a quantity follower is served unchanged, and a bare joined number is not", async () => {

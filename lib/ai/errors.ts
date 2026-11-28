@@ -1,3 +1,5 @@
+import { isTransientHttpStatus } from "./provider-resilience";
+
 export const AI_ERROR_KINDS = [
   "configuration",
   "rate_limited",
@@ -71,7 +73,7 @@ export function normalizeAiProviderError(
   const rawMessage = error instanceof Error ? error.message :
     typeof error === "string" ? error : String(error);
   const statusCode = structuredFailureStatus(error);
-  const retryable = statusCode !== null && [429, 500, 502, 503, 504].includes(statusCode);
+  const retryable = statusCode !== null && isTransientHttpStatus(statusCode);
   const kind: AiErrorKind = statusCode === 429 ? "rate_limited" :
     statusCode === 503 ? "unavailable" : statusCode !== null ? "upstream" : "unknown";
   return new AiProviderError({

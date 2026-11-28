@@ -35,7 +35,12 @@ export const DIAGNOSTIC_KINDS = [
   "application_or_unknown",
 ] as const;
 
-export const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
+/** Shared retryable HTTP statuses. 501 is excluded. 520–529 are handled beside this set. */
+export const TRANSIENT_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+export function isTransientHttpStatus(status: number): boolean {
+  return TRANSIENT_STATUSES.has(status) || (status >= 520 && status <= 529);
+}
 export const TRANSIENT_CODES = new Set([
   "RESOURCE_EXHAUSTED",
   "UNAVAILABLE",
@@ -48,6 +53,8 @@ export const TRANSIENT_CODES = new Set([
   "SERVICE_UNAVAILABLE",
   "OVERLOADED",
   "CF_3040",
+  "CF_10429",
+  "CF_971",
 ]);
 export const NONRETRYABLE_CODES = new Set([
   "INVALID_ARGUMENT",
@@ -109,6 +116,10 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
     if (providerCode === null && typeof record.providerCode === "number" && Number.isInteger(record.providerCode)) {
       providerCode = record.providerCode;
     }
+    if (record.code === "ECONNRESET" || record.code === "ETIMEDOUT" || record.code === "EAI_AGAIN"
+      || record.message === "fetch failed") {
+      code = code ?? "ECONNRESET";
+    }
     if (httpStatus === null) {
       httpStatus = statusNumber(record.status) ?? statusNumber(record.statusCode) ??
         (isObject(record.response) ? statusNumber(record.response.status) : null) ??
@@ -143,7 +154,18 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   if (providerCode === 3040) {
     return { phase, kind: "provider_transient", httpStatus, code: "CF_3040", provider, upstreamErrorName, retryable: true };
   }
-  const typedTransient = (httpStatus !== null && TRANSIENT_STATUSES.has(httpStatus)) ||
+  // 10429 and 971 are third-party rate-limit reports, including inside HTTP 200 success:false.
+  if (providerCode === 10429 || providerCode === 971) {
+    return {
+      phase, kind: "provider_transient", httpStatus,
+      code: providerCode === 10429 ? "CF_10429" : "CF_971",
+      provider, upstreamErrorName, retryable: true,
+    };
+  }
+  if (httpStatus === 501) {
+    return { phase, kind: "provider_nonretryable", httpStatus, code, provider, upstreamErrorName, retryable: false };
+  }
+  const typedTransient = (httpStatus !== null && isTransientHttpStatus(httpStatus)) ||
     (code !== null && TRANSIENT_CODES.has(code));
   if (typedTransient) {
     return { phase, kind: "provider_transient", httpStatus, code, provider, upstreamErrorName, retryable: true };

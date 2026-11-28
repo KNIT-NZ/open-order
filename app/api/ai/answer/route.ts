@@ -31,7 +31,6 @@ import {
   labelBareRulings,
   parseSettlement,
   obligationPartialFacets,
-  dutyVersusDiscretion,
   forumIdentityOutcome,
   presidingOfficerAppealQuery,
   proceedingConsequenceQueries,
@@ -77,7 +76,9 @@ import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
+  applyProseHedges,
   attachClaimQualifications,
+  ungroundedProseHedges,
   mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
@@ -1329,6 +1330,10 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               return;
             }
 
+            const proseHedges = ungroundedProseHedges(
+              finalAnswer,
+              finalAuthorities.map((authority) => authority.citationLabel),
+            );
             if (!checkMentions(finalAnswer).ok) {
               const rewrittenDraft = rewriteDraft(finalAnswer);
               finalAnswer = rewrittenDraft.text;
@@ -1950,15 +1955,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = attachClaimQualifications(finalAnswer, {
               actLabels: [...actLabels],
               forumLabels: [...forumLabels],
-              groundedLabels: finalAuthorities
-                .map((authority) => authority.citationLabel)
-                .filter((label) => !hiddenLabel(label)),
-              discretionaryLabels: finalAuthorities
-                .filter((authority) => hiddenLabel(authority.citationLabel)
-                  && (dutyVersusDiscretion(authority.sectionContent ?? "") === "discretion"
-                    || /\b(?:if|unless|provided that)\b/i.test(authority.sectionContent ?? "")))
-                .map((authority) => authority.citationLabel),
+              groundedLabels: finalAuthorities.map((authority) => authority.citationLabel),
             });
+            finalAnswer = applyProseHedges(finalAnswer, proseHedges);
             const mentionEdit = mentionRewriteEdit(mentionRewrites);
             answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];
             if (answerEdits.length > 0) noteCheckedWithholding();

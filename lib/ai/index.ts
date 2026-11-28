@@ -73,14 +73,17 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
 };
 
 /** Prefer a diagnosed upstream failure over a later opaque failover error. */
-function preferDiagnosedError(
+/** Keep a retryable primary failure ahead of a later non-retryable configuration error. */
+export function preferDiagnosedError(
   existing: AiProviderError | null,
   incoming: AiProviderError,
 ): AiProviderError {
   if (!existing) return incoming;
+  if (existing.retryable && !incoming.retryable) return existing;
+  if (incoming.retryable && !existing.retryable) return incoming;
   const quality = (error: AiProviderError) =>
     error.statusCode !== null ? 3 : error.kind !== "unknown" ? 2 : 0;
-  return quality(incoming) >= quality(existing) ? incoming : existing;
+  return quality(incoming) > quality(existing) ? incoming : existing;
 }
 
 function noProviderConfigured(task: AiTask): AiProviderError {
@@ -115,6 +118,9 @@ export async function generateJson<T>(
     try {
       return await provider.generateJson<T>(request);
     } catch (error) {
+      if (request.signal?.aborted || (error instanceof DOMException && error.name === "AbortError" && request.signal?.aborted)) {
+        throw error;
+      }
       lastError = preferDiagnosedError(lastError, normalizeAiProviderError(error, providerId));
     }
   }
@@ -165,6 +171,7 @@ export async function streamText(
           : undefined,
       });
     } catch (error) {
+      if (request.signal?.aborted) throw error;
       const normalized = normalizeAiProviderError(error, providerId);
 
       if (emittedText) {

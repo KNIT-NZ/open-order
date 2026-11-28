@@ -3,13 +3,13 @@ import test from "node:test";
 import { AiProviderError } from "../lib/ai/errors";
 import {
   CLOUDFLARE_FREE_TIER_MODEL,
-  CLOUDFLARE_MAX_TOKENS,
   generateJson,
   isCloudflareConfigured,
   resetCloudflareQuotaForTests,
   setCloudflareClockForTests,
   streamText,
 } from "../lib/ai/cloudflare";
+import { preferDiagnosedError } from "../lib/ai";
 import { classifyAiError, runClaimValidationWithRetry } from "../lib/ai/provider-resilience";
 import { getAiCandidates } from "../lib/ai/routes";
 
@@ -51,7 +51,9 @@ test("cloudflare stays off unless both credentials are present", () => {
     assert.equal(isCloudflareConfigured(), false);
     process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
     assert.equal(isCloudflareConfigured(), true);
-    assert.deepEqual(getAiCandidates("answer.generate"), ["gemini", "cloudflare"]);
+    assert.deepEqual(getAiCandidates("answer.generate"), ["gemini"]);
+    process.env.OPEN_ORDER_ALLOW_NON_GEMINI = "1";
+    assert.deepEqual(getAiCandidates("answer.generate"), ["gemini", "cloudflare", "openai-compatible"]);
   } finally {
     if (previous.token === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
     else process.env.CLOUDFLARE_API_TOKEN = previous.token;
@@ -126,8 +128,7 @@ test("cloudflare model, quota, and response-shape failures stay classified", asy
   const fetchImpl = async (_url: string, init?: RequestInit) => {
     calls += 1;
     const body = JSON.parse(String(init?.body));
-    assert.equal(typeof body.max_tokens, "number");
-    assert.equal(body.max_tokens, CLOUDFLARE_MAX_TOKENS);
+    assert.equal(body.max_completion_tokens, 1500);
     assert.equal(body.temperature, 0);
     assert.equal(body.model, "@cf/google/gemma-4-26b-a4b-it");
     return jsonResponse(410, { success: false, errors: [{ code: 5028, message: secret }] });
@@ -207,7 +208,7 @@ test("cloudflare model, quota, and response-shape failures stay classified", asy
     }, async (_url, init) => {
       const body = JSON.parse(String(init?.body));
       assert.equal(body.temperature, 0.2);
-      assert.equal(typeof body.max_tokens, "number");
+      assert.equal(body.max_completion_tokens, 3000);
       return jsonResponse(200, { result: { response: "{\"bottomLine\":\"From legacy\"}" } });
     });
     assert.equal(legacy.bottomLine, "From legacy");
@@ -230,5 +231,104 @@ test("cloudflare model, quota, and response-shape failures stay classified", asy
     resetCloudflareQuotaForTests();
     delete process.env.CLOUDFLARE_API_TOKEN;
     delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_AI_MODEL;
+  }
+});
+
+test("recognised Cloudflare codes are read from either error shape", async () => {
+  process.env.CLOUDFLARE_API_TOKEN = "token";
+  process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
+  const secret = "SECRET_PROVIDER_BODY do not keep this";
+  const cases = [
+    { code: 3036, status: 429, kind: "unavailable", retryable: false },
+    { code: 5028, status: 410, kind: "configuration", retryable: false },
+    { code: 3042, status: 404, kind: "configuration", retryable: false },
+    { code: 5007, status: 400, kind: "configuration", retryable: false },
+    { code: 10429, status: 200, kind: "rate_limited", retryable: true },
+  ];
+  try {
+    for (const item of cases) {
+      for (const shape of ["errors", "openai"] as const) {
+        resetCloudflareQuotaForTests();
+        const body = shape === "errors"
+          ? { success: false, errors: [{ code: String(item.code), message: secret }, { code: 1, message: secret }] }
+          : { success: false, error: { code: item.code, type: String(item.code), message: secret } };
+        const error = await generateJson({
+          task: "answer.validate",
+          systemInstruction: "JSON.",
+          prompt: "check",
+          temperature: 0,
+        }, async () => jsonResponse(item.status, body)).catch((caught: unknown) => caught);
+        assert.ok(error instanceof AiProviderError, `${item.code} ${shape}`);
+        assert.equal(error.kind, item.kind, `${item.code} ${shape}`);
+        assert.equal(error.retryable, item.retryable, `${item.code} ${shape}`);
+        assert.equal(error.providerCode, item.code, `${item.code} ${shape}`);
+        assert.equal(`${error.message} ${error.rawMessage ?? ""}`.includes(secret), false);
+        if (item.code === 3036) {
+          let calls = 0;
+          await generateJson({
+            task: "answer.generate", systemInstruction: "A", prompt: "B",
+          }, async () => { calls += 1; return jsonResponse(200, { choices: [{ message: { content: "{\"a\":1}" } }] }); }).catch(() => undefined);
+          assert.equal(calls, 0);
+          assert.equal(classifyAiError(error, "claim_validation").retryable, false);
+        }
+      }
+    }
+    const truncated = await generateJson({
+      task: "answer.validate", systemInstruction: "JSON.", prompt: "check", temperature: 0,
+    }, async () => jsonResponse(200, {
+      choices: [{ finish_reason: "length", message: { content: secret } }],
+    })).catch((error: unknown) => error);
+    assert.ok(truncated instanceof AiProviderError);
+    assert.equal(truncated.kind, "parse");
+    assert.equal(`${truncated.message} ${truncated.rawMessage ?? ""}`.includes(secret), false);
+    const transport = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => { throw Object.assign(new Error("fetch failed"), { code: "ECONNRESET" }); }).catch((error: unknown) => error);
+    assert.equal(classifyAiError(transport, "drafting").retryable, true);
+    const stopped = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => jsonResponse(501, { errors: [{ code: 1, message: secret }] })).catch((error: unknown) => error);
+    assert.ok(stopped instanceof AiProviderError);
+    assert.equal(stopped.retryable, false);
+    const edge = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => jsonResponse(520, { errors: [{ message: secret }] })).catch((error: unknown) => error);
+    assert.ok(edge instanceof AiProviderError);
+    assert.equal(edge.retryable, true);
+    assert.equal(`${edge.message} ${edge.rawMessage ?? ""}`.includes(secret), false);
+    let startedBeforeFetch = false;
+    let fetched = false;
+    await streamText({
+      task: "answer.generate",
+      systemInstruction: "A",
+      prompt: "B",
+      onProviderAttemptStart: () => { startedBeforeFetch = !fetched; },
+    }, async (_url, init) => {
+      fetched = true;
+      const body = JSON.parse(String(init?.body));
+      assert.ok(init?.signal);
+      assert.equal(body.max_completion_tokens, 3000);
+      return jsonResponse(200, { choices: [{ finish_reason: "stop", message: { content: "Yes" } }] });
+    });
+    assert.equal(startedBeforeFetch, true);
+    process.env.CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+    const rejected = await generateJson({
+      task: "answer.generate", systemInstruction: "A", prompt: "B",
+    }, async () => jsonResponse(200, { choices: [{ message: { content: "no" } }] })).catch((error: unknown) => error);
+    assert.ok(rejected instanceof AiProviderError);
+    assert.equal(rejected.kind, "configuration");
+    const primary = new AiProviderError({
+      message: "limited", kind: "rate_limited", statusCode: 429, retryable: true, provider: "gemini",
+    });
+    const kept = preferDiagnosedError(primary, rejected);
+    assert.equal(kept.provider, "gemini");
+    assert.equal(kept.kind, "rate_limited");
+    assert.equal(kept.retryable, true);
+  } finally {
+    resetCloudflareQuotaForTests();
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_AI_MODEL;
   }
 });
