@@ -182,6 +182,29 @@ test("a joined number after one name is a provision unless a quantity word follo
     "SO 1, 5 o'clock",
     "SO 1 and 2 motions",
     "SO 1, 3 amendments",
+    "SO 1, 1 hour",
+    "SO 1, 1 day",
+    "SO 1, 1 minute",
+    "SO 1, 1 vote",
+    "SO 1, 1 week",
+    "SO 1, 1 year",
+    "SO 1, 1 second",
+    "SO 1, 1 time",
+    "SO 1, 1 member",
+    "SO 1, 1 MP",
+    "SO 1, 1 person",
+    "SO 1, 1 question",
+    "SO 1 and 1 Bill",
+    "SO 1, 1 motion",
+    "SO 1, 1 amendment",
+    "SO 1, 1 reading",
+    "SO 1, 2 readings",
+    "SO 1, 12 noon",
+    "SO 1, 1 speaker",
+    "SO 1, 2 speakers",
+    "SO 1, 1 party",
+    "SO 1, 2 parties",
+    "SO 1, 1 month",
   ]) {
     const kept = rewriteForbiddenAuthorityMentions({ answerText: text, authorities: admitted });
     assert.equal(kept.removedMentions.length, 0, text);
@@ -194,6 +217,12 @@ test("a joined number after one name is a provision unless a quantity word follo
   });
   assert.equal(flagged.rewrittenText.includes("99"), false);
   assert.notEqual(flagged.rewrittenText, speaker);
+  // "speaker" is a follower, but the article keeps "the Speaker" a real joined number.
+  const article = rewriteForbiddenAuthorityMentions({
+    answerText: "SO 1 and 99 the Speaker",
+    authorities: admitted,
+  });
+  assert.equal(article.rewrittenText.includes("99"), false);
   for (const possessive of ["SO 1 and 99 Members' bills", "SO 1 and 99 days' notice"]) {
     const keptNumber = rewriteForbiddenAuthorityMentions({ answerText: possessive, authorities: admitted });
     assert.equal(keptNumber.rewrittenText.includes("99"), false, possessive);
@@ -208,6 +237,23 @@ test("a joined number after one name is a provision unless a quantity word follo
     authorities: admitted,
   });
   assert.equal(possessiveBracket.ok, false);
+});
+
+test("an appendix note inside a standing-order bracket is not grounded", () => {
+  const admitted = [{ citationLabel: "SO 1" }];
+  for (const form of [
+    "[SO 1 (Appendix B note)]",
+    "[SO 1 with Appendix B note]",
+    "[SO 1: see Appendix B note]",
+    "[SO 1 cf. Appendix C note]",
+    "[SO 1 Appendix A note]",
+  ]) {
+    const checked = validateAnswerCitations({
+      answerText: `The House sits ${form}.`,
+      authorities: admitted,
+    });
+    assert.equal(checked.ok, false, form);
+  }
 });
 
 test("an over-long standing-order number is consumed whole", () => {
@@ -517,7 +563,7 @@ function source(sectionContent = QUOTE, citationLabel = "SO 1"): ProceduralSearc
 
 async function probe(
   mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source" | "forged_suffix",
-  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[] },
+  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean },
 ) {
   const labels = options?.labels ?? [options?.citationLabel ?? "SO 1"];
   const pack = labels.map((label, index) => ({
@@ -581,7 +627,7 @@ async function probe(
     }
     const found = [...request.prompt.matchAll(/^(claim-\d+)\nClaim: (.+)$/gm)];
     const value = {
-      claims: found.map((match) => ({ id: match[1], supported: true, reason: "checked" })),
+      claims: found.map((match) => ({ id: match[1], supported: options?.support !== false, reason: "checked" })),
       responsiveness: { answersUserQuestion: true, reason: "fits", unaddressedParts: [] as string[] },
     };
     request.validate?.(value);
@@ -750,6 +796,32 @@ test("a bracket that names an unadmitted label is not a supported citation", asy
   assert.equal(done.fallbackCode, "prune_emptied_draft");
   const listed = (done.authorities as Array<{ citationLabel?: string }>).map((item) => item.citationLabel);
   assert.equal(listed.includes("SO 99"), false);
+});
+
+test("an appendix note inside a standing-order bracket is withheld", async () => {
+  for (const form of [
+    "[SO 1 (Appendix B note)]",
+    "[SO 1 with Appendix B note]",
+    "[SO 1: see Appendix B note]",
+    "[SO 1 cf. Appendix C note]",
+    "[SO 1 Appendix A note]",
+  ]) {
+    const done = await probe("named_admitted_source", {
+      draft: `Bottom line:\nThe House sits ${form}.\n\nSettlement: supported`,
+    });
+    assert.equal(done.answerState, "not_answered", form);
+    assert.notEqual(done.answerState, "supported", form);
+    assert.equal(String(done.answerText).includes("Appendix"), false, form);
+  }
+});
+
+test("a claim-check rejection after a rewrite still records the removed mention", async () => {
+  const done = await probe("named_admitted_source", {
+    support: false,
+    draft: `Bottom line:\nStanding Order 39 lets the House sit [SO 1].\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+  });
+  assert.equal(done.answerState, "not_answered");
+  assert.ok((done.answerEdits as string[]).includes("removed_mentions=1"));
 });
 
 test("a forged cross-reference suffix does not come back as supported", async () => {

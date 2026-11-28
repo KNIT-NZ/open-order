@@ -1869,10 +1869,6 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedFo
     const lead = part.match(/^(.*?)(?=\d)/);
     prefix = lead?.[1] ?? prefix;
   }
-  // One number and no fraction cannot hide a second provision. The full detector stays
-  // for every other bracket, where a list, a ruling, or a second name can.
-  const numbers = cited.match(/\d+/g);
-  if ((numbers?.length ?? 0) <= 1 && !cited.includes("/")) return true;
   return mentionSpans(cited, allowedForms).every((span) => span.admitted && !span.suffix);
 }
 
@@ -1898,7 +1894,7 @@ const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
 // A joined number is a provision unless a curated follower comes next. Any other word stays a provision.
 // A word followed by an apostrophe is not a follower: "Members' bills" still names 99.
-const FOLLOWER = String.raw`(?:per${WS1}cent|calendar${WS1}days|working${WS1}days|sitting${WS1}days|members?|mps?|people|persons|questions?|bills?|motions|amendments|votes|times|percent|days|hours|hrs|hr|minutes|mins|min|seconds|secs|weeks|months|years|am|pm|o'clock)`;
+const FOLLOWER = String.raw`(?:per${WS1}cent|calendar${WS1}days?|working${WS1}days?|sitting${WS1}days?|members?|mps?|people|persons?|questions?|bills?|motions?|amendments?|readings?|speakers?|parties|party|votes?|times?|percent|days?|hours?|hrs?|minutes?|mins?|seconds?|secs|weeks?|months?|years?|noon|am|pm|o'clock)`;
 const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1})?${FOLLOWER}(?!['’])`;
 const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.)|${WS}%)`;
 const QUANTITY_CONTINUATION = new RegExp(String.raw`^\d{1,6}[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?${WS1}(?:or${WS1}(?:more|fewer|less)${WS1})?(?:${FOLLOWER}(?!['’])\b|a\.m\.|p\.m\.|%)$`, "i");

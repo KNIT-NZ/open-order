@@ -1880,6 +1880,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               ]);
               outcomeState.fallbackCode = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
               outcomeState.abstained = true;
+              const rejectionEdit = mentionRewriteEdit(mentionRewrites);
+              if (rejectionEdit) answerEdits = [rejectionEdit];
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
                 : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
