@@ -1,5 +1,9 @@
 {
   "files": {
+    "grammar/v1.3/GRAMMAR-v1.3.md": "ebf53142b9ffc68274233a5f4a0045bf6a02f785c9ea614eeb7864658098ba35",
+    "grammar/v1.3/HARNESS.md": "43b7562806428b41184daa9610d178ed376696646bd327ac9e89af976e9a98c4",
+    "grammar/v1.3/MUTATION-TESTS.md": "aeca0e2b06c45b1c7d4e337905a2a5f1ac8b82d382392170678f93612417f38c",
+    "grammar/v1.3/golden-corpus-v1.3.jsonl": "a76639986d8ac690ac3e1f0544670f94d079d2d5bb0743fb0515c33b97d6205c",
     "corpus-matrix-v1.1.json": "ac56e065d7fbc19b21df625a41e30c3149804a2816ad9a4395c7a795a5ec2e53",
     "corpus-matrix-v1.2.json": "b179d695ff005279318c0a888ac9bbae32da435095db1b3ca66bc86e4ba24519",
     "corpus-referents-v2.9.json": "f9326a7113183e99c878b7334d96a36d3889d889e860cf14432dbc422f242ee0",
