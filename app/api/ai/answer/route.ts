@@ -408,10 +408,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       let citationList = (_answerText: string): Array<{ citationLabel?: string; unconfirmed?: boolean }> => [];
       const run = async () => {
         const started = startedAt;
+        const budgetDeadlineAt = started + ANSWER_STREAM_DEADLINE_MS;
         const callJson = <T,>(request: { task: AiTask; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
           generate<T>({
             ...request,
             signal: activeSignal,
+            budgetDeadlineAt,
             onProviderRetry: noteRetry,
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
             onProviderAttemptStart: beginAttempt,
@@ -420,6 +422,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           streamAnswer({
             ...request,
             signal: activeSignal,
+            budgetDeadlineAt,
             onProviderRetry: noteRetry,
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
             onProviderAttemptStart: beginAttempt,

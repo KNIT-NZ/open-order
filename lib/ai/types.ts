@@ -29,6 +29,8 @@ export type AiGenerateJsonRequest = {
   onProviderAttempt?: (attempt: ProviderAttempt) => void;
   onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
+  /** Absolute time when the answer request must stop. Cloudflare caps its own timer to this. */
+  budgetDeadlineAt?: number;
   validate?: (value: unknown) => void;
 };
 
@@ -42,4 +44,6 @@ export type AiStreamTextRequest = {
   onProviderAttempt?: (attempt: ProviderAttempt) => void;
   onProviderAttemptStart?: (model: string) => void;
   signal?: AbortSignal;
+  /** Absolute time when the answer request must stop. Cloudflare caps its own timer to this. */
+  budgetDeadlineAt?: number;
 };

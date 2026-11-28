@@ -302,7 +302,7 @@ function shapeError(): AiProviderError {
   });
 }
 
-/** Gemma thinking is on unless this is exactly "0". */
+/** Thinking stays off unless CLOUDFLARE_DISABLE_THINKING is exactly "0". */
 export function cloudflareThinkingDisabled(): boolean {
   return process.env.CLOUDFLARE_DISABLE_THINKING?.trim() !== "0";
 }
@@ -329,6 +329,16 @@ export function cloudflareRequestTimeoutMs(task: string, drafting = false): numb
     : readTimeoutMs(process.env.CLOUDFLARE_JSON_TIMEOUT_MS, CLOUDFLARE_JSON_TIMEOUT_MS);
 }
 
+const REQUEST_BUDGET_MARGIN_MS = 1_000;
+
+/** The armed timer is the task timeout, or the time left before the 270s request deadline. */
+export function cloudflareArmedTimeoutMs(task: string, drafting = false, now = Date.now(), budgetDeadlineAt?: number): number {
+  const taskTimeout = cloudflareRequestTimeoutMs(task, drafting);
+  if (budgetDeadlineAt === undefined || !Number.isFinite(budgetDeadlineAt)) return taskTimeout;
+  const remaining = Math.trunc(budgetDeadlineAt - now - REQUEST_BUDGET_MARGIN_MS);
+  return Math.min(taskTimeout, Math.max(0, remaining));
+}
+
 function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextRequest["task"], systemInstruction: string, prompt: string, temperature: number | undefined, drafting: boolean, model: string): string {
   const cap = draftTask(task, drafting)
     ? CLOUDFLARE_ANSWER_MAX_TOKENS
@@ -345,9 +355,8 @@ function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextReques
     // Gemini's own default is 0.2. A validator call passes 0 and must stay at 0.
     temperature: temperature ?? 0.2,
     ...limit,
-    // Workers AI chat completions accept this on the same body as AI.run.
-    // Gemma's schema defaults enable_thinking to true.
-    ...(cloudflareThinkingDisabled()
+    // Only Gemma documents enable_thinking. Other allow-listed models omit the field.
+    ...(model === CLOUDFLARE_FREE_TIER_MODEL && cloudflareThinkingDisabled()
       ? { chat_template_kwargs: { enable_thinking: false } }
       : {}),
   });
@@ -359,7 +368,7 @@ function providerTimeoutError(): AiProviderError {
     kind: "unavailable",
     retryable: true,
     provider: PROVIDER_ID,
-    statusCode: 408,
+    statusCode: null,
     rawMessage: "cloudflare_timeout",
     cause: { code: "DEADLINE_EXCEEDED" },
   });
@@ -442,11 +451,12 @@ async function complete(
   onStart: (() => void) | undefined,
   drafting: boolean,
   model: string,
+  budgetDeadlineAt?: number,
 ): Promise<Exclude<Content, { kind: "missing" }>> {
   if (cloudflareQuotaSkipped()) throw cloudflareQuotaSkipError();
   if (callerSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), cloudflareRequestTimeoutMs(task, drafting));
+  const timer = setTimeout(() => timeout.abort(), cloudflareArmedTimeoutMs(task, drafting, Date.now(), budgetDeadlineAt));
   const signal = callerSignal ? AbortSignal.any([callerSignal, timeout.signal]) : timeout.signal;
   try {
     onStart?.();
@@ -525,7 +535,7 @@ export async function generateJson<T>(request: AiGenerateJsonRequest, fetchImpl:
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(model), false, model,
+      () => request.onProviderAttemptStart?.(model), false, model, request.budgetDeadlineAt,
     );
     const parsed = (content.kind === "object" ? content.value : parseJsonText(content.text)) as T;
     request.validate?.(parsed);
@@ -556,7 +566,7 @@ export async function streamText(request: AiStreamTextRequest, fetchImpl: FetchL
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(model), true, model,
+      () => request.onProviderAttemptStart?.(model), true, model, request.budgetDeadlineAt,
     );
     const text = content.kind === "text" ? content.text : JSON.stringify(content.value);
     request.onChunk?.(text);

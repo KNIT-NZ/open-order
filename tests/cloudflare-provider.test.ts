@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { AiProviderError } from "../lib/ai/errors";
 import {
   CLOUDFLARE_FREE_TIER_MODEL,
+  cloudflareArmedTimeoutMs,
   cloudflareRequestTimeoutMs,
   cloudflareThinkingDisabled,
   generateJson,
@@ -361,6 +362,7 @@ test("recognised Cloudflare codes are read from either error shape", async () =>
       const body = JSON.parse(String(init?.body));
       assert.equal(body.max_tokens, 1500);
       assert.equal(body.max_completion_tokens, undefined);
+      assert.equal(body.chat_template_kwargs, undefined);
       return jsonResponse(200, { choices: [{ message: { content: "{\"ok\":true}" } }] });
     });
     const warnings: string[] = [];
@@ -392,8 +394,11 @@ test("recognised Cloudflare codes are read from either error shape", async () =>
     })).catch((error: unknown) => error);
     assert.ok(stalled instanceof AiProviderError);
     assert.equal(stalled.message.includes("answer deadline elapsed"), false);
+    assert.equal(stalled.retryable, true);
+    assert.equal(stalled.statusCode, null);
     assert.equal(classifyAiError(stalled, "drafting").kind, "provider_transient");
     assert.equal(classifyAiError(stalled, "drafting").code, "DEADLINE_EXCEEDED");
+    assert.equal(classifyAiError(stalled, "drafting").httpStatus, null);
     assert.equal(classifyAiError(stalled, "drafting").provider, "cloudflare");
   } finally {
     resetCloudflareQuotaForTests();
@@ -538,8 +543,11 @@ test("cloudflare disables Gemma thinking, splits timeouts, and classifies its ow
     assert.ok(timedOut instanceof AiProviderError);
     assert.equal(timedOut.message.includes("answer deadline elapsed"), false);
     const diagnostic = classifyAiError(timedOut, "drafting");
+    assert.equal(timedOut.retryable, true);
+    assert.equal(timedOut.statusCode, null);
     assert.equal(diagnostic.kind, "provider_transient");
     assert.equal(diagnostic.code, "DEADLINE_EXCEEDED");
+    assert.equal(diagnostic.httpStatus, null);
     assert.equal(diagnostic.provider, "cloudflare");
     assert.equal(outcome, "timeout");
     assert.equal(`${timedOut.message} ${timedOut.rawMessage ?? ""}`.includes("SECRET"), false);
@@ -552,6 +560,80 @@ test("cloudflare disables Gemma thinking, splits timeouts, and classifies its ow
     restore("CLOUDFLARE_DISABLE_THINKING", saved.thinking);
     restore("CLOUDFLARE_DRAFT_TIMEOUT_MS", saved.draft);
     restore("CLOUDFLARE_JSON_TIMEOUT_MS", saved.json);
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  }
+});
+
+test("cloudflare arms the env timer, clears it, and caps a late call", async () => {
+  process.env.CLOUDFLARE_API_TOKEN = "token";
+  process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
+  delete process.env.CLOUDFLARE_DISABLE_THINKING;
+  process.env.CLOUDFLARE_JSON_TIMEOUT_MS = "18000";
+  process.env.CLOUDFLARE_DRAFT_TIMEOUT_MS = "22000";
+  mock.timers.enable({ apis: ["setTimeout"] });
+  const delays: number[] = [];
+  const pending = new Set<unknown>();
+  const mockedSet = globalThis.setTimeout;
+  const mockedClear = globalThis.clearTimeout;
+  globalThis.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+    delays.push(Number(ms ?? 0));
+    const handle = mockedSet(fn, ms as number, ...(args as []));
+    pending.add(handle);
+    return handle;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = ((handle: ReturnType<typeof setTimeout>) => {
+    pending.delete(handle);
+    return mockedClear(handle);
+  }) as typeof clearTimeout;
+  const ok = () => jsonResponse(200, { choices: [{ message: { content: "{\"ok\":true}" } }] });
+  try {
+    await generateJson({ task: "answer.validate", systemInstruction: "A", prompt: "B", temperature: 0 }, async () => ok());
+    assert.equal(delays.at(-1), 18_000);
+    assert.equal(pending.size, 0);
+    await streamText({ task: "answer.generate", systemInstruction: "A", prompt: "B" }, async () => ok());
+    assert.equal(delays.at(-1), 22_000);
+    assert.equal(pending.size, 0);
+
+    process.env.CLOUDFLARE_AI_MODEL = "@cf/openai/gpt-oss-120b";
+    await generateJson({ task: "answer.generate", systemInstruction: "A", prompt: "B" }, async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.chat_template_kwargs, undefined);
+      assert.equal(body.max_tokens, 2000);
+      return ok();
+    });
+    delete process.env.CLOUDFLARE_AI_MODEL;
+
+    assert.equal(cloudflareArmedTimeoutMs("answer.repair", true, 1_000, 3_000), 1_000);
+    assert.equal(cloudflareArmedTimeoutMs("answer.repair", true, 1_000, 100_000), 22_000);
+    const deadline = Date.now() + 2_000;
+    const late = streamText({
+      task: "answer.repair",
+      systemInstruction: "A",
+      prompt: "B",
+      budgetDeadlineAt: deadline,
+    }, async () => new Response(new ReadableStream({ start() { /* stalled */ } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })).catch((error: unknown) => error);
+    const armed = delays.at(-1) ?? -1;
+    assert.ok(armed > 0 && armed <= 1_000);
+    mock.timers.tick(1_000);
+    const error = await late;
+    assert.ok(error instanceof AiProviderError);
+    assert.equal(error.retryable, true);
+    assert.equal(error.statusCode, null);
+    assert.equal(error.message.includes("answer deadline elapsed"), false);
+    const diagnostic = classifyAiError(error, "drafting");
+    assert.equal(diagnostic.kind, "provider_transient");
+    assert.equal(diagnostic.code, "DEADLINE_EXCEEDED");
+    assert.equal(diagnostic.httpStatus, null);
+    assert.equal(pending.size, 0);
+  } finally {
+    mock.timers.reset();
+    delete process.env.CLOUDFLARE_JSON_TIMEOUT_MS;
+    delete process.env.CLOUDFLARE_DRAFT_TIMEOUT_MS;
+    delete process.env.CLOUDFLARE_AI_MODEL;
     delete process.env.CLOUDFLARE_API_TOKEN;
     delete process.env.CLOUDFLARE_ACCOUNT_ID;
   }
