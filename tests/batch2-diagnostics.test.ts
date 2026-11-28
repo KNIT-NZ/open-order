@@ -879,7 +879,11 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   const text = String(done.answerText);
   assert.ok(text.includes(`${grounded} ${model}`), text);
   assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
-  assert.match(text, /a provision that was not retrieved was mentioned beside the sitting \[SO 1\]/);
+  // OO-DEF-125: this line is exact. Adding the bare hedge to every placeholder line fails it.
+  assert.equal(
+    text.split("\n").find((line) => line.includes("a provision that was not retrieved")),
+    "a provision that was not retrieved was mentioned beside the sitting [SO 1].",
+  );
   assert.equal(text.includes("[SO 5]"), false);
   assert.equal(text.includes("SO 5"), false);
   const groundedLine = text.split("\n").find((line) => line.includes(grounded)) ?? "";
