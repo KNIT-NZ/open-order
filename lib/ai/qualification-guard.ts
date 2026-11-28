@@ -97,6 +97,33 @@ function exceptionArms(subsection: string): Array<{kind: string; text: string}> 
   }
   return result;
 }
+function claimSentences(text: string): string[] {
+  const sentences: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of text) {
+    if (char === "[") depth += 1;
+    if (char === "]" && depth > 0) depth -= 1;
+    current += char;
+    if (depth === 0 && /[.!?]/.test(char)) {
+      if (current.trim()) sentences.push(current.trim());
+      current = "";
+    }
+  }
+  if (current.trim()) sentences.push(current.trim());
+  return sentences.length > 0 ? sentences : [text.trim()];
+}
+
+/** Sentences that carry this citation, plus categorical sentences it governs. */
+function sentencesForCitation(claim: string, citation: string): string[] {
+  const sentences = claimSentences(claim);
+  const needle = citation.trim();
+  const carries = sentences.filter((sentence) => sentence.includes(needle) || sentence.includes(`[${needle}]`));
+  const governed = sentences.filter((sentence) => !/\[[^\]]+\]/.test(sentence) && CATEGORICAL.test(sentence));
+  const scope = [...carries, ...governed.filter((sentence) => !carries.includes(sentence))];
+  return scope.length > 0 ? scope : sentences;
+}
+
 function acknowledgesArm(claim: string, arm: {kind: string; text: string}): boolean {
   if (GENERIC_ACKNOWLEDGEMENT.test(claim)) return true;
   const claimNormal = normalise(claim);
@@ -127,7 +154,11 @@ export function findOmittedSourceQualifications(input: {
     for (const citation of claim.citations) {
       // Section qualifiers cite the same selected parent authority, but a
       // reference alone must never manufacture another available source.
-      const parent = sourceLabel(citation);
+      if (citation.trim().toLowerCase() === "citation not verified") continue;
+      const labels = joinedCitationLabels(citation);
+      let vetoed = false;
+      for (const label of labels) {
+      const parent = sourceLabel(label);
       const authority = authorityMap.get(normalise(parent));
       if (!authority?.sectionContent) {
         // An unmapped citation is a veto. Skipping it let a comma edition and a
@@ -137,6 +168,7 @@ export function findOmittedSourceQualifications(input: {
           citationLabel: citation.trim(),
           reason: "Pinpoint could not be mapped to an admitted source",
         });
+        vetoed = true;
         break;
       }
       for (const subsection of numberedSubsections(authority.sectionContent)) {
@@ -157,14 +189,16 @@ export function findOmittedSourceQualifications(input: {
         const sentenceEndFound = subsection.indexOf(".", modalStart);
         const sentenceEnd = sentenceEndFound < 0 ? subsection.length : sentenceEndFound + 1;
         const restrictionSentence = subsection.slice(sentenceStart, sentenceEnd);
+        const scope = sentencesForCitation(claim.text, citation);
         const missing = arms.filter((arm) => {
-          if (arm.kind !== "other than") return !acknowledgesArm(claim.text, arm);
+          const stated = scope.every((sentence) => acknowledgesArm(sentence, arm));
+          if (arm.kind !== "other than") return !stated;
           const armPhrase = `${arm.kind} ${arm.text}`.toLowerCase();
           const armPosition = subsection.toLowerCase().indexOf(armPhrase);
           // Only the exception to the very same operative sentence qualifies.
           const sameSentence = armPosition >= sentenceStart && armPosition < sentenceEnd;
           if (!sameSentence) return false;
-          return !acknowledgesArm(claim.text, arm);
+          return !stated;
         });
         if (!missing.length) continue;
         rejected.push({
@@ -172,10 +206,36 @@ export function findOmittedSourceQualifications(input: {
           citationLabel: authority.citationLabel,
           reason: `Categorical claim omits an express source qualification (${missing.map((arm) => arm.kind).join(", ")}) within the same operative subsection`,
         });
+        vetoed = true;
         break;
       }
-      if (rejected.some((item) => item.claimId === claim.id)) break;
+      if (vetoed) break;
+      }
+      if (vetoed) break;
     }
   }
   return rejected;
+}
+
+/** And/or/& joins and numeric ranges are checked label by label. Pin continuations stay one citation. */
+function joinedCitationLabels(citation: string): string[] {
+  const flat = citation.trim().replace(/\s+/g, " ").replace(/--|[‐‑‒–—−]/g, "-");
+  if (/\([^)]+\)\s*(?:and|or|&)\s*\(/i.test(flat)) return [flat];
+  const range = /^(?:standing orders?|s\.?\s*o\.?s?|so)\s*(\d+)\s*(?:to|through|-)\s*(\d+)$/i.exec(flat);
+  if (range) {
+    const from = Number(range[1]);
+    const to = Number(range[2]);
+    if (to >= from && to - from <= 100) {
+      return Array.from({ length: to - from + 1 }, (_, index) => `SO ${from + index}`);
+    }
+  }
+  const parts = flat.split(/\s*(?:&|\band\b|\bor\b)\s*/i).map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) return [flat];
+  let prefix = "";
+  return parts.map((part) => {
+    if (/^\d+[a-z]*$/i.test(part) && prefix) return `${prefix}${part}`.replace(/\s+/g, " ");
+    const lead = part.match(/^(.*?)(?=\d)/);
+    if (lead && /so|standing|appendix|sr|s\.?\s*[or]/i.test(lead[1])) prefix = lead[1];
+    return part;
+  });
 }

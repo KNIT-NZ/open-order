@@ -26,15 +26,17 @@ function withoutCurrentEdition(citation: string): string {
   const ruling = /\d+\s*\/\s*\d+/.test(flat) && !/\b(?:so|standing orders?|appendix)\b/i.test(flat);
   const year = ruling ? "2023" : "2026";
   return flat
-    .replace(new RegExp(String.raw`,?\s*\(\s*${year}\s+edition\s*\)`, "ig"), "")
-    .replace(new RegExp(String.raw`,\s*${year}\s+edition\b`, "ig"), "")
+    .replace(new RegExp(String.raw`,?\s*\(\s*${year}\s+(?:edition|edn|revision)\s*\)`, "ig"), "")
+    .replace(new RegExp(String.raw`,\s*${year}\s+(?:edition|edn|revision)\b`, "ig"), "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 /** Parent authority for a citation. Letter-only, two-letter and deeper pins map back to that parent. */
 export function sourceLabel(citation: string): string {
-  const trimmed = withoutCurrentEdition(citation);
+  const trimmed = withoutCurrentEdition(citation).replace(/--|[‐‑‒–—−]/g, "-");
+  const repeated = /^(?:standing orders?|s\.?\s*o\.?|so)\s*(\d+)(?:\([^)]+\))*\s*-\s*(?:standing orders?|s\.?\s*o\.?|so)\s*\1\b/i.exec(trimmed);
+  if (repeated) return `SO ${repeated[1]}`;
   const normalized = trimmed.replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
   const one = `${SOURCE_PIN}(?:\\s*(?:-|–|—|to|through)\\s*${SOURCE_PIN})?`;
   const tail = `(?:\\s*${one}(?:\\s*(?:,|and|or)\\s*${one})*)?`;

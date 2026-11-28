@@ -1301,11 +1301,30 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const downgradeNumberRanges = (answerText: string, invalid: string[]): string | null => {
               if (invalid.length === 0 || !invalid.every((item) => isNumberRangeBracket(item))) return null;
               const wanted = new Set(invalid.map((item) => flatRange(item)));
-              let next = answerText.replace(/(\S)?\[([^\[\]]+)\]/g, (match, prev: string | undefined, inner: string) => {
-                if (!wanted.has(flatRange(inner))) return match;
-                const glued = Boolean(prev && /[A-Za-z0-9]/.test(prev));
-                return `${prev ?? ""}${glued ? " " : ""}a provision that was not retrieved`;
-              });
+              let next = "";
+              for (let index = 0; index < answerText.length; index += 1) {
+                if (answerText[index] !== "[") {
+                  next += answerText[index];
+                  continue;
+                }
+                const close = answerText.indexOf("]", index);
+                if (close < 0) {
+                  next += answerText.slice(index);
+                  break;
+                }
+                const inner = answerText.slice(index + 1, close);
+                if (!wanted.has(flatRange(inner))) {
+                  next += answerText.slice(index, close + 1);
+                  index = close;
+                  continue;
+                }
+                const before = next.slice(-1);
+                const after = answerText[close + 1] ?? "";
+                if (before && /[A-Za-z0-9\]]/.test(before)) next += " ";
+                next += "[citation not verified]";
+                if (after && !/[\s.,;:!?]/.test(after)) next += " ";
+                index = close;
+              }
               next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?])/g, "$1");
               next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
               if (!next.trim() || !citeCheck(next).ok) return null;
@@ -1314,7 +1333,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
             if (!citationValidation.ok) {
               const onlyRanges = citationValidation.invalidCitations.every((item) => isNumberRangeBracket(item));
-              const kept = onlyRanges && checkMentions(finalAnswer).ok
+              const kept = onlyRanges
                 ? downgradeNumberRanges(finalAnswer, citationValidation.invalidCitations)
                 : null;
               if (kept) {

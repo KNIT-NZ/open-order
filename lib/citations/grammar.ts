@@ -358,7 +358,7 @@ function isStructuredGroup(body: string): boolean {
 }
 
 function isUnreadablePinGroup(body: string): boolean {
-  if (/^\((?:1[8-9]\d{2}|20\d{2})\s+edition\)$/i.test(body)) return false;
+  if (/^\((?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)$/i.test(body)) return false;
   if (body.startsWith("(") && (isValidPinGroup(body) || /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body) || isStructuredGroup(body))) return false;
   return body.length > 2;
 }
@@ -508,11 +508,17 @@ function joinerAt(text: string, index: number): { end: number; text: string } | 
 }
 
 function readEditionPhrase(text: string, index: number): { year: number; end: number } | null {
-  const wrapped = /^\s*\((1[8-9]\d{2}|20\d{2})\s+edition\)/i.exec(text.slice(index));
+  const wrapped = /^\s*\((1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)/i.exec(text.slice(index));
   if (wrapped) return { year: Number(wrapped[1]), end: index + wrapped[0].length };
-  const comma = /^\s*,\s*(1[8-9]\d{2}|20\d{2})\s+edition\b/i.exec(text.slice(index));
+  const comma = /^\s*,\s*(1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\b/i.exec(text.slice(index));
   if (comma) return { year: Number(comma[1]), end: index + comma[0].length };
   return null;
+}
+
+function readSameLabelPinRange(text: string, index: number, soNumber: string): { pin: string; end: number } | null {
+  const match = new RegExp(String.raw`^\s*(?:-|to|through)\s*(?:standing\s+orders?|s\.?\s*o\.?|so)\s*${soNumber}(\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\))`, "i").exec(text.slice(index));
+  if (!match) return null;
+  return { pin: match[1], end: index + match[0].length };
 }
 
 function readPinRange(text: string, index: number): { pin: string; end: number } | null {
@@ -539,7 +545,14 @@ function siblingTokens(nodes: Set<string>, parent: string): string[] {
 }
 
 function romanSeries(tokens: string[]): boolean {
-  return tokens.some((token) => token.length > 1 && romanValue(token) !== null);
+  if (tokens[0] !== "i") return false;
+  let previous = 0;
+  for (const token of tokens) {
+    const value = romanValue(token);
+    if (value === null || value !== previous + 1) return false;
+    previous = value;
+  }
+  return previous > 0;
 }
 
 function pinsInOrder(start: string, end: string, roman: boolean): boolean {
@@ -587,6 +600,7 @@ const RANGE_DASH = "--|[‐‑‒–—−-]";
 export function isNumberRangeBracket(text: string): boolean {
   const flat = text.replace(new RegExp(RANGE_DASH, "g"), "-").replace(/\s+/g, " ");
   if (/\([^)]+\)\s*(?:-|to|through)\s*\(/i.test(flat)) return true;
+  if (/\bso\s*\d+[a-z]*\([^)]+\)\s*(?:-|to|through)\s*so\s*\d+/i.test(flat)) return true;
   return /\d+[A-Za-z]*(?:\s*\/\s*\d+)?\s*(?:-|to|through)\s*\d+/i.test(flat);
 }
 
@@ -686,7 +700,10 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       break;
     }
     const continued = items[items.length - 1];
-    const pinRange = continued?.pins ? readPinRange(text, cursor) : null;
+    const soNumber = /SO\s+(\d+)/i.exec(continued?.cpk ?? "")?.[1] ?? "";
+    const pinRange = continued?.pins
+      ? (readPinRange(text, cursor) ?? (soNumber ? readSameLabelPinRange(text, cursor, soNumber) : null))
+      : null;
     if (pinRange && continued?.cpk) {
       const parent = continued.cpk.replace(/\([^()]*\)$/, "");
       continued.pinRange = true;
@@ -1671,9 +1688,12 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment): {
       next = `${next.slice(0, edit.start)}${stripped}${next.slice(edit.end)}`;
       continue;
     }
-    const jammed = edit.start > 0 && !/\s/.test(next[edit.start - 1] ?? "") && /[(\uFF08]/.test(next[edit.start] ?? "");
-    const gap = jammed ? " " : "";
-    next = `${next.slice(0, edit.start)}${gap}a provision that was not retrieved${next.slice(edit.end)}`;
+    const before = next[edit.start - 1] ?? "";
+    const after = next[edit.end] ?? "";
+    let insert = "[citation not verified]";
+    if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
+    if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
+    next = `${next.slice(0, edit.start)}${insert}${next.slice(edit.end)}`;
     removed += 1;
   }
   return { text: next, removed };

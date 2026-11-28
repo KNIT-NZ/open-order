@@ -1696,8 +1696,8 @@ export function normalizeAnswerCitationLabels(input: {
       if (parts.length === 0) return match;
 
       const withoutEdition = inner
-        .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+edition\)/i, "")
-        .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+edition\b/i, "")
+        .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)/i, "")
+        .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\b/i, "")
         .trim();
       if (withoutEdition !== inner.trim() && citationParentLabel(withoutEdition, allowedLabels)) return match;
 
@@ -1841,10 +1841,11 @@ function citationCandidates(prefix: string, part: string): string[] {
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
+  if (cited.trim().toLowerCase() === "citation not verified") return true;
   const normalized = cited
     .replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ")
-    .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+edition\)/i, "")
-    .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+edition\b/i, "")
+    .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)/i, "")
+    .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\b/i, "")
     .replace(/\s+/g, " ")
     .trim();
   const parts = citationParts(normalized);
@@ -2050,7 +2051,15 @@ export function rewriteForbiddenAuthorityMentions(input: {
   let rewritten = "";
   for (const span of spans) {
     rewritten += input.answerText.slice(cursor, span.start);
-    rewritten += span.admitted ? span.mention : "a provision that was not retrieved";
+    if (span.admitted) rewritten += span.mention;
+    else {
+      const before = rewritten.slice(-1);
+      const after = input.answerText[span.end] ?? "";
+      let insert = "[citation not verified]";
+      if (before && /[A-Za-z0-9\]]/.test(before)) insert = ` ${insert}`;
+      if (after && !/[\s.,;:!?\])]/.test(after)) insert = `${insert} `;
+      rewritten += insert;
+    }
     removed.push(span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
     cursor = span.end;
   }

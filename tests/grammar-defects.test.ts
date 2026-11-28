@@ -22,7 +22,7 @@ import {
 
 const ACT = "has not been confirmed to govern the specific act asked about.";
 const FORUM = "has not been confirmed to be the body the question is about.";
-const PLACEHOLDER = "a provision that was not retrieved";
+const PLACEHOLDER = "[citation not verified]";
 
 function authorities(labels: string[], content = new Map<string, string>()) {
   return labels.map((citationLabel) => ({ citationLabel, sectionContent: content.get(citationLabel) }));
@@ -106,8 +106,8 @@ test("OO-DEF-129 list and range fuzz loses no citation main kept", () => {
     for (const match of main.rewrittenText.matchAll(/\[([^\[\]]+)\]/g)) {
       if (!head.text.includes(`[${match[1]}]`)) lost += 1;
     }
-    if (/[A-Za-z]a provision that was not retrieved/.test(head.text)) glued += 1;
-    if (/not retrieved[A-Za-z0-9\]]/.test(head.text)) glued += 1;
+    if (/[A-Za-z0-9\]]\[citation not verified\]/.test(head.text)) glued += 1;
+    if (/\[citation not verified\][A-Za-z0-9\[]/.test(head.text)) glued += 1;
   }
   console.log(JSON.stringify({ listRangeFuzz: 5000, lostCitations: lost, gluedPlaceholders: glued }));
   assert.equal(lost, 0);
@@ -355,11 +355,11 @@ test("OO-DEF-142 an appendix pinpoint keeps the parent authorities entry", () =>
 test("OO-DEF-143 placeholders keep the separating space", () => {
   const admitted = authorities(["SO 1"]);
   const rewrite = (input: string) => rewriteByGrammar(input, assessCitations(input, admitted, { provisionTree: {} })).text;
-  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "a provision that was not retrieved apply [SO 1].");
-  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "a provision that was not retrieved apply [SO 1].");
-  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "a provision that was not retrieved lets the House sit late.");
-  assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under a provision that was not retrieved the House may sit late [SO 1].");
-  assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and a provision that was not retrieved apply [SO 1].");
+  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "[citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "[citation not verified] apply [SO 1].");
+  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "[citation not verified] lets the House sit late.");
+  assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under [citation not verified] the House may sit late [SO 1].");
+  assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and [citation not verified] apply [SO 1].");
   assert.equal(rewrite("Standing Order one hundred and forty-six applies [SO 1].").includes("forty-six"), false);
   assert.equal(/[A-Za-z]a provision|anda provision|SO 1a provision/.test(rewrite("SO 1 et seq. apply [SO 1].")), false);
 });
@@ -428,13 +428,13 @@ test("OO-DEF-148 a spaced parenthesis after a label is left intact", () => {
   }
   const parenthetical = "Under SO 1 (and SO 99) the House may sit [SO 1].";
   const parentheticalOut = rewriteByGrammar(parenthetical, assessCitations(parenthetical, labels)).text;
-  assert.equal(parentheticalOut, "Under SO 1 (and a provision that was not retrieved) the House may sit [SO 1].");
+  assert.equal(parentheticalOut, "Under SO 1 (and [citation not verified]) the House may sit [SO 1].");
   const attached = "The Speaker may name a member [SO 7(as amended)].";
   assert.notEqual(assessCitations(attached, labels).reasonCode, "served");
   const prose = "Under SO 7(as amended) the Speaker may name a member [SO 7].";
   const proseOut = rewriteByGrammar(prose, assessCitations(prose, labels)).text;
-  assert.equal(proseOut, "Under SO 7 a provision that was not retrieved the Speaker may name a member [SO 7].");
-  assert.equal(/[A-Za-z0-9]a provision that was not retrieved/.test(proseOut), false);
+  assert.equal(proseOut, "Under SO 7 [citation not verified] the Speaker may name a member [SO 7].");
+  assert.equal(/[A-Za-z0-9\]]\[citation not verified\]/.test(proseOut), false);
   assert.equal(proseOut.includes("SO 7 "), true);
 });
 
@@ -569,6 +569,97 @@ test("OO-DEF-153 range fuzz serves no trailing or phantom label", () => {
   assert.equal(servedBad, 0);
 });
 
+test("G2 a qualification named in another sentence does not cover the cited sentence", () => {
+  const section = "(1) A member must not interrupt another member who is speaking unless the Speaker has given leave.";
+  const admitted = [{ citationLabel: "SO 80", sectionContent: section }, { citationLabel: "SO 7", sectionContent: "The Speaker may act." }];
+  const drops = [
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker may act [SO 7].",
+    "The Speaker has given leave elsewhere. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker has given leave for a different matter.",
+    "Unless the Speaker has given leave, the House may sit. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking. The Speaker has given leave [SO 80].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80, 2026 edition].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80 (2026 edition)].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80(1)].",
+    "The Speaker may act. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Debate then continues.",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80 and SO 7].",
+    "Leave was discussed earlier. A member must not interrupt another member who is speaking [SO 80].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [Standing Order 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker may act [SO 7]. A further point follows.",
+    "The Speaker has given leave [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. Unless the Speaker has given leave, something else applies.",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80(1) and (2)].",
+    "Previously the Speaker acted. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. The Speaker may act.",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [S.O. 80].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80 (2026 edn)].",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking [SO 80 (2026 revision)].",
+    "A member must sit [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
+  ];
+  let servedDrops = 0;
+  for (const text of drops) {
+    const rejected = findOmittedSourceQualifications({
+      claims: [{ id: "drop", text, citations: [...text.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]) }],
+      authorities: admitted,
+    });
+    if (rejected.length === 0) servedDrops += 1;
+  }
+  const faithful = [
+    "A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80].",
+    "A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80]. The House may then proceed.",
+    "The Speaker may act [SO 7]. A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80].",
+    "A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80, 2026 edition].",
+  ];
+  let servedFaithful = 0;
+  for (const text of faithful) {
+    const rejected = findOmittedSourceQualifications({
+      claims: [{ id: "keep", text, citations: [...text.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]) }],
+      authorities: admitted,
+    });
+    if (rejected.length === 0) servedFaithful += 1;
+  }
+  console.log(JSON.stringify({ qualificationDrops: drops.length, servedDrops, faithful: faithful.length, servedFaithful }));
+  assert.equal(drops.length, 24);
+  assert.equal(servedDrops, 0);
+  assert.equal(servedFaithful, faithful.length);
+});
+
+test("OO-DEF-164 a joined citation is kept only when every label passes", () => {
+  const restricted = "(1) A member must not interrupt another member who is speaking unless the Speaker has given leave.";
+  const plain = "The House may sit.";
+  const authoritiesForGuard = [
+    { citationLabel: "SO 80", sectionContent: restricted },
+    { citationLabel: "SO 7", sectionContent: plain },
+    { citationLabel: "SO 1", sectionContent: plain },
+    { citationLabel: "SO 2", sectionContent: plain },
+    { citationLabel: "SO 3", sectionContent: plain },
+  ];
+  const faithful = "A member must not interrupt another member who is speaking unless the Speaker has given leave [SO 80 and SO 7].";
+  const omitted = "A member must not interrupt another member who is speaking [SO 80 and SO 7].";
+  const kept = findOmittedSourceQualifications({
+    claims: [{ id: "keep", text: faithful, citations: ["SO 80 and SO 7"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.deepEqual(kept, []);
+  const cut = findOmittedSourceQualifications({
+    claims: [{ id: "cut", text: omitted, citations: ["SO 80 and SO 7"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.equal(cut.length, 1);
+  const range = findOmittedSourceQualifications({
+    claims: [{ id: "range", text: "A member must attend [SO 1 to 3].", citations: ["SO 1 to 3"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.deepEqual(range, []);
+  const bare = findOmittedSourceQualifications({
+    claims: [{ id: "bare", text: "A member must not interrupt another member who is speaking [SO 1 and 80].", citations: ["SO 1 and 80"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.equal(bare.length, 1);
+});
+
 test("OO-DEF-159 letters stay alphabetical unless the sibling list is roman", () => {
   const letters = "abcdefghijklmnopqrstuvwx".split("").map((letter) => `(${letter}) letter ${letter} duty of the member`).join("\n");
   const labels = authorities(["SO 418"], new Map([["SO 418", letters]]));
@@ -585,6 +676,14 @@ test("OO-DEF-159 letters stay alphabetical unless the sibling list is roman", ()
   }
   const romans = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].map((token) => `(${token}) roman duty ${token}`).join("\n");
   const romanLabels = authorities(["SO 418"], new Map([["SO 418", romans]]));
+  const inserted = assessCitations("The member has that duty [SO 7(c)–(i)].", [{ citationLabel: "SO 7", sectionContent: "(c) one" }], {
+    provisionTree: { "SO 7": ["SO 7", "SO 7(c)", "SO 7(i)", "SO 7(ii)"] },
+  });
+  assert.equal(inserted.reasonCode, "served");
+  const insertedBack = assessCitations("The member has that duty [SO 7(i)–(c)].", [{ citationLabel: "SO 7", sectionContent: "(c) one" }], {
+    provisionTree: { "SO 7": ["SO 7", "SO 7(c)", "SO 7(i)", "SO 7(ii)"] },
+  });
+  assert.notEqual(insertedBack.reasonCode, "served");
   assert.equal(assessCitations("The member has that duty [SO 418(v)–(ix)].", romanLabels).reasonCode, "served");
   const backward = assessCitations("The member has that duty [SO 418(ix)–(v)].", romanLabels);
   assert.notEqual(backward.reasonCode, "served");
@@ -662,7 +761,7 @@ test("OO-DEF-156 a long-form appeal keeps the pin", () => {
 
 test("OO-DEF-149 a current edition phrase is not a withhold and a superseded year is", () => {
   const labels = authorities(["SO 7"], new Map([["SO 7", "(1) first duty"]]));
-  for (const input of ["[SO 7 (2026 edition)]", "[SO 7, 2026 edition]", "[SO 7(2026 edition)]"]) {
+  for (const input of ["[SO 7 (2026 edition)]", "[SO 7, 2026 edition]", "[SO 7(2026 edition)]", "[SO 7 (2026 edn)]", "[SO 7 (2026 revision)]"]) {
     const assessed = assessCitations(`The House may sit ${input}.`, labels);
     assert.equal(assessed.reasonCode, "served", input);
     assert.equal(assessed.brackets[0]?.class, "grounded", input);

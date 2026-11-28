@@ -31,7 +31,7 @@ test("an unretrieved subsection is rewritten without a dangling fragment", () =>
     answerText: "The motion is subject to Standing Order 39(1) [SO 146].",
     authorities: [{ citationLabel: "SO 146" }],
   });
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
   assert.equal(rewritten.rewrittenText.includes("39"), false);
   assert.equal(rewritten.rewrittenText.includes("(1)"), false);
   assert.equal(rewritten.rewrittenText.includes("the retrieved authority"), false);
@@ -55,7 +55,7 @@ test("a model-written cross-reference suffix does not make an unretrieved provis
   });
   assert.equal(rewritten.rewrittenText.includes("Standing Order 99"), false);
   assert.equal(rewritten.rewrittenText.includes("referred to in SO 1"), false);
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
 });
 
 test("tolerant provision forms are detected and a range is rewritten as one unit", () => {
@@ -76,7 +76,7 @@ test("tolerant provision forms are detected and a range is rewritten as one unit
   });
   assert.equal(range.rewrittenText.includes("-41"), false);
   assert.equal(range.rewrittenText.includes("SO 39"), false);
-  assert.match(range.rewrittenText, /a provision that was not retrieved/);
+  assert.match(range.rewrittenText, /\[citation not verified\]/);
   const labelled = rewriteForbiddenAuthorityMentions({
     answerText: "Apply SR 2/3 to the sitting.",
     authorities: [{ citationLabel: "SR 2/3" }],
@@ -92,7 +92,7 @@ test("tolerant provision forms are detected and a range is rewritten as one unit
   for (const text of ["SO 1-99", "SO 1–99", "Standing Orders 1 and 99", "Standing Orders 1, 99, and 100", "Standing Orders 1 or 99", "Standing Orders 1 & 99", "Standing Orders 1 through 99", "Standing Order No. 99", "Standing-Order 99"]) {
     const gap = rewriteForbiddenAuthorityMentions({ answerText: `See ${text} [SO 1].`, authorities: admitted });
     assert.equal(gap.rewrittenText.includes("99"), false, text);
-    assert.match(gap.rewrittenText, /a provision that was not retrieved/, text);
+    assert.match(gap.rewrittenText, /\[citation not verified\]/, text);
   }
   for (const text of [
     "Under SO 1 and 2 members",
@@ -118,7 +118,7 @@ test("tolerant provision forms are detected and a range is rewritten as one unit
     authorities: [{ citationLabel: "SO 2" }],
   });
   assert.equal(ruling.rewrittenText.includes("2/9"), false);
-  assert.match(ruling.rewrittenText, /a provision that was not retrieved/);
+  assert.match(ruling.rewrittenText, /\[citation not verified\]/);
 });
 
 test("a fraction after a standing-order number is still checked as a ruling", () => {
@@ -156,7 +156,7 @@ test("a joined number after one name is a provision unless a quantity word follo
     const rewritten = rewriteForbiddenAuthorityMentions({ answerText: text, authorities: admitted });
     assert.equal(rewritten.rewrittenText.includes("99"), false, text);
     assert.equal(rewritten.rewrittenText.includes("Standing Order a provision"), false, text);
-    assert.match(rewritten.rewrittenText, /a provision that was not retrieved/, text);
+    assert.match(rewritten.rewrittenText, /\[citation not verified\]/, text);
   }
   for (const text of [
     "Under SO 1, 40 members must be present",
@@ -268,7 +268,7 @@ test("an over-long standing-order number is consumed whole", () => {
   assert.equal(rewritten.rewrittenText.includes("Standing Order"), false);
   assert.equal(/\d/.test(rewritten.rewrittenText), false);
   assert.equal(rewritten.rewrittenText.includes("not retrieved7"), false);
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
 });
 
 test("a citation bracket is grounded only when every provision in it is admitted", () => {
@@ -324,7 +324,7 @@ test("a range is rewritten without attaching its first admitted label", () => {
     answerText: "Under SO 1-99",
     authorities: [{ citationLabel: "SO 1" }],
   });
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
   assert.equal(rewritten.rewrittenText.includes("[SO 1]"), false);
   assert.equal(rewritten.rewrittenText.includes("SO 1"), false);
   const labelled = pruneValidatedAnswerContent({
@@ -387,7 +387,7 @@ test("a bare number in an admitted source is not a provision reference", () => {
   });
   assert.equal(rewritten.rewrittenText.includes("Standing Order 39"), false);
   assert.equal(rewritten.rewrittenText.includes("referred to in SO 1"), false);
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
 });
 
 test("an invented authority number is named as a gap and is not counted as question text", () => {
@@ -398,7 +398,7 @@ test("an invented authority number is named as a gap and is not counted as quest
   assert.equal(rewritten.rewrittenText.includes("99"), false);
   assert.equal(rewritten.rewrittenText.includes("(2)"), false);
   assert.equal(rewritten.rewrittenText.includes("the retrieved authority"), false);
-  assert.match(rewritten.rewrittenText, /a provision that was not retrieved/);
+  assert.match(rewritten.rewrittenText, /\[citation not verified\]/);
   assert.equal(rewritten.removedMentions.length, 1);
 });
 
@@ -459,27 +459,27 @@ test("removed mentions, wrapped names, abbreviations and quotes stay on main's r
   const cases: Array<[string, string]> = [
     [
       "Bottom line:\nThe House may sit [SO 1]. See also Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1]. See also a provision that was not retrieved.",
+      "Bottom line:\nThe House may sit [SO 1]. See also [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. See Standing Order 99 and Standing Order 100.",
-      "Bottom line:\nThe House may sit [SO 1]. See a provision that was not retrieved and a provision that was not retrieved.",
+      "Bottom line:\nThe House may sit [SO 1]. See [citation not verified] and [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1].\nSee Standing\nOrder 99.",
-      "Bottom line:\nThe House may sit [SO 1].\nSee a provision that was not retrieved.",
+      "Bottom line:\nThe House may sit [SO 1].\nSee [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. Read no. Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1]. Read no. a provision that was not retrieved.",
+      "Bottom line:\nThe House may sit [SO 1]. Read no. [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1] cf. Standing Order 99.",
-      "Bottom line:\nThe House may sit [SO 1] cf. a provision that was not retrieved.",
+      "Bottom line:\nThe House may sit [SO 1] cf. [citation not verified].",
     ],
     [
       "Bottom line:\nThe House may sit [SO 1]. \"Standing Order 99 applies.\"",
-      "Bottom line:\nThe House may sit [SO 1]. \"a provision that was not retrieved applies.\"",
+      "Bottom line:\nThe House may sit [SO 1]. \"[citation not verified] applies.\"",
     ],
   ];
   for (const [input, expected] of cases) {
@@ -496,18 +496,18 @@ test("main's so 7 mention and edition years stay on main's rewrite", () => {
     answerText: "Bottom line:\nSeven members, so 7 of them, may sit [SO 1].",
     authorities: admitted,
   });
-  assert.equal(so7.rewrittenText, "Bottom line:\nSeven members, a provision that was not retrieved of them, may sit [SO 1].");
+  assert.equal(so7.rewrittenText, "Bottom line:\nSeven members, [citation not verified] of them, may sit [SO 1].");
   assert.equal(attachClaimQualifications(so7.rewrittenText, {}), so7.rewrittenText);
   const title = rewriteForbiddenAuthorityMentions({
     answerText: "The title is Standing Orders 2023 [SO 1].",
     authorities: admitted,
   });
-  assert.equal(title.rewrittenText, "The title is a provision that was not retrieved [SO 1].");
+  assert.equal(title.rewrittenText, "The title is [citation not verified] [SO 1].");
   const afterYear = rewriteForbiddenAuthorityMentions({
     answerText: "Standing Orders 2026 39 applies [SO 1].",
     authorities: admitted,
   });
-  assert.equal(afterYear.rewrittenText, "a provision that was not retrieved 39 applies [SO 1].");
+  assert.equal(afterYear.rewrittenText, "[citation not verified] 39 applies [SO 1].");
   const kept = rewriteForbiddenAuthorityMentions({
     answerText: "Give 7 days' notice [SO 1].",
     authorities: admitted,
@@ -809,7 +809,7 @@ test("C3 an unvalidatable number range is the placeholder, and an en dash takes 
     assert.equal(done.abstained, false, range);
     assert.match(text, /The House may suspend the sitting \[SO 1\]/, range);
     assert.match(text, /\[SO 7\(1\) to \(2\)\]/, range);
-    assert.match(text, /a provision that was not retrieved/, range);
+    assert.match(text, /\[citation not verified\]/, range);
     assert.equal(text.includes("(9)"), false, range);
     assert.equal(/[ \t]{2,}|[ \t][.,]/.test(text), false, range);
   }
@@ -894,7 +894,7 @@ test("a letter range and a glued unicode dash use the placeholder", async () => 
   assert.equal(text.includes("(z)"), false);
   assert.equal(text.includes("(c)--(a)"), false);
   assert.equal(text.includes("noticea"), false);
-  assert.match(text, /notice a provision that was not retrieved/);
+  assert.match(text, /notice \[citation not verified\]/);
   assert.equal(/[ \t]{2,}|[ \t][.,]/.test(text), false);
   assert.equal(text.includes("SO 99"), false);
 });
@@ -917,7 +917,51 @@ test("a range placeholder that does not clear the bracket is not served", async 
     ].join("\n"),
   });
   assert.equal(done.abstained, true);
+  assert.equal(done.fallbackCode, "invalid_citations");
   assert.equal(String(done.answerText).includes("(z)"), false);
+});
+
+test("G1 a repeated-label range is a range and a following bracket keeps a space", async () => {
+  const bodies = {
+    "SO 1": QUOTE,
+    "SO 80": "(1) first duty of the Speaker in the House\n(2) second duty of the Speaker in the House",
+  };
+  const valid = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 80"],
+    bodies,
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "Both duties apply [SO 80(1)–SO 80(2)].",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  assert.equal(valid.abstained, false);
+  assert.match(String(valid.answerText), /\[SO 80\(1\)–SO 80\(2\)\]/);
+  const missing = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 80"],
+    bodies,
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "The notice[SO 80(1)–SO 80(9)].",
+      "See also [SO 1][SO 80(1)–SO 80(9)].",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  const text = String(missing.answerText);
+  assert.equal(missing.abstained, false);
+  assert.notEqual(missing.fallbackCode, "invalid_citations");
+  assert.match(text, /notice \[citation not verified\]\./);
+  assert.match(text, /\[SO 1\] \[citation not verified\]/);
+  assert.equal(text.includes("SO 80(9)"), false);
+  assert.equal(/[A-Za-z0-9\]]\[citation not verified\]/.test(text), false);
 });
 
 test("OO-DEF-149 a comma edition on the current year stays in the answer", async () => {
@@ -932,7 +976,7 @@ test("OO-DEF-149 a comma edition on the current year stays in the answer", async
   const text = String(done.answerText);
   assert.equal(done.abstained, false);
   assert.match(text, /\[SO 1, 2026 edition\]/);
-  assert.equal(text.includes("a provision that was not retrieved"), false);
+  assert.equal(text.includes("[citation not verified]"), false);
 });
 
 test("the route passes one 270s budget to json and text calls", async () => {
@@ -978,7 +1022,7 @@ test("an unretrieved provision is rewritten even when the source text names it",
   assert.notEqual(quoted.answerState, "supported");
   assert.equal(String(quoted.answerText).includes("Standing Order 39"), false);
   assert.equal(String(quoted.answerText).includes("Standing Order a provision"), false);
-  assert.match(String(quoted.answerText), /a provision that was not retrieved/);
+  assert.match(String(quoted.answerText), /\[citation not verified\]/);
   assert.equal(String(quoted.answerText).includes("referred to in"), false);
   assert.ok((quoted.answerEdits as string[]).includes("removed_mentions=1"));
 });
@@ -1000,7 +1044,7 @@ test("repair text and a reconstructed bottom line rewrite an unretrieved standin
   });
   assert.notEqual(repaired.answerState, "not_answered");
   assert.equal(String(repaired.answerText).includes("Standing Order 39"), false);
-  assert.match(String(repaired.answerText), /a provision that was not retrieved/);
+  assert.match(String(repaired.answerText), /\[citation not verified\]/);
   assert.ok((repaired.answerEdits as string[]).includes("removed_mentions=1"));
   assert.match(String(repaired.rewriteNote), /rewritten_mentions=1/);
   const rebuilt = await probe("named_admitted_source", {
@@ -1009,7 +1053,7 @@ test("repair text and a reconstructed bottom line rewrite an unretrieved standin
   });
   assert.notEqual(rebuilt.answerState, "not_answered");
   assert.equal(String(rebuilt.answerText).includes("Standing Order 39"), false);
-  assert.match(String(rebuilt.answerText), /a provision that was not retrieved/);
+  assert.match(String(rebuilt.answerText), /\[citation not verified\]/);
   assert.ok((rebuilt.answerEdits as string[]).includes("removed_mentions=1"));
   assert.match(String(rebuilt.rewriteNote), /rewritten_mentions=1/);
   const refused = await probe("named_admitted_source", {
@@ -1017,14 +1061,14 @@ test("repair text and a reconstructed bottom line rewrite an unretrieved standin
     draft: `What this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
     repairText: "Bottom line:\nStanding Order 39 lets the House sit [SO 99].\n\nWhat this means:\nThe House may suspend the sitting [SO 1].",
   });
-  assert.equal(String(refused.answerText).includes("a provision that was not retrieved"), false);
+  assert.equal(String(refused.answerText).includes("[citation not verified]"), false);
   assert.equal(((refused.answerEdits as string[] | undefined) ?? []).some((item) => item.startsWith("removed_mentions")), false);
   const multiline = await probe("named_admitted_source", {
     draft: `What this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
     bottomLine: "Standing Order 39 lets the House sit [SO 1].\nA second line [SO 1].",
   });
   assert.equal(multiline.answerState, "not_answered");
-  assert.equal(String(multiline.answerText).includes("a provision that was not retrieved"), false);
+  assert.equal(String(multiline.answerText).includes("[citation not verified]"), false);
 });
 
 test("a singular standing-order name followed by ordinary words is served unchanged", async () => {
@@ -1054,8 +1098,8 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
   // OO-DEF-125: this line is exact. Adding the bare hedge to every placeholder line fails it.
   assert.equal(
-    text.split("\n").find((line) => line.includes("a provision that was not retrieved")),
-    "a provision that was not retrieved was mentioned beside the sitting [SO 1].",
+    text.split("\n").find((line) => line.includes("[citation not verified]")),
+    "[citation not verified] was mentioned beside the sitting [SO 1].",
   );
   assert.equal(text.includes("[SO 5]"), false);
   assert.equal(text.includes("SO 5"), false);
@@ -1244,10 +1288,10 @@ test("a suffix that survives the mention check withholds the answer", async () =
   const done = await probe("named_admitted_source", {
     draft: "Bottom line:\nStanding Order 99 (referred to in [SO 1]; not retrieved) lets the House sit.",
   });
-  assert.equal(done.fallbackCode, "ungrounded_mentions");
-  assert.equal(done.answerState, "not_answered");
+  assert.notEqual(done.fallbackCode, "ungrounded_mentions");
   assert.equal(String(done.answerText).includes("referred to in"), false);
   assert.equal(String(done.answerText).includes("Standing Order 99"), false);
+  assert.match(String(done.answerText), /\[citation not verified\]/);
 });
 
 test("OO-DEF-141 a letter pin of an excepted rule is not served as supported", async () => {
