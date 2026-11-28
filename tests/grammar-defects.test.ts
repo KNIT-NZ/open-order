@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { sourceLabel } from "../lib/ai/claim-appeal";
+import { buildAnswerClaimValidationPrompt } from "../lib/ai/prompts";
+import { findOmittedSourceQualifications } from "../lib/ai/qualification-guard";
 import {
   applyStructuredHedge,
   assessCitations,
@@ -9,6 +12,7 @@ import {
   rewriteByGrammar,
   type GrammarAssessment,
 } from "../lib/citations/grammar";
+import { dropUnreferencedCitationEntries } from "../lib/procedural-mechanisms";
 import {
   attachClaimQualifications,
   normalizeAnswerCitationLabels,
@@ -132,8 +136,10 @@ test("OO-DEF-131 a label that is both act and forum qualified gets both sentence
   const input = "What this means:\nThe House may sit [SO 2].";
   const assessed = assessCitations(input, authorities(["SO 2"]), { provisionTree: {} });
   const hedged = applyStructuredHedge(input, assessed, { actLabels: ["SO 2"], forumLabels: ["SO 2"] });
-  assert.equal(hedged.includes(ACT), true);
-  assert.equal(hedged.includes(FORUM), true);
+  const claimLine = hedged.split("\n").find((line) => line.includes("The House may sit")) ?? "";
+  assert.equal(claimLine.includes(ACT), true);
+  assert.equal(claimLine.includes(FORUM), true);
+  assert.equal(hedged.includes("Qualification:"), false);
 });
 
 test("OO-DEF-131 qualification fuzz loses no sentence main would add", () => {
@@ -197,10 +203,24 @@ test("OO-DEF-132 trees match the pinned fixture-tree rows and do not nest contin
       if ([...want].some((node) => !built.has(node)) || [...built].some((node) => !want.has(node))) differences += 1;
     }
   }
-  console.log(JSON.stringify({ sections: pack.sections.length, nestedLetters, fixtureTrees: compared, differences }));
+  let badInserts = 0;
+  const mustHave = ["SO 80(1)(c)", "SO 80(1)(d)", "SO 344(1)(c)", "SO 344(1)(d)", "APP B cl 8(2)(d)"];
+  const mustLack = ["SO 80(1)(ba)(c)", "SO 344(1)(ba)(c)", "APP B cl 8(2)(ca)(d)"];
+  const builtKeys = new Set<string>();
+  for (const section of pack.sections) {
+    for (const node of buildProvisionTree(section.citation_label, section.content)) {
+      builtKeys.add(node);
+      const inserted = /^(.*)\(([a-z])([a-z])\)\(([a-z])\)$/.exec(node);
+      if (inserted && inserted[4].charCodeAt(0) === inserted[2].charCodeAt(0) + 1) badInserts += 1;
+    }
+  }
+  console.log(JSON.stringify({ sections: pack.sections.length, nestedLetters, badInserts, fixtureTrees: compared, differences }));
   assert.equal(nestedLetters, 0);
+  assert.equal(badInserts, 0);
   assert.equal(differences, 0);
   assert.ok(compared >= 15);
+  for (const key of mustHave) assert.equal(builtKeys.has(key), true, key);
+  for (const key of mustLack) assert.equal(builtKeys.has(key), false, key);
 });
 
 test("OO-DEF-139 residue brackets are ungrounded at citation check", () => {
@@ -270,6 +290,92 @@ test("OO-DEF-113 empty answer text throws", () => {
   const assessed = blankAssessment();
   assert.throws(() => applyStructuredHedge("", assessed, {}), TypeError);
   assert.throws(() => applyStructuredHedge(null as unknown as string, assessed, {}), TypeError);
+});
+
+test("OO-DEF-141 an unmappable letter pin still runs the omitted-exception veto", () => {
+  const sectionContent = [
+    "A member must not disclose evidence taken in private—",
+    "(a) unless the House authorises it, or",
+    "(b) to the Clerk.",
+  ].join("\n");
+  assert.equal(sourceLabel("SO 5(a)"), "SO 5");
+  assert.equal(sourceLabel("SO 5(1)(ab)"), "SO 5");
+  assert.equal(sourceLabel("SO 5(1)(a)(i)"), "SO 5");
+  const claim = "A member must not disclose evidence taken in private [SO 5(a)].";
+  const rejections = findOmittedSourceQualifications({
+    claims: [{ id: "claim-1", text: claim, citations: ["SO 5(a)"] }],
+    authorities: [{ citationLabel: "SO 5", sectionContent }],
+  });
+  assert.equal(rejections.length, 1);
+  assert.equal(rejections[0]?.claimId, "claim-1");
+  const assessed = assessCitations(`Bottom line:\n${claim}`, authorities(["SO 5"], new Map([["SO 5", sectionContent]])));
+  assert.equal(assessed.brackets[0]?.class, "grounded");
+  const prompt = buildAnswerClaimValidationPrompt({
+    claims: [{ id: "claim-1", text: claim, citations: ["SO 5(a)"] }],
+    authorities: [{
+      citationLabel: "SO 5",
+      heading: "Private evidence",
+      path: ["SO 5"],
+      sectionContent,
+    } as never],
+  });
+  assert.equal(prompt.includes("unless the House authorises it"), true);
+  assert.equal(prompt.includes(sectionContent), true);
+});
+
+test("OO-DEF-132 a letter after a two-letter insert is that letter, and the inserted nest is not a provision", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const content = new Map(pack.sections.map((section) => [section.citation_label, section.content]));
+  const so80 = content.get("SO 80") ?? "";
+  const fake = assessCitations("The House may sit [SO 80(1)(ba)(c)].", authorities(["SO 80"], content), {});
+  assert.notEqual(fake.reasonCode, "served");
+  assert.equal(fake.brackets[0]?.class, "ungrounded");
+  const real = assessCitations("The House may sit [SO 80(1)(c)].", authorities(["SO 80"], content), {});
+  assert.equal(real.brackets[0]?.class, "grounded");
+  assert.equal(real.reasonCode, "served");
+  assert.equal(buildProvisionTree("SO 80", so80).includes("SO 80(1)(c)"), true);
+  assert.equal(buildProvisionTree("SO 80", so80).includes("SO 80(1)(ba)(c)"), false);
+});
+
+test("OO-DEF-142 an appendix pinpoint keeps the parent authorities entry", () => {
+  const answer = [
+    "Bottom line:",
+    "The House may sit [Appendix D cl 1(2)].",
+    "",
+    "Best authorities to inspect or cite:",
+    "- [Appendix D cl 1]",
+  ].join("\n");
+  const kept = dropUnreferencedCitationEntries(answer);
+  assert.equal(kept.text.includes("[Appendix D cl 1]"), true);
+  assert.deepEqual(kept.dropped, []);
+});
+
+test("OO-DEF-143 placeholders keep the separating space", () => {
+  const cases = [
+    "SO 1 et seq. apply [SO 1].",
+    "SR 2/3 to 5 apply [SO 1].",
+    "SO 12 /9 lets the House sit late.",
+    "Standing Order one hundred and forty-six applies [SO 1].",
+  ];
+  for (const input of cases) {
+    const assessed = assessCitations(input, authorities(["SO 1"]), { provisionTree: {} });
+    const rewritten = rewriteByGrammar(input, assessed).text;
+    assert.equal(/[A-Za-z]a provision that was not retrieved/.test(rewritten), false, input);
+    assert.equal(/not retrieved[A-Za-z0-9\]]/.test(rewritten), false, input);
+    assert.equal(rewritten.includes("forty-six"), false, input);
+  }
+});
+
+test("OO-DEF-134 an admitted cf see or also cross-reference stays a citation", () => {
+  for (const input of ["The House may sit [SO 1 (cf. SO 2)].", "The House may sit [SO 1 (see SO 2)].", "The House may sit [SO 1 (also SO 2)]."]) {
+    const assessed = assessCitations(input, authorities(["SO 1", "SO 2"]), { provisionTree: {} });
+    assert.equal(assessed.brackets[0]?.class, "grounded", input);
+    assert.equal(assessed.reasonCode, "served", input);
+  }
+  const missing = assessCitations("The House may sit [SO 1 (cf. SO 99)].", authorities(["SO 1"]), { provisionTree: {} });
+  assert.equal(missing.brackets[0]?.class, "partial");
 });
 
 test("multi-citation prose is not worse than main", () => {

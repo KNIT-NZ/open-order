@@ -227,24 +227,26 @@ function readCardinal(text: string, index: number): { value: number; end: number
   let value = 0;
   let end = index;
   let rest = slice;
+  let body = index;
   if (hundred) {
     value = 100;
     end = index + hundred[0].length;
-    rest = text.slice(end);
-    if (rest.startsWith(" ")) { /* already included */ }
+    const gap = /^\s+/.exec(text.slice(end));
+    body = end + (gap?.[0].length ?? 0);
+    rest = text.slice(body);
   }
   const teen = /^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)\b/i.exec(rest);
   if (teen && (value === 0 || hundred)) {
-    return { value: value + TEENS[teen[1].toLowerCase()], end: end + teen[0].length };
+    return { value: value + TEENS[teen[1].toLowerCase()], end: body + teen[0].length };
   }
   const ten = /^(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[-\s](one|two|three|four|five|six|seven|eight|nine))?\b/i.exec(rest);
   if (ten) {
-    return { value: value + TENS[ten[1].toLowerCase()] + (ten[2] ? ONES[ten[2].toLowerCase()] : 0), end: end + ten[0].length };
+    return { value: value + TENS[ten[1].toLowerCase()] + (ten[2] ? ONES[ten[2].toLowerCase()] : 0), end: body + ten[0].length };
   }
   const one = /^(one|two|three|four|five|six|seven|eight|nine)\b/i.exec(rest);
   if (one && (value > 0 || !hundred)) {
     if (value === 0) return { value: ONES[one[1].toLowerCase()], end: index + one[0].length };
-    return { value: value + ONES[one[1].toLowerCase()], end: end + one[0].length };
+    return { value: value + ONES[one[1].toLowerCase()], end: body + one[0].length };
   }
   if (hundred && value === 100 && !ten && !one) return { value: 100, end };
   return null;
@@ -526,7 +528,8 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     }
     const open = /^\s*(?:et\s+seq\.?|ff\.?|and\s+following)\b/i.exec(text.slice(cursor));
     if (open) {
-      items.push(makeItem({ kind: "open_range", ref: "OPEN", open: true, textStart: cursor, textEnd: cursor + open[0].length }));
+      const lead = open[0].length - open[0].trimStart().length;
+      items.push(makeItem({ kind: "open_range", ref: "OPEN", open: true, textStart: cursor + lead, textEnd: cursor + open[0].length }));
       cursor += open[0].length;
       break;
     }
@@ -568,11 +571,12 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     }
     const continuedSlash = /^\s*\d+(?:\([^)]+\))?\/\d+/.exec(text.slice(after));
     if (continuedSlash) {
+      const lead = continuedSlash[0].length - continuedSlash[0].trimStart().length;
       items.push(makeItem({
         kind: "standing_order",
         ref: continuedSlash[0].trim(),
         slash: true,
-        textStart: after,
+        textStart: after + lead,
         textEnd: after + continuedSlash[0].length,
       }));
       cursor = after + continuedSlash[0].length;
@@ -664,11 +668,12 @@ function endOfQuantity(text: string, index: number): number {
 function readSlash(text: string, index: number): Item | null {
   const match = /^\s*(\d+)(?:\([^)]+\))?\/\d+(?:\/\d+)?/.exec(text.slice(index));
   if (!match) return null;
+  const lead = match[0].length - match[0].trimStart().length;
   return makeItem({
     kind: "standing_order",
     ref: `SO ${match[0].trim()}`,
     slash: true,
-    textStart: index,
+    textStart: index + lead,
     textEnd: index + match[0].length,
   });
 }
@@ -698,7 +703,7 @@ function readRuling(text: string, index: number, numberAt: number, inBracket: bo
     if (bare) {
       const base = makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end });
       const continuation = makeItem({
-        kind: "speakers_ruling", ref: `R ..${bare[1]}`, range: true, cpk, textStart: end, textEnd: range.end + bare[0].length,
+        kind: "speakers_ruling", ref: `R ..${bare[1]}`, range: true, cpk, textStart: skipSpace(text, end), textEnd: range.end + bare[0].length,
       });
       return { plural: false, end: continuation.textEnd, items: [base, continuation] };
     }
@@ -892,7 +897,9 @@ function scanRegion(text: string, from: number, to: number, where: "bracket" | "
     }
     const wrapped = /^\s*\(\s*/.exec(text.slice(cursor));
     if (wrapped && cursor + wrapped[0].length < to) {
-      const innerAt = cursor + wrapped[0].length;
+      let innerAt = cursor + wrapped[0].length;
+      const lead = /^(?:cf\.|cf|see also|see|also)\s+/i.exec(text.slice(innerAt));
+      if (lead) innerAt += lead[0].length;
       const inner = readProvisionAt(text, innerAt, where === "bracket", false);
       if (inner && inner.end <= to && inner.items.some((item) => item.cpk || item.kind === "standing_order" || item.kind === "speakers_ruling" || item.kind === "appendix")) {
         items.push(...inner.items);
@@ -1124,8 +1131,11 @@ function buildTree(label: string, sectionContent: string): { nodes: Set<string>;
       continue;
     }
     const rom = romanValue(lower);
-    const continuesLetter = lastLetter !== null && lastLetter.length === 1 && lower.length === 1
-      && lower.charCodeAt(0) === lastLetter.charCodeAt(0) + 1;
+    // A two-letter insert keeps the letter run: (b)(ba)(c) and (c)(ca)(d).
+    // The next single letter continues from the insert's first letter, and is not a roman under the insert.
+    const anchor = lastLetter === null ? "" : lastLetter.length === 1 ? lastLetter : lastLetter[0];
+    const continuesLetter = anchor.length === 1 && lower.length === 1
+      && lower.charCodeAt(0) === anchor.charCodeAt(0) + 1;
     // (aa) and (ab) are letters. (ii) and (iv) are roman, even though they are two letters.
     const asLetter = (/^[a-z]{2}$/.test(lower) && rom === null) || continuesLetter || (/^[a-z]$/.test(lower) && rom === null);
     if (asLetter) {

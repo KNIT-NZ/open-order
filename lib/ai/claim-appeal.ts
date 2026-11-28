@@ -15,10 +15,14 @@ export type AppealVerdict = {
 };
 export type AppealCheck = { accepted: boolean; reason: string };
 
+const SOURCE_PARENT = String.raw`(?:SO\s+\d+[a-z]*|Appendix\s+[A-F]\s+cl\s+\d+[a-z]*|\d+\/\d+)`;
+const SOURCE_PIN = String.raw`(?:\((?:\d+[a-z]*|[a-z]{1,4})\))+`;
+
+/** Parent authority for a citation. Letter-only, two-letter and deeper pins map back to that parent. */
 export function sourceLabel(citation: string): string {
   const trimmed = citation.trim();
-  const m = /^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(?:\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i.exec(trimmed);
-  return (m ? m[1] : trimmed).replace(/\s+/g, " ");
+  const mapped = new RegExp(`^(${SOURCE_PARENT})\\s*(?:${SOURCE_PIN}(?:\\s*[-–]\\s*${SOURCE_PIN})?)?$`, "i").exec(trimmed);
+  return (mapped ? mapped[1] : trimmed).replace(/\s+/g, " ");
 }
 function key(label: string): string {
   return label.trim().replace(/\s+/g, " ").toLowerCase();

@@ -1,5 +1,6 @@
 // lib/ai/prompts.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
+import { sourceLabel } from "@/lib/ai/claim-appeal";
 import { usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import { buildAuthorityProfile } from "@/lib/procedural-reasoning";
 
@@ -293,13 +294,7 @@ export function buildAnswerClaimValidationPrompt(input: {
   // selected authority, not different authorities. Resolve only a tightly
   // bounded numeric subsection or numeric range suffix; never infer other
   // sources from a citation or presume a subsection claim is supported.
-  const sourceLabelForClaimCitation = (citation: string): string => {
-    const label = citation.trim();
-    const qualified = label.match(
-      /^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i,
-    );
-    return qualified ? qualified[1].replace(/\s+/g, " ") : label;
-  };
+  const sourceLabelForClaimCitation = (citation: string): string => sourceLabel(citation);
   const citedLabels = input.claims.flatMap((claim) => claim.citations);
   const citedSourceLabels = new Set(
     citedLabels.map((citation) => sourceLabelForClaimCitation(citation)),
