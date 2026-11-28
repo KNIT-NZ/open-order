@@ -130,16 +130,14 @@ export function findOmittedSourceQualifications(input: {
       const parent = sourceLabel(citation);
       const authority = authorityMap.get(normalise(parent));
       if (!authority?.sectionContent) {
-        // A pin that still does not name an admitted source must not skip the veto.
-        if (/\([^)]+\)/.test(citation) && normalise(parent) === normalise(citation)) {
-          rejected.push({
-            claimId: claim.id,
-            citationLabel: citation.trim(),
-            reason: "Pinpoint could not be mapped to an admitted source",
-          });
-          break;
-        }
-        continue;
+        // An unmapped citation is a veto. Skipping it let a comma edition and a
+        // two-label bracket past the exception check.
+        rejected.push({
+          claimId: claim.id,
+          citationLabel: citation.trim(),
+          reason: "Pinpoint could not be mapped to an admitted source",
+        });
+        break;
       }
       for (const subsection of numberedSubsections(authority.sectionContent)) {
         const operativeMatch = RESTRICTION.exec(subsection);

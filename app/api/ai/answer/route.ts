@@ -1297,26 +1297,31 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             const citationValidation = citeCheck(finalAnswer);
+            const flatRange = (value: string) => value.replace(/--|[‐‑‒–—−-]/g, "-").replace(/\s+/g, " ").trim();
             const downgradeNumberRanges = (answerText: string, invalid: string[]): string | null => {
               if (invalid.length === 0 || !invalid.every((item) => isNumberRangeBracket(item))) return null;
-              const wanted = new Set(invalid.map((item) => item.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim()));
-              let next = answerText.replace(/\[([^\[\]]+)\]/g, (match, inner: string) => {
-                const flat = inner.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
-                return wanted.has(flat) ? "a provision that was not retrieved" : match;
+              const wanted = new Set(invalid.map((item) => flatRange(item)));
+              let next = answerText.replace(/(\S)?\[([^\[\]]+)\]/g, (match, prev: string | undefined, inner: string) => {
+                if (!wanted.has(flatRange(inner))) return match;
+                const glued = Boolean(prev && /[A-Za-z0-9]/.test(prev));
+                return `${prev ?? ""}${glued ? " " : ""}a provision that was not retrieved`;
               });
               next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?])/g, "$1");
               next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
-              if (!next.trim() || !citeCheck(next).ok || !checkMentions(next).ok) return null;
+              if (!next.trim() || !citeCheck(next).ok) return null;
               return next;
             };
 
             if (!citationValidation.ok) {
-              const kept = downgradeNumberRanges(finalAnswer, citationValidation.invalidCitations);
+              const onlyRanges = citationValidation.invalidCitations.every((item) => isNumberRangeBracket(item));
+              const kept = onlyRanges && checkMentions(finalAnswer).ok
+                ? downgradeNumberRanges(finalAnswer, citationValidation.invalidCitations)
+                : null;
               if (kept) {
                 finalAnswer = kept;
                 outcomeState.pruned = true;
                 noteCheckedWithholding();
-              } else {
+              } else if (!onlyRanges || checkMentions(finalAnswer).ok) {
               outcomeState.fallbackCode = "invalid_citations";
               outcomeState.abstained = true;
               // Count only: the unretrieved labels stay off the client payload.
@@ -1386,7 +1391,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               const recheckCitations = citeCheck(finalAnswer);
 
               const keptRanges = recheckCitations.ok ? null : downgradeNumberRanges(finalAnswer, recheckCitations.invalidCitations);
-              if (keptRanges) {
+              if (keptRanges && checkMentions(keptRanges).ok) {
                 finalAnswer = keptRanges;
                 outcomeState.pruned = true;
                 noteCheckedWithholding();

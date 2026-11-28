@@ -569,6 +569,64 @@ test("OO-DEF-153 range fuzz serves no trailing or phantom label", () => {
   assert.equal(servedBad, 0);
 });
 
+test("OO-DEF-159 letters stay alphabetical unless the sibling list is roman", () => {
+  const letters = "abcdefghijklmnopqrstuvwx".split("").map((letter) => `(${letter}) letter ${letter} duty of the member`).join("\n");
+  const labels = authorities(["SO 418"], new Map([["SO 418", letters]]));
+  const served = ["(c)–(i)", "(c)–(l)", "(c)–(v)", "(c)–(x)", "(d)–(i)", "(l)–(v)", "(l)–(x)"];
+  const withheld = ["(i)–(c)", "(i)–(d)", "(l)–(c)", "(v)–(c)", "(v)–(l)", "(x)–(c)", "(x)–(l)"];
+  for (const pins of served) {
+    const assessed = assessCitations(`The member has that duty [SO 418${pins}].`, labels);
+    assert.equal(assessed.reasonCode, "served", pins);
+  }
+  for (const pins of withheld) {
+    const assessed = assessCitations(`The member has that duty [SO 418${pins}].`, labels);
+    assert.notEqual(assessed.reasonCode, "served", pins);
+    assert.equal(assessed.mentions.some((mention) => mention.code === "ungrounded-range"), true, pins);
+  }
+  const romans = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].map((token) => `(${token}) roman duty ${token}`).join("\n");
+  const romanLabels = authorities(["SO 418"], new Map([["SO 418", romans]]));
+  assert.equal(assessCitations("The member has that duty [SO 418(v)–(ix)].", romanLabels).reasonCode, "served");
+  const backward = assessCitations("The member has that duty [SO 418(ix)–(v)].", romanLabels);
+  assert.notEqual(backward.reasonCode, "served");
+  assert.equal(backward.mentions.some((mention) => mention.code === "ungrounded-range"), true);
+});
+
+test("OO-DEF-158 a current edition still maps, and an unmapped citation is vetoed", () => {
+  const section = "(1) A member must not disclose classified material unless the committee consents in writing.";
+  const authoritiesForGuard = [{ citationLabel: "SO 80", sectionContent: section }, { citationLabel: "Appendix B cl 1", sectionContent: section }];
+  for (const citation of ["SO 80, 2026 edition", "SO 80 , 2026 edition", "SO 80,2026 edition", "SO 80, 2026 Edition", "Appendix B cl 1, 2026 edition", "SO 80 (2026 edition)"]) {
+    assert.equal(sourceLabel(citation).replace(/\s+/g, " "), citation.startsWith("Appendix") ? "Appendix B cl 1" : "SO 80", citation);
+  }
+  const omitted = findOmittedSourceQualifications({
+    claims: [{ id: "omit", text: "A member must not disclose classified material [SO 80, 2026 edition].", citations: ["SO 80, 2026 edition"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.equal(omitted.length, 1);
+  assert.equal(omitted[0]?.reason.includes("could not be mapped"), false);
+  const kept = findOmittedSourceQualifications({
+    claims: [{ id: "keep", text: "A member must not disclose classified material unless the committee consents in writing [SO 80, 2026 edition].", citations: ["SO 80, 2026 edition"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.deepEqual(kept, []);
+  const two = findOmittedSourceQualifications({
+    claims: [{ id: "two", text: "A member must not disclose classified material unless the committee consents in writing [SO 80 and SO 7].", citations: ["SO 80 and SO 7"] }],
+    authorities: authoritiesForGuard,
+  });
+  assert.equal(two.length, 1);
+  assert.equal(two[0]?.reason.includes("could not be mapped"), true);
+});
+
+test("a revoked or ambiguous range endpoint keeps its own reason", () => {
+  const revoked = assessCitations("The House may sit [SO 300(3)–(4)].", [{ citationLabel: "SO 300", sectionContent: "(3) one\n(4) two" }], {
+    provisionTree: { "SO 300": ["SO 300", "SO 300(3)", "SO 300(4)"] },
+  });
+  assert.equal(revoked.mentions.some((mention) => mention.code === "ungrounded-revoked"), true);
+  const ambiguous = assessCitations("The House may sit [SO 3(1)(a)–(b)].", [{ citationLabel: "SO 3", sectionContent: "(1) one" }], {
+    provisionTree: { "SO 3": ["SO 3", "SO 3(1)"] },
+  });
+  assert.equal(ambiguous.mentions.some((mention) => mention.code === "ambiguous-tree"), true);
+});
+
 test("OO-DEF-156 a long-form appeal keeps the pin", () => {
   const section = "(1) first duty of the Speaker in the chamber\n(2) second duty of the Speaker outside";
   const claim = {

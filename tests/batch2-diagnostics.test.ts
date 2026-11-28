@@ -815,6 +815,111 @@ test("C3 an unvalidatable number range is the placeholder, and an en dash takes 
   }
 });
 
+test("OO-DEF-158 a comma edition and a two-label bracket meet the qualification veto", async () => {
+  const section = "(1) A member must not disclose classified material unless the committee consents in writing.";
+  const bodies = { "SO 1": QUOTE, "SO 80": section, "Appendix B cl 1": section };
+  const forms = ["[SO 80, 2026 edition]", "[SO 80 , 2026 edition]", "[SO 80,2026 edition]", "[SO 80, 2026 Edition]", "[Appendix B cl 1, 2026 edition]", "[SO 80 (2026 edition)]"];
+  for (const form of forms) {
+    const omitted = await probe("named_admitted_source", {
+      labels: ["SO 1", "SO 80", "Appendix B cl 1"],
+      bodies,
+      draft: [
+        "Bottom line:",
+        "The House may suspend the sitting [SO 1].",
+        "",
+        "What this means:",
+        `A member must not disclose classified material ${form}.`,
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    assert.equal(String(omitted.answerText).includes("must not disclose classified material"), false, form);
+    assert.match(String(omitted.answerText), /\[SO 1\]/, form);
+    const kept = await probe("named_admitted_source", {
+      labels: ["SO 1", "SO 80", "Appendix B cl 1"],
+      bodies,
+      draft: [
+        "Bottom line:",
+        "The House may suspend the sitting [SO 1].",
+        "",
+        "What this means:",
+        `A member must not disclose classified material unless the committee consents in writing ${form}.`,
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    assert.match(String(kept.answerText), /unless the committee consents in writing/, form);
+  }
+  const two = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 80"],
+    bodies,
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "A member must not disclose classified material unless the committee consents in writing [SO 80 and SO 7].",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  assert.equal(String(two.answerText).includes("SO 80 and SO 7"), false);
+  assert.equal(String(two.answerText).includes("must not disclose classified material"), false);
+});
+
+test("a letter range and a glued unicode dash use the placeholder", async () => {
+  const bodies = {
+    "SO 1": QUOTE,
+    "SO 7": "(a) alpha duty of the member\n(b) beta duty of the member\n(c) gamma duty of the member",
+  };
+  const hyphen = "\u2010";
+  const done = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 7"],
+    bodies,
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "Under SO 99 the notice[SO 7(a)" + hyphen + "(z)].",
+      "A reversed list is not a source [SO 7(c)--(a)] .",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  const text = String(done.answerText);
+  assert.equal(done.abstained, false);
+  assert.notEqual(done.fallbackCode, "invalid_citations");
+  assert.match(text, /\[SO 1\]/);
+  assert.equal(text.includes("(z)"), false);
+  assert.equal(text.includes("(c)--(a)"), false);
+  assert.equal(text.includes("noticea"), false);
+  assert.match(text, /notice a provision that was not retrieved/);
+  assert.equal(/[ \t]{2,}|[ \t][.,]/.test(text), false);
+  assert.equal(text.includes("SO 99"), false);
+});
+
+test("a range placeholder that does not clear the bracket is not served", async () => {
+  const done = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 7"],
+    bodies: {
+      "SO 1": QUOTE,
+      "SO 7": "(a) alpha duty of the member\n(b) beta duty of the member\n(c) gamma duty of the member",
+    },
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "A hidden mark stays ungrounded [SO 7(a)\u200b–(z)].",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  assert.equal(done.abstained, true);
+  assert.equal(String(done.answerText).includes("(z)"), false);
+});
+
 test("OO-DEF-149 a comma edition on the current year stays in the answer", async () => {
   const done = await probe("named_admitted_source", {
     draft: [

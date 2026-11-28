@@ -118,7 +118,8 @@ function isSlash(cp: number): boolean {
 }
 
 function isDash(cp: number): boolean {
-  return cp === 0x2d || cp === 0x2013 || cp === 0x2014;
+  return cp === 0x2d || cp === 0x2010 || cp === 0x2011 || cp === 0x2012
+    || cp === 0x2013 || cp === 0x2014 || cp === 0x2212;
 }
 
 function isApos(cp: number): boolean {
@@ -176,7 +177,10 @@ function normalizeGrammarTextStable(input: string): Norm {
     }
     let emitted = ch;
     if (isSlash(cp)) emitted = "/";
-    else if (isDash(cp)) emitted = "-";
+    else if (isDash(cp)) {
+      if (out[out.length - 1] === "-") continue;
+      emitted = "-";
+    }
     else if (isApos(cp)) emitted = "'";
     if (emitted === "/" && out[out.length - 1] === " ") {
       out.pop();
@@ -522,7 +526,23 @@ function pinToken(key: string): string {
   return (/\(([^()]*)\)$/.exec(key)?.[1] ?? "").toLowerCase();
 }
 
-function pinsInOrder(start: string, end: string): boolean {
+function siblingTokens(nodes: Set<string>, parent: string): string[] {
+  const prefix = `${parent}(`;
+  const tokens: string[] = [];
+  for (const key of nodes) {
+    if (!key.startsWith(prefix) || !key.endsWith(")")) continue;
+    const inner = key.slice(prefix.length, -1);
+    if (inner.includes("(")) continue;
+    tokens.push(inner.toLowerCase());
+  }
+  return tokens;
+}
+
+function romanSeries(tokens: string[]): boolean {
+  return tokens.some((token) => token.length > 1 && romanValue(token) !== null);
+}
+
+function pinsInOrder(start: string, end: string, roman: boolean): boolean {
   const left = pinToken(start);
   const right = pinToken(end);
   const leftNumber = /^(\d+)([a-z]*)$/i.exec(left);
@@ -532,9 +552,11 @@ function pinsInOrder(start: string, end: string): boolean {
     if (delta !== 0) return delta < 0;
     return leftNumber[2].toLowerCase() <= rightNumber[2].toLowerCase();
   }
-  const leftRoman = romanValue(left);
-  const rightRoman = romanValue(right);
-  if (leftRoman !== null && rightRoman !== null) return leftRoman <= rightRoman;
+  if (roman) {
+    const leftRoman = romanValue(left);
+    const rightRoman = romanValue(right);
+    if (leftRoman !== null && rightRoman !== null) return leftRoman <= rightRoman;
+  }
   return left <= right;
 }
 
@@ -559,11 +581,13 @@ function applyRangeTail(text: string, item: Item, cursor: number, currentYear: n
   return { end, residue: pinResidue(text, residueStart, end) };
 }
 
-/** A section or pin number range. Letter ranges are a separate check. */
+const RANGE_DASH = "--|[‐‑‒–—−-]";
+
+/** Any pin or section range, including a letter range and a unicode dash. */
 export function isNumberRangeBracket(text: string): boolean {
-  const flat = text.replace(/\s+/g, " ");
-  if (/\(\d+[A-Za-z]*\)\s*(?:-|–|—|to|through)\s*\(\d+/i.test(flat)) return true;
-  return /\d+[A-Za-z]*(?:\s*\/\s*\d+)?\s*(?:-|–|—|to|through)\s*\d+/i.test(flat);
+  const flat = text.replace(new RegExp(RANGE_DASH, "g"), "-").replace(/\s+/g, " ");
+  if (/\([^)]+\)\s*(?:-|to|through)\s*\(/i.test(flat)) return true;
+  return /\d+[A-Za-z]*(?:\s*\/\s*\d+)?\s*(?:-|to|through)\s*\d+/i.test(flat);
 }
 
 function rangeAt(text: string, index: number): { end: number } | null {
@@ -1203,7 +1227,8 @@ function gradePinRange(item: Item, admitted: Set<string>, trees: TreeIndex): { s
     }
     return { status: "ungrounded", code: "ungrounded-nonexistent", cpk: start };
   }
-  if (!pinsInOrder(start, end)) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
+  const roman = romanSeries(siblingTokens(nodes, parent));
+  if (!pinsInOrder(start, end, roman)) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
   return { status: "grounded", code: "grounded-pinpoint", cpk: start };
 }
 

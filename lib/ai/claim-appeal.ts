@@ -20,9 +20,21 @@ export type AppealCheck = { accepted: boolean; reason: string };
 const SOURCE_PARENT = String.raw`(?:SO\s+\d+[a-z]*|Appendix\s+[A-F]\s+cl\s+\d+[a-z]*|\d+\/\d+)`;
 const SOURCE_PIN = String.raw`(?:\((?:\d+[a-z]*|[a-z]{1,4})\))+`;
 
+/** Drop only the current edition phrase, so a comma or parenthetical year still names its authority. */
+function withoutCurrentEdition(citation: string): string {
+  const flat = citation.trim().replace(/\s+/g, " ");
+  const ruling = /\d+\s*\/\s*\d+/.test(flat) && !/\b(?:so|standing orders?|appendix)\b/i.test(flat);
+  const year = ruling ? "2023" : "2026";
+  return flat
+    .replace(new RegExp(String.raw`,?\s*\(\s*${year}\s+edition\s*\)`, "ig"), "")
+    .replace(new RegExp(String.raw`,\s*${year}\s+edition\b`, "ig"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Parent authority for a citation. Letter-only, two-letter and deeper pins map back to that parent. */
 export function sourceLabel(citation: string): string {
-  const trimmed = citation.trim().replace(/\s+/g, " ");
+  const trimmed = withoutCurrentEdition(citation);
   const normalized = trimmed.replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
   const one = `${SOURCE_PIN}(?:\\s*(?:-|–|—|to|through)\\s*${SOURCE_PIN})?`;
   const tail = `(?:\\s*${one}(?:\\s*(?:,|and|or)\\s*${one})*)?`;
@@ -34,7 +46,7 @@ function key(label: string): string {
 }
 
 function pinGroups(citation: string): string[] {
-  const normalized = citation.trim().replace(/\s+/g, " ").replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
+  const normalized = withoutCurrentEdition(citation).replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
   const parent = sourceLabel(citation).replace(/\s+/g, " ");
   if (!normalized.toLowerCase().startsWith(parent.toLowerCase())) return [];
   return [...normalized.slice(parent.length).matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim().toLowerCase()).filter(Boolean);
