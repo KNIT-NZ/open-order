@@ -52,7 +52,7 @@ function allowedValue(key: string, value: string): boolean {
   if (key === "code") return value === "none" || PROVIDER_CODE.has(value);
   if (key === "kind") return KIND.has(value);
   if (key === "status") return value === "none" || value === "429" || value === "503" || /^[45]\d\d$/.test(value);
-  if (key === "provider") return /^(?:gemini|openai-compatible|router|none|unknown)$/.test(value);
+  if (key === "provider") return /^(?:gemini|openai-compatible|cloudflare|router|none|unknown)$/.test(value);
   if (key === "operation") return /^(?:drafting|claim_validation|post_validation)$/.test(value);
   if (key === "selector_forum" || key === "overlooked_forum") return FORUM_VALUE.test(value);
   if (key === "selector_forum_withheld") return FORUM_WITHHELD_VALUE.test(value);

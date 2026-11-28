@@ -74,7 +74,7 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
       process.env.CLOUDFLARE_ACCOUNT_ID,
     ];
     if (disallowed.some((value) => Boolean(value?.trim()))) {
-      throw new Error("Tester mode forbids OpenAI-compatible provider configuration.");
+      throw new Error("Tester mode forbids non-Gemini provider configuration.");
     }
     return ["gemini"];
   }

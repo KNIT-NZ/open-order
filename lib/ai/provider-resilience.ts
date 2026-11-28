@@ -47,6 +47,7 @@ export const TRANSIENT_CODES = new Set([
   "RATE_LIMIT",
   "SERVICE_UNAVAILABLE",
   "OVERLOADED",
+  "CF_3040",
 ]);
 export const NONRETRYABLE_CODES = new Set([
   "INVALID_ARGUMENT",
@@ -54,6 +55,10 @@ export const NONRETRYABLE_CODES = new Set([
   "UNAUTHENTICATED",
   "NOT_FOUND",
   "FAILED_PRECONDITION",
+  "CF_3036",
+  "CF_5028",
+  "CF_3042",
+  "CF_5007",
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -86,6 +91,7 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   let provider: string | null = null;
   let upstreamErrorName: string | null = null;
   let formatFailure = false;
+  let providerCode: number | null = null;
   for (let depth = 0; depth < 4 && isObject(next) && !seen.has(next); depth += 1) {
     seen.add(next);
     const record = next;
@@ -99,6 +105,9 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
     }
     if (record.name === "ZodError" || record.name === "SyntaxError") {
       formatFailure = true;
+    }
+    if (providerCode === null && typeof record.providerCode === "number" && Number.isInteger(record.providerCode)) {
+      providerCode = record.providerCode;
     }
     if (httpStatus === null) {
       httpStatus = statusNumber(record.status) ?? statusNumber(record.statusCode) ??
@@ -120,6 +129,19 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   // A schema failure is an invalid validation result, not a capacity signal.
   if (formatFailure) {
     return { phase, kind: "validation_format", httpStatus, code, provider, upstreamErrorName, retryable: false };
+  }
+  // 3036 is the daily neuron allocation, carried on HTTP 429. It must not be retried.
+  if (providerCode === 3036) {
+    return { phase, kind: "provider_nonretryable", httpStatus, code: "CF_3036", provider, upstreamErrorName, retryable: false };
+  }
+  if (providerCode === 5028 || providerCode === 3042 || providerCode === 5007) {
+    return {
+      phase, kind: "provider_nonretryable", httpStatus,
+      code: `CF_${providerCode}`, provider, upstreamErrorName, retryable: false,
+    };
+  }
+  if (providerCode === 3040) {
+    return { phase, kind: "provider_transient", httpStatus, code: "CF_3040", provider, upstreamErrorName, retryable: true };
   }
   const typedTransient = (httpStatus !== null && TRANSIENT_STATUSES.has(httpStatus)) ||
     (code !== null && TRANSIENT_CODES.has(code));

@@ -14,6 +14,8 @@ export class AiProviderError extends Error {
   statusCode: number | null;
   retryable: boolean;
   provider: string;
+  /** Numeric provider code only. Never a response body or message. */
+  providerCode: number | null;
   rawMessage?: string;
   cause?: unknown;
 
@@ -23,6 +25,7 @@ export class AiProviderError extends Error {
     statusCode?: number | null;
     retryable?: boolean;
     provider?: string;
+    providerCode?: number | null;
     rawMessage?: string;
     cause?: unknown;
   }) {
@@ -32,6 +35,7 @@ export class AiProviderError extends Error {
     this.statusCode = params.statusCode ?? null;
     this.retryable = params.retryable ?? false;
     this.provider = params.provider ?? "unknown";
+    this.providerCode = params.providerCode ?? null;
     this.rawMessage = params.rawMessage;
     this.cause = params.cause;
   }

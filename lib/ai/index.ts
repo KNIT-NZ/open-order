@@ -101,6 +101,11 @@ export async function generateJson<T>(
 
   for (const providerId of candidates) {
     const provider = PROVIDERS[providerId];
+    if (providerId === "cloudflare" && cloudflare.cloudflareQuotaSkipped()) {
+      lastError = preferDiagnosedError(lastError, cloudflare.cloudflareQuotaSkipError());
+      configuredCount += 1;
+      continue;
+    }
     if (!provider.isConfigured(request.task)) {
       continue;
     }
@@ -137,6 +142,11 @@ export async function streamText(
 
   for (const providerId of candidates) {
     const provider = PROVIDERS[providerId];
+    if (providerId === "cloudflare" && cloudflare.cloudflareQuotaSkipped()) {
+      lastError = preferDiagnosedError(lastError, cloudflare.cloudflareQuotaSkipError());
+      configuredCount += 1;
+      continue;
+    }
     if (!provider.isConfigured(request.task)) {
       continue;
     }
