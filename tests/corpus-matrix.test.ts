@@ -13,7 +13,7 @@ import { foldPlural } from "../lib/plural-fold.js";
 import { committeeClassWords } from "../lib/committee-class-data.js";
 
 const matrixBytes = readFileSync(new URL("./fixtures/corpus-matrix-v1.2.json", import.meta.url));
-assert.equal(createHash("sha256").update(matrixBytes).digest("hex"), "6c476516abc8f966e0f86f8fd176c496a55bf4d952f90738326ae3273fd9126e");
+assert.equal(createHash("sha256").update(matrixBytes).digest("hex"), "b179d695ff005279318c0a888ac9bbae32da435095db1b3ca66bc86e4ba24519");
 const matrix = JSON.parse(matrixBytes.toString("utf8"));
 
 type MatrixCase = {

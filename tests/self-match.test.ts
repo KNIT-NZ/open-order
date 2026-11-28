@@ -9,8 +9,8 @@ type ExpectedRow = { id: string; outcome: "match" | "uncertain" | "reject" };
 test("each pack section can be scored against its own path", () => {
   const packBytes = readFileSync(new URL("./fixtures/so-pack.json", import.meta.url));
   const expectedBytes = readFileSync(new URL("./fixtures/self-match-expected.json", import.meta.url));
-  assert.equal(createHash("sha256").update(packBytes).digest("hex"), "34771e4a6102b996fc0a9cfc5d3663e06d32cd62395af7d00702a42e0b6eb100");
-  assert.equal(createHash("sha256").update(expectedBytes).digest("hex"), "3f109f9ebc1fc7bd6f49e6b578df7b9bf66b63ac3d448dba848ac5c306b92da8");
+  assert.equal(createHash("sha256").update(packBytes).digest("hex"), "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80");
+  assert.equal(createHash("sha256").update(expectedBytes).digest("hex"), "d8d424aa2c7a7745416d50ecc9123ee03c0a5ec727bf05027d945660af450974");
   const pack = JSON.parse(packBytes.toString("utf8")) as {
     sections: Array<{ citation_label?: string; heading?: string; path?: string[] }>;
   };
