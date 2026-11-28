@@ -429,6 +429,108 @@ test("an uncited uncertain source is named in the qualification section", () => 
   assert.match(attached, /Qualification:\n\[SO 2\] has not been confirmed to govern the specific act asked about/);
 });
 
+test("model hedge wording stays verbatim when no qualification is attached", () => {
+  const samples = [
+    "Bottom line:\nA member may object. This has not been confirmed to govern the specific act asked about.",
+    "Bottom line:\nThe House may sit [SO 1]. Standing Order 5 has not been confirmed to govern the specific act asked about.",
+    "Bottom line:\nThe House may sit [SO 1]. THIS HAS NOT BEEN CONFIRMED TO GOVERN THE SPECIFIC ACT ASKED ABOUT, although it.",
+    "Bottom line:\nThe power to suspend the sitting [SO 1] has not been confirmed to govern the specific act asked about.",
+    "What this means:\nWhether the House may sit [SO 1] has not been confirmed to govern the specific act asked about by the Committee.",
+  ];
+  for (const text of samples) {
+    assert.equal(attachClaimQualifications(text, {}), text);
+    const cited = attachClaimQualifications(text, { actLabels: ["SO 1"] });
+    assert.equal(cited.includes(text), true, text);
+    assert.equal(cited.includes("although it."), text.includes("although it."));
+  }
+});
+
+test("null answer text throws and empty text follows the qualification section", () => {
+  assert.throws(() => attachClaimQualifications(null as unknown as string, { actLabels: ["SO 1"] }), TypeError);
+  assert.equal(
+    attachClaimQualifications("", { actLabels: ["SO 1"] }),
+    "\n\nQualification:\n[SO 1] has not been confirmed to govern the specific act asked about.",
+  );
+});
+
+test("removed mentions, wrapped names, abbreviations and quotes stay on main's rewrite", () => {
+  const admitted = [{ citationLabel: "SO 1" }];
+  const cases: Array<[string, string]> = [
+    [
+      "Bottom line:\nThe House may sit [SO 1]. See also Standing Order 99.",
+      "Bottom line:\nThe House may sit [SO 1]. See also a provision that was not retrieved.",
+    ],
+    [
+      "Bottom line:\nThe House may sit [SO 1]. See Standing Order 99 and Standing Order 100.",
+      "Bottom line:\nThe House may sit [SO 1]. See a provision that was not retrieved and a provision that was not retrieved.",
+    ],
+    [
+      "Bottom line:\nThe House may sit [SO 1].\nSee Standing\nOrder 99.",
+      "Bottom line:\nThe House may sit [SO 1].\nSee a provision that was not retrieved.",
+    ],
+    [
+      "Bottom line:\nThe House may sit [SO 1]. Read no. Standing Order 99.",
+      "Bottom line:\nThe House may sit [SO 1]. Read no. a provision that was not retrieved.",
+    ],
+    [
+      "Bottom line:\nThe House may sit [SO 1] cf. Standing Order 99.",
+      "Bottom line:\nThe House may sit [SO 1] cf. a provision that was not retrieved.",
+    ],
+    [
+      "Bottom line:\nThe House may sit [SO 1]. \"Standing Order 99 applies.\"",
+      "Bottom line:\nThe House may sit [SO 1]. \"a provision that was not retrieved applies.\"",
+    ],
+  ];
+  for (const [input, expected] of cases) {
+    const rewrite = rewriteForbiddenAuthorityMentions({ answerText: input, authorities: admitted });
+    assert.equal(rewrite.rewrittenText, expected, input);
+    assert.equal(attachClaimQualifications(rewrite.rewrittenText, {}), rewrite.rewrittenText);
+    assert.equal(rewrite.rewrittenText.includes("has not been confirmed"), false);
+  }
+});
+
+test("main's so 7 mention and edition years stay on main's rewrite", () => {
+  const admitted = [{ citationLabel: "SO 1" }];
+  const so7 = rewriteForbiddenAuthorityMentions({
+    answerText: "Bottom line:\nSeven members, so 7 of them, may sit [SO 1].",
+    authorities: admitted,
+  });
+  assert.equal(so7.rewrittenText, "Bottom line:\nSeven members, a provision that was not retrieved of them, may sit [SO 1].");
+  assert.equal(attachClaimQualifications(so7.rewrittenText, {}), so7.rewrittenText);
+  const title = rewriteForbiddenAuthorityMentions({
+    answerText: "The title is Standing Orders 2023 [SO 1].",
+    authorities: admitted,
+  });
+  assert.equal(title.rewrittenText, "The title is a provision that was not retrieved [SO 1].");
+  const afterYear = rewriteForbiddenAuthorityMentions({
+    answerText: "Standing Orders 2026 39 applies [SO 1].",
+    authorities: admitted,
+  });
+  assert.equal(afterYear.rewrittenText, "a provision that was not retrieved 39 applies [SO 1].");
+  const kept = rewriteForbiddenAuthorityMentions({
+    answerText: "Give 7 days' notice [SO 1].",
+    authorities: admitted,
+  });
+  assert.equal(kept.rewrittenText, "Give 7 days' notice [SO 1].");
+  const list = rewriteForbiddenAuthorityMentions({
+    answerText: "Standing Orders 1 and 7 both apply.",
+    authorities: [{ citationLabel: "SO 1" }, { citationLabel: "SO 7" }],
+  });
+  assert.equal(list.rewrittenText, "Standing Orders 1 and 7 both apply.");
+  assert.equal(validateAnswerAuthorityMentions({
+    answerText: "Standing Order 1(2) applies.",
+    authorities: admitted,
+  }).ok, true);
+  assert.equal(validateAnswerAuthorityMentions({
+    answerText: "See Appendix A note.",
+    authorities: [{ citationLabel: "Appendix A note" }],
+  }).ok, true);
+  assert.equal(validateAnswerAuthorityMentions({
+    answerText: "See Appendix A table 2 row 10.",
+    authorities: [{ citationLabel: "Appendix A table 2 row 10" }],
+  }).ok, true);
+});
+
 test("a qualification stays on the uncertain claim and off the settled provision", () => {
   const attached = attachClaimQualifications([
     "Bottom line:",
@@ -566,11 +668,11 @@ function source(sectionContent = QUOTE, citationLabel = "SO 1"): ProceduralSearc
 
 async function probe(
   mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source" | "forged_suffix",
-  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean },
+  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean; bodies?: Record<string, string> },
 ) {
   const labels = options?.labels ?? [options?.citationLabel ?? "SO 1"];
   const pack = labels.map((label, index) => ({
-    ...source(options?.sectionContent, label),
+    ...source(options?.bodies?.[label] ?? options?.sectionContent, label),
     sectionId: `s${index + 1}`,
     sectionKey: `s${index + 1}`,
   }));
@@ -616,11 +718,11 @@ async function probe(
     if (request.systemInstruction.includes("PROCEDURAL SOURCE adjudicator")) {
       const value = options?.admit
         ? {
-          selected: [{
-            citationLabel: options?.citationLabel ?? "SO 1", role: "governing", exactQuote: QUOTE,
+          selected: pack.map((item) => ({
+            citationLabel: item.citationLabel, role: "governing", exactQuote: item.sectionContent,
             actorMatches: true, settingMatches: true, actionMatches: true, stageMatches: true,
             rationale: "governs the sitting",
-          }],
+          })),
           remainingUncertainties: [], explanation: "quoted",
         }
         : { selected: [], remainingUncertainties: [], explanation: "none nominated" };
@@ -760,6 +862,28 @@ test("a singular standing-order name followed by ordinary words is served unchan
   assert.equal(done.answerState, "supported");
   assert.match(String(done.answerText), /Under SO 1, 40 members may demand a vote \[SO 1\]\./);
   assert.equal(((done.answerEdits as string[] | undefined) ?? []).some((item) => item.startsWith("removed_mentions")), false);
+});
+
+test("the route qualifies only the ungrounded and specially qualified claims", async () => {
+  const device = "Carrying a device is permitted when it does not disrupt the forum.";
+  const grounded = "The House may suspend the sitting [SO 1].";
+  const model = "The power to suspend the sitting [SO 1] has not been confirmed to govern the specific act asked about.";
+  const qualified = "A device rule applies [SO 2].";
+  const prose = "Standing Order 5 was mentioned beside the sitting [SO 1].";
+  const done = await probe("named_admitted_source", {
+    admit: true,
+    labels: ["SO 1", "SO 2"],
+    bodies: { "SO 1": QUOTE, "SO 2": device },
+    draft: `Bottom line:\n${grounded} ${model}\n\nWhat this means:\n${qualified}\n\nRisks or constraints:\n${prose}\n\nSettlement: supported`,
+  });
+  const text = String(done.answerText);
+  assert.ok(text.includes(`${grounded} ${model}`), text);
+  assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
+  assert.match(text, /a provision that was not retrieved was mentioned beside the sitting \[SO 1\]/);
+  assert.equal(text.includes("[SO 5]"), false);
+  assert.equal(text.includes("SO 5"), false);
+  const groundedLine = text.split("\n").find((line) => line.includes(grounded)) ?? "";
+  assert.equal(groundedLine.split("has not been confirmed to govern").length - 1, 1);
 });
 
 test("a quantity follower is served unchanged, and a bare joined number is not", async () => {

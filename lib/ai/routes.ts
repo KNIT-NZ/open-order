@@ -15,6 +15,7 @@ const VALID_LANES: readonly AiLane[] = [
 const VALID_PROVIDERS: readonly AiProviderId[] = [
   "gemini",
   "openai-compatible",
+  "cloudflare",
 ];
 
 function isAiLane(value: string): value is AiLane {
@@ -63,15 +64,17 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
     }
     // Do not permit any OpenAI-compatible credentials or endpoint/model config
     // in the isolated tester deployment, even if not normally selected.
-    const disallowed = [
-      process.env.AI_OPENAI_COMPATIBLE_BASE_URL,
-      process.env.AI_OPENAI_COMPATIBLE_API_KEY,
-      process.env.AI_OPENAI_COMPATIBLE_MODEL,
-      process.env.AI_OPENAI_COMPATIBLE_QUERY_MODEL,
-      process.env.AI_OPENAI_COMPATIBLE_ANSWER_MODEL,
-    ];
-    if (disallowed.some((value) => Boolean(value?.trim()))) {
-      throw new Error("Tester mode forbids OpenAI-compatible provider configuration.");
+    const present = [
+      ["AI_OPENAI_COMPATIBLE_BASE_URL", process.env.AI_OPENAI_COMPATIBLE_BASE_URL],
+      ["AI_OPENAI_COMPATIBLE_API_KEY", process.env.AI_OPENAI_COMPATIBLE_API_KEY],
+      ["AI_OPENAI_COMPATIBLE_MODEL", process.env.AI_OPENAI_COMPATIBLE_MODEL],
+      ["AI_OPENAI_COMPATIBLE_QUERY_MODEL", process.env.AI_OPENAI_COMPATIBLE_QUERY_MODEL],
+      ["AI_OPENAI_COMPATIBLE_ANSWER_MODEL", process.env.AI_OPENAI_COMPATIBLE_ANSWER_MODEL],
+      ["CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN],
+      ["CLOUDFLARE_ACCOUNT_ID", process.env.CLOUDFLARE_ACCOUNT_ID],
+    ].filter((entry) => Boolean(entry[1]?.trim())).map((entry) => entry[0]);
+    if (present.length > 0) {
+      throw new Error(`Tester mode forbids non-Gemini provider configuration: ${present.join(", ")}.`);
     }
     return ["gemini"];
   }
@@ -83,7 +86,7 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
       throw new AiProviderError({
         message:
           `Invalid AI_ROUTE_OVERRIDE "${override}". ` +
-          "Expected gemini or openai-compatible.",
+          "Expected gemini, openai-compatible, or cloudflare.",
         kind: "configuration",
         provider: "router",
       });
@@ -98,7 +101,14 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
     return [override];
   }
 
-  // Default chain is free-tier Gemini only. A non-Gemini provider is a
-  // fallback after Gemini, and only when explicitly enabled.
-  return nonGeminiProvidersAllowed() ? ["gemini", "openai-compatible"] : ["gemini"];
+  // Cloudflare uses the same opt-in as every other non-Gemini fallback.
+  // Credentials alone do not put it on the chain.
+  const cloudflareConfigured = nonGeminiProvidersAllowed() && Boolean(
+    process.env.CLOUDFLARE_API_TOKEN?.trim()
+    && /^[a-f0-9]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ?? ""),
+  );
+  if (nonGeminiProvidersAllowed()) {
+    return cloudflareConfigured ? ["gemini", "cloudflare", "openai-compatible"] : ["gemini", "openai-compatible"];
+  }
+  return ["gemini"];
 }

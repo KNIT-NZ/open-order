@@ -35,7 +35,12 @@ export const DIAGNOSTIC_KINDS = [
   "application_or_unknown",
 ] as const;
 
-export const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
+/** Shared retryable HTTP statuses. 501 is excluded. 520–529 are handled beside this set. */
+export const TRANSIENT_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+export function isTransientHttpStatus(status: number): boolean {
+  return TRANSIENT_STATUSES.has(status) || (status >= 520 && status <= 529);
+}
 export const TRANSIENT_CODES = new Set([
   "RESOURCE_EXHAUSTED",
   "UNAVAILABLE",
@@ -47,6 +52,9 @@ export const TRANSIENT_CODES = new Set([
   "RATE_LIMIT",
   "SERVICE_UNAVAILABLE",
   "OVERLOADED",
+  "CF_3040",
+  "CF_10429",
+  "CF_971",
 ]);
 export const NONRETRYABLE_CODES = new Set([
   "INVALID_ARGUMENT",
@@ -54,6 +62,10 @@ export const NONRETRYABLE_CODES = new Set([
   "UNAUTHENTICATED",
   "NOT_FOUND",
   "FAILED_PRECONDITION",
+  "CF_3036",
+  "CF_5028",
+  "CF_3042",
+  "CF_5007",
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -86,11 +98,12 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   let provider: string | null = null;
   let upstreamErrorName: string | null = null;
   let formatFailure = false;
+  let providerCode: number | null = null;
   for (let depth = 0; depth < 4 && isObject(next) && !seen.has(next); depth += 1) {
     seen.add(next);
     const record = next;
     if (provider === null && (record.provider === "gemini" ||
-      record.provider === "openai-compatible" || record.provider === "router")) {
+      record.provider === "openai-compatible" || record.provider === "cloudflare" || record.provider === "router")) {
       provider = record.provider;
     }
     if (upstreamErrorName === null && typeof record.name === "string" &&
@@ -99,6 +112,13 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
     }
     if (record.name === "ZodError" || record.name === "SyntaxError") {
       formatFailure = true;
+    }
+    if (providerCode === null && typeof record.providerCode === "number" && Number.isInteger(record.providerCode)) {
+      providerCode = record.providerCode;
+    }
+    if (record.code === "ECONNRESET" || record.code === "ETIMEDOUT" || record.code === "EAI_AGAIN"
+      || record.message === "fetch failed") {
+      code = code ?? "ECONNRESET";
     }
     if (httpStatus === null) {
       httpStatus = statusNumber(record.status) ?? statusNumber(record.statusCode) ??
@@ -121,7 +141,32 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
   if (formatFailure) {
     return { phase, kind: "validation_format", httpStatus, code, provider, upstreamErrorName, retryable: false };
   }
-  const typedTransient = (httpStatus !== null && TRANSIENT_STATUSES.has(httpStatus)) ||
+  // 3036 is the daily neuron allocation, carried on HTTP 429. It must not be retried.
+  if (providerCode === 3036) {
+    return { phase, kind: "provider_nonretryable", httpStatus, code: "CF_3036", provider, upstreamErrorName, retryable: false };
+  }
+  if (providerCode === 5028 || providerCode === 3042 || providerCode === 5007) {
+    return {
+      phase, kind: "provider_nonretryable", httpStatus,
+      code: `CF_${providerCode}`, provider, upstreamErrorName, retryable: false,
+    };
+  }
+  if (providerCode === 3040) {
+    return { phase, kind: "provider_transient", httpStatus, code: "CF_3040", provider, upstreamErrorName, retryable: true };
+  }
+  // 10429 and 971 are third-party rate-limit reports, including inside HTTP 200 success:false.
+  if (providerCode === 10429 || providerCode === 971) {
+    return {
+      phase, kind: "provider_transient", httpStatus,
+      code: providerCode === 10429 ? "CF_10429" : "CF_971",
+      provider, upstreamErrorName, retryable: true,
+    };
+  }
+  if (providerCode !== null && code === null) code = `CF_${providerCode}`;
+  if (httpStatus === 501) {
+    return { phase, kind: "provider_nonretryable", httpStatus, code, provider, upstreamErrorName, retryable: false };
+  }
+  const typedTransient = (httpStatus !== null && isTransientHttpStatus(httpStatus)) ||
     (code !== null && TRANSIENT_CODES.has(code));
   if (typedTransient) {
     return { phase, kind: "provider_transient", httpStatus, code, provider, upstreamErrorName, retryable: true };

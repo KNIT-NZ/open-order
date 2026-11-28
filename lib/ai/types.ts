@@ -8,7 +8,7 @@ export type AiTask =
 
 export type AiLane = "development" | "staging" | "production";
 
-export type AiProviderId = "gemini" | "openai-compatible";
+export type AiProviderId = "gemini" | "openai-compatible" | "cloudflare";
 
 /**
  * `other` is not a success and not a capacity signal. It means the attempt
