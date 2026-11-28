@@ -429,6 +429,42 @@ test("an uncited uncertain source is named in the qualification section", () => 
   assert.match(attached, /Qualification:\n\[SO 2\] has not been confirmed to govern the specific act asked about/);
 });
 
+test("a fully grounded answer has no blanket hedge", () => {
+  const attached = attachClaimQualifications([
+    "Bottom line:",
+    "The House may sit [SO 1]. [SO 1] has not been confirmed to govern the specific act asked about.",
+  ].join("\n"), { actLabels: ["SO 1"], groundedLabels: ["SO 1"] });
+  assert.equal(attached.includes("has not been confirmed"), false);
+});
+
+test("a mixed answer hedges only the ungrounded claim", () => {
+  const attached = attachClaimQualifications([
+    "Bottom line:",
+    "The House may sit [SO 1].",
+    "",
+    "What this means:",
+    "A different step applies [SO 2].",
+  ].join("\n"), { actLabels: ["SO 1", "SO 2"], groundedLabels: ["SO 1"] });
+  const bottom = attached.split("\n").find((line) => line.includes("[SO 1]")) ?? "";
+  const other = attached.split("\n").find((line) => line.includes("[SO 2]")) ?? "";
+  assert.equal(bottom.includes("has not been confirmed"), false);
+  assert.match(other, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
+});
+
+test("a discretionary provision keeps its qualification", () => {
+  const attached = attachClaimQualifications(
+    "Bottom line:\nThe Speaker may suspend the sitting [SO 1].",
+    { actLabels: ["SO 1"], groundedLabels: ["SO 1"], discretionaryLabels: ["SO 1"] },
+  );
+  assert.match(attached, /\[SO 1\] has not been confirmed to govern the specific act asked about/);
+});
+
+test("an ungrounded claim does not lose an existing hedge", () => {
+  const text = "What this means:\nThe other step applies [SO 99]. [SO 99] has not been confirmed to govern the specific act asked about.";
+  const attached = attachClaimQualifications(text, { groundedLabels: ["SO 1"] });
+  assert.match(attached, /\[SO 99\] has not been confirmed to govern the specific act asked about/);
+});
+
 test("a qualification stays on the uncertain claim and off the settled provision", () => {
   const attached = attachClaimQualifications([
     "Bottom line:",

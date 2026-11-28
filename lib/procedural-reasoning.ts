@@ -2259,26 +2259,54 @@ function lineCitesLabel(line: string, label: string): boolean {
   return citationTokensInBrackets(line).some((token) => citationTokenMatchesLabel(token, label));
 }
 
+const BLANKET_HEDGE = /(?:\[[^\]]+\]\s*)?has not been confirmed to (?:govern the specific act asked about|be the body the question is about)\.?/gi;
+
+function labelKey(label: string): string {
+  return label.trim().toLowerCase();
+}
+
 /** Put a real uncertainty on the claim it qualifies. Do not brand a settled provision. */
 export function attachClaimQualifications(answerText: string, input: {
   actLabels?: string[];
   forumLabels?: string[];
+  /** Admitted labels whose citation is grounded. Omit to keep the previous add-only behaviour. */
+  groundedLabels?: string[];
+  /** Provisions that are genuinely discretionary or conditional. Their qualification stays. */
+  discretionaryLabels?: string[];
 }): string {
   const actLabels = [...new Set((input.actLabels ?? []).map((label) => label.trim()).filter(Boolean))];
   const forumLabels = [...new Set((input.forumLabels ?? []).map((label) => label.trim()).filter(Boolean))];
-  if (actLabels.length === 0 && forumLabels.length === 0) return answerText;
+  const grounded = input.groundedLabels === undefined
+    ? null
+    : new Set(input.groundedLabels.map(labelKey).filter(Boolean));
+  const discretionary = new Set((input.discretionaryLabels ?? []).map(labelKey).filter(Boolean));
+  const needsHedge = (label: string) => {
+    const key = labelKey(label);
+    if (discretionary.has(key)) return true;
+    if (grounded === null) return true;
+    return !grounded.has(key);
+  };
   const substantive = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
   const lines = String(answerText ?? "").split("\n");
   let section: string | null = null;
   const claimIndexes: number[] = [];
   lines.forEach((line, index) => {
     const trimmed = line.trim();
-    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:") {
+    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:" || trimmed === "Qualification:") {
       section = trimmed;
       return;
     }
     if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
   });
+  if (grounded !== null) {
+    for (const index of claimIndexes) {
+      const tokens = citationTokensInBrackets(lines[index] ?? "");
+      const ungrounded = tokens.some((token) => !grounded.has(labelKey(token)));
+      const keepsQualification = tokens.some((token) => discretionary.has(labelKey(token)));
+      if (ungrounded || keepsQualification) continue;
+      lines[index] = lines[index].replace(BLANKET_HEDGE, " ").replace(/[ \t]{2,}/g, " ").trimEnd();
+    }
+  }
   const citing = (label: string): number[] =>
     claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
   const append = (indexes: number[], sentence: string) => {
@@ -2288,18 +2316,14 @@ export function attachClaimQualifications(answerText: string, input: {
     }
   };
   const qualificationSection: string[] = [];
-  for (const label of actLabels) {
-    const sentence = `[${label}] ${ACT_QUALIFICATION}`;
+  const consider = (label: string, sentence: string) => {
+    if (!needsHedge(label)) return;
     const hits = citing(label);
     if (hits.length > 0) append(hits, sentence);
-    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
-  }
-  for (const label of forumLabels) {
-    const sentence = `[${label}] ${FORUM_QUALIFICATION}`;
-    const hits = citing(label);
-    if (hits.length > 0) append(hits, sentence);
-    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
-  }
+    else if (!lines.join("\n").includes(sentence)) qualificationSection.push(sentence);
+  };
+  for (const label of actLabels) consider(label, `[${label}] ${ACT_QUALIFICATION}`);
+  for (const label of forumLabels) consider(label, `[${label}] ${FORUM_QUALIFICATION}`);
   if (qualificationSection.length > 0) lines.push("", "Qualification:", ...qualificationSection);
   return lines.join("\n");
 }

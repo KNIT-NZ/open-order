@@ -31,6 +31,7 @@ import {
   labelBareRulings,
   parseSettlement,
   obligationPartialFacets,
+  dutyVersusDiscretion,
   forumIdentityOutcome,
   presidingOfficerAppealQuery,
   proceedingConsequenceQueries,
@@ -1949,6 +1950,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = attachClaimQualifications(finalAnswer, {
               actLabels: [...actLabels],
               forumLabels: [...forumLabels],
+              groundedLabels: finalAuthorities
+                .map((authority) => authority.citationLabel)
+                .filter((label) => !hiddenLabel(label)),
+              discretionaryLabels: finalAuthorities
+                .filter((authority) => hiddenLabel(authority.citationLabel)
+                  && (dutyVersusDiscretion(authority.sectionContent ?? "") === "discretion"
+                    || /\b(?:if|unless|provided that)\b/i.test(authority.sectionContent ?? "")))
+                .map((authority) => authority.citationLabel),
             });
             const mentionEdit = mentionRewriteEdit(mentionRewrites);
             answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];

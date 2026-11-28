@@ -2,6 +2,7 @@ import {
   AiProviderError,
   normalizeAiProviderError,
 } from "./errors";
+import * as cloudflare from "./cloudflare";
 import * as gemini from "./gemini";
 import * as openAiCompatible from "./openai-compatible";
 import { getAiCandidates } from "./routes";
@@ -61,6 +62,13 @@ const PROVIDERS: Record<AiProviderId, ProviderRuntime> = {
       openAiCompatible.generateJson<T>(request),
     streamText: (request: AiStreamTextRequest) =>
       openAiCompatible.streamText(request),
+  },
+  cloudflare: {
+    isConfigured: () => cloudflare.isCloudflareConfigured(),
+    generateJson: <T>(request: AiGenerateJsonRequest) =>
+      cloudflare.generateJson<T>(request),
+    streamText: (request: AiStreamTextRequest) =>
+      cloudflare.streamText(request),
   },
 };
 

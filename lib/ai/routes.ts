@@ -15,6 +15,7 @@ const VALID_LANES: readonly AiLane[] = [
 const VALID_PROVIDERS: readonly AiProviderId[] = [
   "gemini",
   "openai-compatible",
+  "cloudflare",
 ];
 
 function isAiLane(value: string): value is AiLane {
@@ -69,6 +70,8 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
       process.env.AI_OPENAI_COMPATIBLE_MODEL,
       process.env.AI_OPENAI_COMPATIBLE_QUERY_MODEL,
       process.env.AI_OPENAI_COMPATIBLE_ANSWER_MODEL,
+      process.env.CLOUDFLARE_API_TOKEN,
+      process.env.CLOUDFLARE_ACCOUNT_ID,
     ];
     if (disallowed.some((value) => Boolean(value?.trim()))) {
       throw new Error("Tester mode forbids OpenAI-compatible provider configuration.");
@@ -83,7 +86,7 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
       throw new AiProviderError({
         message:
           `Invalid AI_ROUTE_OVERRIDE "${override}". ` +
-          "Expected gemini or openai-compatible.",
+          "Expected gemini, openai-compatible, or cloudflare.",
         kind: "configuration",
         provider: "router",
       });
@@ -98,7 +101,15 @@ export function getAiCandidates(task: AiTask): readonly AiProviderId[] {
     return [override];
   }
 
-  // Default chain is free-tier Gemini only. A non-Gemini provider is a
-  // fallback after Gemini, and only when explicitly enabled.
-  return nonGeminiProvidersAllowed() ? ["gemini", "openai-compatible"] : ["gemini"];
+  // Default chain is free-tier Gemini only. Cloudflare is a free-tier fallback
+  // only when both of its credentials are present. A paid-compatible provider
+  // still requires the explicit non-Gemini opt-in.
+  const cloudflareConfigured = Boolean(
+    process.env.CLOUDFLARE_API_TOKEN?.trim()
+    && /^[a-f0-9]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ?? ""),
+  );
+  if (nonGeminiProvidersAllowed()) {
+    return cloudflareConfigured ? ["gemini", "cloudflare", "openai-compatible"] : ["gemini", "openai-compatible"];
+  }
+  return cloudflareConfigured ? ["gemini", "cloudflare"] : ["gemini"];
 }

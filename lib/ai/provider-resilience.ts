@@ -90,7 +90,7 @@ export function classifyAiError(error: unknown, phase: AiOperationPhase):
     seen.add(next);
     const record = next;
     if (provider === null && (record.provider === "gemini" ||
-      record.provider === "openai-compatible" || record.provider === "router")) {
+      record.provider === "openai-compatible" || record.provider === "cloudflare" || record.provider === "router")) {
       provider = record.provider;
     }
     if (upstreamErrorName === null && typeof record.name === "string" &&
