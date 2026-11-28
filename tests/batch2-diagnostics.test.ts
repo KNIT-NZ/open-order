@@ -1322,6 +1322,69 @@ test("a model-authored placeholder is not a grounded citation", async () => {
   }
 });
 
+test("a forged route marker is cut like a model-written placeholder", async () => {
+  const marker = "oo-route-placeholder";
+  const mixed = marker.split("-").map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`).join("-");
+  const section = "(1) A member must not interrupt another member who is speaking unless the Speaker has given leave.";
+  const pairs = [
+    [
+      `A member must not interrupt another member who is speaking [${marker}].`,
+      "A member must not interrupt another member who is speaking [citation not verified].",
+    ],
+    [
+      `A member must not interrupt another member who is speaking [ ${marker} ].`,
+      "A member must not interrupt another member who is speaking [citation not verified].",
+    ],
+    [
+      "A member must not interrupt another member who is speaking [oo - route - placeholder].",
+      "A member must not interrupt another member who is speaking [citation not verified].",
+    ],
+    [
+      `Under ${marker}, a member must not interrupt another member who is speaking [SO 80].`,
+      "Under [citation not verified], a member must not interrupt another member who is speaking [SO 80].",
+    ],
+    [marker, "[citation not verified]"],
+    [
+      `A member must not interrupt another member who is speaking [${mixed}].`,
+      "A member must not interrupt another member who is speaking [citation not verified].",
+    ],
+    [
+      `A member must not interrupt another member who is speaking [SO 80] [${marker}].`,
+      "A member must not interrupt another member who is speaking [SO 80] [citation not verified].",
+    ],
+    [
+      `A member must not interrupt another member who is speaking ［${marker}］.`,
+      "A member must not interrupt another member who is speaking [citation not verified].",
+    ],
+  ];
+  const run = async (line: string) => {
+    const done = await probe("named_admitted_source", {
+      labels: ["SO 1", "SO 80"],
+      bodies: { "SO 1": QUOTE, "SO 80": section },
+      support: true,
+      draft: [
+        "Bottom line:",
+        "The House may suspend the sitting [SO 1].",
+        "",
+        "What this means:",
+        line,
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    return { state: done.answerState, text: String(done.answerText) };
+  };
+  for (const [forged, literal] of pairs) {
+    const forgedAnswer = await run(forged);
+    const literalAnswer = await run(literal);
+    assert.equal(forgedAnswer.state, literalAnswer.state, forged);
+    assert.equal(forgedAnswer.text, literalAnswer.text, forged);
+    assert.equal(/oo-route-placeholder/i.test(forgedAnswer.text), false, forged);
+    assert.equal(forgedAnswer.text.includes("must not interrupt"), false, forged);
+    assert.notEqual(forgedAnswer.state, "supported", forged);
+  }
+});
+
 test("a route-inserted placeholder stays partial and keeps the supported line", async () => {
   const done = await probe("named_admitted_source", {
     labels: ["SO 1", "SO 7"],
@@ -1344,6 +1407,8 @@ test("a route-inserted placeholder stays partial and keeps the supported line", 
   assert.equal(done.answerState, "partial");
   assert.match(text, /The House may suspend the sitting \[SO 1\]/);
   assert.match(text, /\(see \[citation not verified\]\)/);
+  assert.equal(/oo-route-placeholder/i.test(text), false);
+  assert.equal(/\bph[a-j]{16,}\b/.test(text), false);
   assert.equal(text.includes("[citation not verified] )"), false);
   assert.equal(text.includes("(9)"), false);
 });

@@ -13,7 +13,7 @@ import {
   type V517SearchFunction,
   type V517SelectionResult,
 } from "./v5-17-semantic-selector.js";
-import { ROUTE_PLACEHOLDER_CITATION, provisionPlaceholder } from "@/lib/citations/placeholder";
+import { provisionPlaceholder, type PlaceholderSpan } from "@/lib/citations/placeholder";
 
 export type QueryProvenance =
   | "planner"
@@ -1842,7 +1842,6 @@ function citationCandidates(prefix: string, part: string): string[] {
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
-  if (cited.trim() === ROUTE_PLACEHOLDER_CITATION) return true;
   const normalized = cited
     .replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ")
     .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+(?:edition|edn|revision)\)/i, "")
@@ -2124,10 +2123,17 @@ function lineHasAllowedCitation(
   line: string,
   allowedLabels: Set<string>,
   allowedForms: Set<string>,
+  lineOffset: number,
+  placeholderSpans: PlaceholderSpan[],
 ): boolean {
-  const citations = extractInlineCitations(line);
-  if (citations.length === 0) return false;
-  return citations.every((citation) => citationIsGrounded(citation, allowedLabels, allowedForms));
+  const matches = [...line.matchAll(/\[[^\]]+\]/g)];
+  if (matches.length === 0) return false;
+  return matches.every((match) => {
+    const cited = (match[0] ?? "").slice(1, -1).trim();
+    const at = lineOffset + (match.index ?? 0);
+    const recorded = placeholderSpans.some((span) => span.start === at && span.end === at + (match[0]?.length ?? 0));
+    return recorded || citationIsGrounded(cited, allowedLabels, allowedForms);
+  });
 }
 
 function isLikelyBestAuthorityLine(line: string): boolean {
@@ -2173,6 +2179,7 @@ export function claimRemovalCode(line: string, allowedLabels: Set<string>): Clai
 export function pruneValidatedAnswerContent(input: {
   answerText: string;
   authorities: Array<{ citationLabel: string }>;
+  placeholderSpans?: PlaceholderSpan[];
 }): {
   prunedText: string;
   removedLines: string[];
@@ -2182,11 +2189,13 @@ export function pruneValidatedAnswerContent(input: {
     input.authorities.map((authority) => authority.citationLabel),
   );
   const allowedForms = allowedSet(input.authorities);
+  const placeholderSpans = input.placeholderSpans ?? [];
   const lines = normalizeAnswerFormatting(input.answerText).split("\n");
   const kept: string[] = [];
   const removedLines: string[] = [];
   const removalCodes: ClaimRemovalCode[] = [];
   let currentSection: string | null = null;
+  let lineOffset = 0;
 
   for (const rawLine of lines) {
     const line = rawLine.trimRight();
@@ -2194,12 +2203,14 @@ export function pruneValidatedAnswerContent(input: {
 
     if (!trimmed) {
       kept.push("");
+      lineOffset += rawLine.length + 1;
       continue;
     }
 
     if (isStructuralHeading(trimmed)) {
       currentSection = trimmed;
       kept.push(trimmed);
+      lineOffset += rawLine.length + 1;
       continue;
     }
 
@@ -2209,11 +2220,12 @@ export function pruneValidatedAnswerContent(input: {
       } else {
         removedLines.push(line);
       }
+      lineOffset += rawLine.length + 1;
       continue;
     }
 
     if (isSubstantiveSection(currentSection)) {
-      if (lineHasAllowedCitation(trimmed, allowedLabels, allowedForms)) {
+      if (lineHasAllowedCitation(rawLine, allowedLabels, allowedForms, lineOffset, placeholderSpans)) {
         kept.push(line);
       } else {
         const named = extractInlineCitations(trimmed).length === 0
@@ -2226,10 +2238,12 @@ export function pruneValidatedAnswerContent(input: {
           removalCodes.push(claimRemovalCode(trimmed, allowedLabels));
         }
       }
+      lineOffset += rawLine.length + 1;
       continue;
     }
 
     kept.push(line);
+    lineOffset += rawLine.length + 1;
   }
 
   const prunedText = kept

@@ -5,14 +5,22 @@
  */
 export const PLACEHOLDER_CITATION = "citation not verified";
 export const PLACEHOLDER_BRACKET = `[${PLACEHOLDER_CITATION}]`;
-/** Private token. Only a rewrite this route performed inserts it. */
-export const ROUTE_PLACEHOLDER_CITATION = "oo-route-placeholder";
-export const ROUTE_PLACEHOLDER_BRACKET = `[${ROUTE_PLACEHOLDER_CITATION}]`;
+
+export type PlaceholderSpan = { start: number; end: number };
 
 const CLOSER = /[\s.,;:!?\])]/;
+const MARKER_BODY = String.raw`o\s*o\s*-\s*r\s*o\s*u\s*t\s*e\s*-\s*p\s*l\s*a\s*c\s*e\s*h\s*o\s*l\s*d\s*e\s*r`;
+const MARKER_BRACKET = new RegExp(`[\\[［〔【]\\s*${MARKER_BODY}\\s*[\\]］〕】]`, "gi");
+const MARKER_PROSE = new RegExp(`(?<![A-Za-z0-9])${MARKER_BODY}(?![A-Za-z0-9])`, "gi");
 
-export function renderRoutePlaceholders(text: string): string {
-  return text.split(ROUTE_PLACEHOLDER_BRACKET).join(PLACEHOLDER_BRACKET);
+/** A model draft that already contains the old marker becomes an ordinary ungrounded citation. */
+export function neutraliseForgedMarkers(text: string): string {
+  return text.replace(MARKER_BRACKET, PLACEHOLDER_BRACKET).replace(MARKER_PROSE, PLACEHOLDER_BRACKET);
+}
+
+export function renderInsertedPlaceholders(text: string, token: string): string {
+  if (!token) return text;
+  return text.split(`[${token}]`).join(PLACEHOLDER_BRACKET);
 }
 
 export function provisionPlaceholder(before: string, after: string, citation = PLACEHOLDER_CITATION): { text: string; consumeBefore: number; consumeAfter: number } {
@@ -41,6 +49,31 @@ export function provisionPlaceholder(before: string, after: string, citation = P
   const following = after.slice(consumeAfter)[0] ?? "";
   if (following && !CLOSER.test(following)) text = `${text} `;
   return { text, consumeBefore, consumeAfter };
+}
+
+/** Keep recorded spans aligned when a region is replaced. */
+export function shiftPlaceholderSpans(spans: PlaceholderSpan[], replaceStart: number, replaceEnd: number, delta: number): PlaceholderSpan[] {
+  return spans.flatMap((span) => {
+    if (span.end <= replaceStart) return [span];
+    if (span.start >= replaceEnd) return [{ start: span.start + delta, end: span.end + delta }];
+    return [];
+  });
+}
+
+/** After formatting, the inserted bracket still identifies the span. */
+export function realignPlaceholderSpans(before: string, after: string, spans: PlaceholderSpan[]): PlaceholderSpan[] {
+  if (before === after) return spans;
+  let cursor = 0;
+  const mapped: PlaceholderSpan[] = [];
+  for (const span of [...spans].sort((left, right) => left.start - right.start)) {
+    const snippet = before.slice(span.start, span.end);
+    if (!snippet) continue;
+    const at = after.indexOf(snippet, cursor);
+    if (at < 0) continue;
+    mapped.push({ start: at, end: at + snippet.length });
+    cursor = at + snippet.length;
+  }
+  return mapped;
 }
 
 function isSentenceStart(before: string): boolean {

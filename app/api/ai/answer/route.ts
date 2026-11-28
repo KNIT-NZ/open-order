@@ -74,8 +74,9 @@ import {
 } from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
+import { randomBytes } from "node:crypto";
 import { applyStructuredHedge, assessCitations, isNumberRangeBracket, rewriteByGrammar } from "@/lib/citations/grammar";
-import { ROUTE_PLACEHOLDER_CITATION, renderRoutePlaceholders } from "@/lib/citations/placeholder";
+import { neutraliseForgedMarkers, realignPlaceholderSpans, renderInsertedPlaceholders, type PlaceholderSpan } from "@/lib/citations/placeholder";
 import {
   answerSectionHasContent,
   mentionRewriteEdit,
@@ -1005,11 +1006,17 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             if (invalid.length === 0 && assessed.stripSpans.length === 0) return { ok: true as const };
             return { ok: false as const, invalidAuthorityMentions: invalid.map((mention) => mention.ref) };
           };
-          const rewriteDraft = (answerText: string) => {
+          const placeholderToken = `ph${randomBytes(16).toString("hex").replace(/[0-9]/g, (digit) => "abcdefghij"[Number(digit)])}`;
+          const rewriteDraft = (answerText: string, priorSpans: PlaceholderSpan[] = []) => {
             const assessed = assessCitations(answerText, grammarAuthorities);
-            const rewrite = rewriteByGrammar(answerText, assessed, ROUTE_PLACEHOLDER_CITATION);
-            if (rewrite.text === answerText) return { text: answerText, removed: 0 };
-            return { text: normalizeAnswerFormatting(rewrite.text), removed: rewrite.removed };
+            const rewrite = rewriteByGrammar(answerText, assessed, placeholderToken, priorSpans);
+            if (rewrite.text === answerText) return { text: answerText, removed: 0, placeholderSpans: priorSpans };
+            const text = normalizeAnswerFormatting(rewrite.text);
+            return {
+              text,
+              removed: rewrite.removed,
+              placeholderSpans: realignPlaceholderSpans(rewrite.text, text, rewrite.placeholderSpans),
+            };
           };
           const commitRewrites = (removed: number) => {
             if (removed <= 0) return;
@@ -1192,12 +1199,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               temperature: 0.2,
             });
 
-            let finalAnswer = normalizeAnswerFormatting(
+            let finalAnswer = neutraliseForgedMarkers(normalizeAnswerFormatting(
               normalizeAnswerCitationLabels({
                 answerText: draftedAnswer,
                 authorities: authorityPayload,
               }),
-            );
+            )).split(`[${placeholderToken}]`).join("[citation not verified]");
+            let routePlaceholderSpans: PlaceholderSpan[] = [];
             const draftedSettlement = parseSettlement(finalAnswer);
             finalAnswer = draftedSettlement.text;
             outcomeState.settlement = draftedSettlement.settlement;
@@ -1299,10 +1307,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
             const citationValidation = citeCheck(finalAnswer);
             const flatRange = (value: string) => value.replace(/--|[‐‑‒–—−-]/g, "-").replace(/\s+/g, " ").trim();
-            const downgradeNumberRanges = (answerText: string, invalid: string[]): string | null => {
+            const downgradeNumberRanges = (answerText: string, invalid: string[]): { text: string; placeholderSpans: PlaceholderSpan[] } | null => {
               if (invalid.length === 0 || !invalid.every((item) => isNumberRangeBracket(item))) return null;
               const wanted = new Set(invalid.map((item) => flatRange(item)));
+              const bracket = `[${placeholderToken}]`;
               let next = "";
+              let placeholderSpans: PlaceholderSpan[] = [];
               for (let index = 0; index < answerText.length; index += 1) {
                 if (answerText[index] !== "[") {
                   next += answerText[index];
@@ -1322,14 +1332,20 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const before = next.slice(-1);
                 const after = answerText[close + 1] ?? "";
                 if (before && /[A-Za-z0-9\]]/.test(before)) next += " ";
-                next += `[${ROUTE_PLACEHOLDER_CITATION}]`;
+                const at = next.length;
+                next += bracket;
+                placeholderSpans.push({ start: at, end: at + bracket.length });
                 if (after && !/[\s.,;:!?\])]/.test(after)) next += " ";
                 index = close;
               }
-              next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?\])])/g, "$1");
-              next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
-              if (!next.trim() || !citeCheck(next).ok) return null;
-              return next;
+              const collapsed = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?\])])/g, "$1");
+              placeholderSpans = realignPlaceholderSpans(next, collapsed, placeholderSpans);
+              const normalized = normalizeAnswerFormatting(collapsed);
+              placeholderSpans = realignPlaceholderSpans(collapsed, normalized, placeholderSpans);
+              const cleaned = removeEmptyAnswerSections(normalized);
+              placeholderSpans = realignPlaceholderSpans(normalized, cleaned, placeholderSpans);
+              if (!cleaned.trim() || !citeCheck(cleaned).ok) return null;
+              return { text: cleaned, placeholderSpans };
             };
 
             if (!citationValidation.ok) {
@@ -1338,7 +1354,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 ? downgradeNumberRanges(finalAnswer, citationValidation.invalidCitations)
                 : null;
               if (kept) {
-                finalAnswer = kept;
+                finalAnswer = kept.text;
+                routePlaceholderSpans = kept.placeholderSpans;
                 outcomeState.pruned = true;
                 noteCheckedWithholding();
               } else if (!onlyRanges || checkMentions(finalAnswer).ok) {
@@ -1383,14 +1400,16 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             if (!checkMentions(finalAnswer).ok) {
-              const rewrittenDraft = rewriteDraft(finalAnswer);
+              const rewrittenDraft = rewriteDraft(finalAnswer, routePlaceholderSpans);
               finalAnswer = rewrittenDraft.text;
+              routePlaceholderSpans = rewrittenDraft.placeholderSpans;
               const removedCount = rewrittenDraft.removed;
               commitRewrites(removedCount);
 
               const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
                 authorities: authorityPayload,
+                placeholderSpans: routePlaceholderSpans,
               });
 
               finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
@@ -1411,8 +1430,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               const recheckCitations = citeCheck(finalAnswer);
 
               const keptRanges = recheckCitations.ok ? null : downgradeNumberRanges(finalAnswer, recheckCitations.invalidCitations);
-              if (keptRanges && checkMentions(keptRanges).ok) {
-                finalAnswer = keptRanges;
+              if (keptRanges && checkMentions(keptRanges.text).ok) {
+                finalAnswer = keptRanges.text;
+                routePlaceholderSpans = keptRanges.placeholderSpans;
                 outcomeState.pruned = true;
                 noteCheckedWithholding();
               } else if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
@@ -1455,7 +1475,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               }
             }
 
-            finalAnswer = renderRoutePlaceholders(finalAnswer);
+            finalAnswer = renderInsertedPlaceholders(finalAnswer, placeholderToken);
             let answerClaims = extractAnswerClaims(finalAnswer);
 
             if (answerClaims.length === 0) {
@@ -1560,11 +1580,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   temperature: 0.1,
                 });
                 repairPhase = "deterministic_checks";
-                let repairedAnswer = normalizeAnswerFormatting(
+                let repairedAnswer = neutraliseForgedMarkers(normalizeAnswerFormatting(
                   normalizeAnswerCitationLabels({
                     answerText: proposedRepair, authorities: authorityPayload,
                   }),
-                );
+                )).split(`[${placeholderToken}]`).join("[citation not verified]");
                 const repairedPrune = pruneValidatedAnswerContent({
                   answerText: repairedAnswer, authorities: authorityPayload,
                 });
@@ -1572,7 +1592,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
                 const repairedRewrite = rewriteDraft(repairedAnswer);
-                repairedAnswer = renderRoutePlaceholders(repairedRewrite.text);
+                repairedAnswer = renderInsertedPlaceholders(repairedRewrite.text, placeholderToken);
                 noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = citeCheck(repairedAnswer);
@@ -1845,8 +1865,9 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
                 const rawLine = recovery.bottomLine.trim();
                 const singleLine = rawLine.length >= 20 && !rawLine.includes("\n") && /\[[^\]]+\]/.test(rawLine);
-                const recoveredRewrite = singleLine ? rewriteDraft(rawLine) : { text: rawLine, removed: 0 };
-                const line = renderRoutePlaceholders(recoveredRewrite.text).trim();
+                const recoveredSource = neutraliseForgedMarkers(rawLine).split(`[${placeholderToken}]`).join("[citation not verified]");
+                const recoveredRewrite = singleLine ? rewriteDraft(recoveredSource) : { text: recoveredSource, removed: 0, placeholderSpans: [] as PlaceholderSpan[] };
+                const line = renderInsertedPlaceholders(recoveredRewrite.text, placeholderToken).trim();
                 if (singleLine && line.length >= 20 && !line.includes("\n") &&
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);

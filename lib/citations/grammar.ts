@@ -3,7 +3,7 @@
  * in the reason codes. Trees come from full section text or, in tests, from
  * the corpus provision_tree.
  */
-import { PLACEHOLDER_CITATION, provisionPlaceholder } from "@/lib/citations/placeholder";
+import { PLACEHOLDER_CITATION, provisionPlaceholder, shiftPlaceholderSpans, type PlaceholderSpan } from "@/lib/citations/placeholder";
 
 export const RULE_CODES = [
   "grounded",
@@ -1669,7 +1669,12 @@ function displayLabel(cpk: string, labels: string[]): string {
   return labels.find((label) => labelToCpk(label) === wanted) ?? cpk;
 }
 
-export function rewriteByGrammar(text: string, assessment: GrammarAssessment, citation = PLACEHOLDER_CITATION): { text: string; removed: number } {
+export function rewriteByGrammar(
+  text: string,
+  assessment: GrammarAssessment,
+  citation = PLACEHOLDER_CITATION,
+  priorSpans: PlaceholderSpan[] = [],
+): { text: string; removed: number; placeholderSpans: PlaceholderSpan[] } {
   type Edit = { start: number; end: number; kind: "rewrite" | "strip" };
   const edits: Edit[] = [
     ...assessment.rewriteSpans.map((span) => ({ start: span.start, end: span.end, kind: "rewrite" as const })),
@@ -1677,7 +1682,9 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment, ci
   ].sort((a, b) => b.start - a.start || b.end - a.end);
   let next = text;
   let removed = 0;
+  let placeholderSpans = priorSpans.map((span) => ({ ...span }));
   let lastStart = Number.POSITIVE_INFINITY;
+  const bracket = `[${citation}]`;
   for (const edit of edits) {
     if (edit.start === lastStart) continue;
     lastStart = edit.start;
@@ -1686,6 +1693,7 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment, ci
       const slice = next.slice(edit.start, edit.end);
       const stripped = slice.replace(/\s*\(referred to in[^)]*not retrieved\)/i, "");
       if (stripped === slice) continue;
+      placeholderSpans = shiftPlaceholderSpans(placeholderSpans, edit.start, edit.end, stripped.length - slice.length);
       next = `${next.slice(0, edit.start)}${stripped}${next.slice(edit.end)}`;
       continue;
     }
@@ -1693,8 +1701,14 @@ export function rewriteByGrammar(text: string, assessment: GrammarAssessment, ci
     const replaceStart = edit.start - shaped.consumeBefore;
     const replaceEnd = edit.end + shaped.consumeAfter;
     if (replaceStart < 0 || replaceEnd > next.length) continue;
+    placeholderSpans = shiftPlaceholderSpans(placeholderSpans, replaceStart, replaceEnd, shaped.text.length - (replaceEnd - replaceStart));
+    const bracketAt = shaped.text.indexOf(bracket);
+    if (bracketAt >= 0) {
+      const at = replaceStart + bracketAt;
+      placeholderSpans.push({ start: at, end: at + bracket.length });
+    }
     next = `${next.slice(0, replaceStart)}${shaped.text}${next.slice(replaceEnd)}`;
     removed += 1;
   }
-  return { text: next, removed };
+  return { text: next, removed, placeholderSpans };
 }
