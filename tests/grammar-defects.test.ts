@@ -620,12 +620,12 @@ test("G2 a qualification named in another sentence does not cover the cited sent
     "A member must not interrupt another member who is speaking [SO 80]. Unless the Speaker has given leave for an interruption [SO 80].",
     "A member must not interrupt another member who is speaking [SO 80]. Except where the Speaker gives leave for an interruption [SO 80].",
     "A member must not interrupt another member who is speaking [SO 80]. The exception is where the Speaker gives leave for an interruption [SO 80].",
-    "A member must not interrupt another member who is speaking [SO 80]. That rule does not apply where the Speaker has given leave [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. That rule does not apply where the Speaker has given leave for an interruption [SO 80].",
     "However, the Speaker may give leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
-    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption.",
-    "However, the Speaker may give leave for an interruption. A member must not interrupt another member who is speaking [SO 80].",
-    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave.",
-    "The exception is where the Speaker gives leave. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. However, the Speaker may give leave for an interruption [SO 80].",
+    "However, the Speaker may give leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
+    "A member must not interrupt another member who is speaking [SO 80]. But the Speaker may give leave for an interruption [SO 80].",
+    "The exception is where the Speaker gives leave for an interruption [SO 80]. A member must not interrupt another member who is speaking [SO 80].",
   ];
   const lookalikes = [
     "The Speaker has given leave for many things [SO 7]. A member must not interrupt another member who is speaking [SO 80].",
@@ -673,6 +673,60 @@ test("G2 a qualification named in another sentence does not cover the cited sent
   assert.equal(servedNext, nextSentence.length);
   assert.equal(lookalikes.length, 20);
   assert.equal(servedLookalikes, 0);
+});
+
+test("H1 adversarial adjacent sentences do not state the exception", () => {
+  const section = "(1) A member must not interrupt another member who is speaking unless the Speaker has given leave.";
+  const admitted = [{ citationLabel: "SO 80", sectionContent: section }, { citationLabel: "SO 7", sectionContent: "The Speaker may act." }];
+  const rule = "A member must not interrupt another member who is speaking [SO 80].";
+  const categories: Record<string, string[]> = {
+    negated: [
+      `${rule} However, the Speaker may not give leave for an interruption [SO 80].`,
+      `${rule} However, the Speaker cannot give leave for an interruption [SO 80].`,
+      `${rule} However, the Speaker is not permitted to give leave for an interruption [SO 80].`,
+      `${rule} However, a member must not interrupt without the leave of the Speaker [SO 80].`,
+    ],
+    wrongBody: [
+      `${rule} However, the House, not the Speaker, may grant leave for an interruption [SO 80].`,
+      `${rule} However, a person other than the Speaker may give leave for an interruption [SO 80].`,
+      `${rule} However, neither the Speaker nor the Clerk may give leave for an interruption [SO 80].`,
+    ],
+    differentActBefore: [
+      `Unless the Speaker has given leave, a member must not speak twice in a debate [SO 80]. ${rule}`,
+      `However, the Speaker may give leave to move a motion [SO 80]. ${rule}`,
+    ],
+    differentActAfter: [
+      `${rule} However, the Speaker may give leave to move a motion [SO 80].`,
+      `${rule} However, the Speaker may give leave to adjourn the House [SO 80].`,
+    ],
+    speakerWithoutException: [
+      `The Speaker may act [SO 80]. ${rule}`,
+      `${rule} The Speaker may act in the Chair [SO 80].`,
+      `The Speaker was present [SO 80]. ${rule}`,
+      `${rule} However, the Speaker may preside over the debate [SO 80].`,
+    ],
+    broadened: [
+      `${rule} However, the Speaker may give leave for an interruption at any time [SO 80].`,
+      `${rule} However, the Speaker always gives leave for an interruption [SO 80].`,
+      `${rule} However, any member may interrupt if the Speaker has given leave [SO 80].`,
+    ],
+    wrongCondition: [
+      `${rule} However, the Speaker may give a ruling on a point of order during an interruption [SO 80].`,
+    ],
+    missingCitation: [
+      `${rule} However, the Speaker may give leave for an interruption.`,
+      `However, the Speaker may give leave for an interruption. ${rule}`,
+    ],
+  };
+  const served: Record<string, number> = {};
+  for (const [name, rows] of Object.entries(categories)) {
+    served[name] = rows.filter((text) => findOmittedSourceQualifications({
+      claims: [{ id: name, text, citations: [...text.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]) }],
+      authorities: admitted,
+    }).length === 0).length;
+    assert.equal(served[name], 0, name);
+  }
+  console.log(JSON.stringify({ adversarial: served }));
 });
 
 test("OO-DEF-164 a joined citation is kept only when every label passes", () => {

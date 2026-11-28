@@ -129,12 +129,6 @@ function carriesCitation(sentence: string, citation: string): boolean {
   return needle.length > 0 && (sentence.includes(needle) || sentence.includes(`[${needle}]`));
 }
 
-function exceptionLead(sentence: string): boolean {
-  const start = sentence.replace(/^\[[^\]]+\]\s*/, "").trim();
-  return /^(?:however|but|unless|except|that said|that rule|the exception)\b/i.test(start)
-    || /\b(?:does not apply|do not apply|exception is|except where)\b/i.test(start);
-}
-
 function armActor(arm: string): string | null {
   const match = arm.match(/\b(speaker|clerk|chairperson|committee|house|member)\b/i);
   return match ? match[1].toLowerCase() : null;
@@ -156,26 +150,51 @@ function differentAct(sentence: string, claim: string, arm: string): boolean {
   });
 }
 
-function mentionsClaimAct(sentence: string, claimSentence: string): boolean {
-  const acts = tokens(claimSentence).filter((word) => word.length >= 6);
-  const text = sentence.toLowerCase();
-  return acts.some((act) => text.includes(act.slice(0, 5)));
+function permissionNegated(sentence: string): boolean {
+  return /\b(?:may not|shall not|must not|cannot|can't|can not|is not permitted|are not permitted|is not allowed|are not allowed|without(?:\s+the)?\s+leave)\b/i.test(sentence);
 }
 
-/** An adjacent sentence may state the source exception. A lookalike about some other act does not. */
+function actorIsPositive(sentence: string, actor: string): boolean {
+  if (!sentence.toLowerCase().includes(actor)) return false;
+  const denied = new RegExp(String.raw`\b(?:not|other than|rather than|except|without|neither|nor)\s+(?:the\s+)?${actor}\b`, "i");
+  return !denied.test(sentence);
+}
+
+function ruleActStem(ruleSentence: string): string {
+  const match = ruleSentence.match(/\b(?:must|shall|may|cannot|can't)\s+(?:not\s+)?(\w+)/i);
+  const verb = (match?.[1] ?? "").toLowerCase();
+  if (!verb || /^(?:not|be|have|do|give|grant)$/.test(verb)) return "";
+  return verb.replace(/(?:ing|ion|e)$/i, "");
+}
+
+function governsSameAct(neighbor: string, ruleSentence: string): boolean {
+  const stem = ruleActStem(ruleSentence);
+  if (stem.length < 4) return false;
+  return neighbor.toLowerCase().includes(stem);
+}
+
+function broaderThanSource(sentence: string): boolean {
+  return /\b(?:at any time|at all times|always|whenever|in any case|any member may|any person may|never required|no longer required|leave is not required)\b/i.test(sentence);
+}
+
+/**
+ * An adjacent sentence states the source exception only when every guard holds.
+ * A However lead-in, a negated permission, or a different act is not enough.
+ */
 function isAdjacentException(neighbor: string, arm: { kind: string; text: string }, citation: string, claimSentence: string): boolean {
   const armText = `${arm.kind} ${arm.text}`;
-  const lead = exceptionLead(neighbor);
-  const sameRule = carriesCitation(neighbor, citation) && mentionsClaimAct(neighbor, claimSentence);
-  if (!lead && !sameRule) return false;
+  if (!carriesCitation(neighbor, citation)) return false;
+  if (permissionNegated(neighbor)) return false;
+  if (broaderThanSource(neighbor)) return false;
   if (/\b(?:elsewhere|different matter|many things|other matters|unrelated|something else)\b/i.test(neighbor)) return false;
   const actor = armActor(armText);
   const condition = armCondition(armText);
-  const text = neighbor.toLowerCase();
-  if (actor && !text.includes(actor)) return false;
-  if (condition && !text.includes(condition)) return false;
+  if (!actor || !condition) return false;
+  if (!actorIsPositive(neighbor, actor)) return false;
+  if (!neighbor.toLowerCase().includes(condition)) return false;
+  if (!governsSameAct(neighbor, claimSentence)) return false;
   if (differentAct(neighbor, claimSentence, armText)) return false;
-  return Boolean(actor || condition);
+  return true;
 }
 
 function qualificationStated(sentence: string, sentences: string[], arm: { kind: string; text: string }, citation: string, claim: string): boolean {
