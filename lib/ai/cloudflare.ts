@@ -11,8 +11,10 @@ const PROVIDER_ID = "cloudflare";
 export const CLOUDFLARE_FREE_TIER_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
 /** Gemini does not set a token cap. These ceilings replace Cloudflare's 256-token default. */
-export const CLOUDFLARE_ANSWER_MAX_TOKENS = 3000;
+export const CLOUDFLARE_ANSWER_MAX_TOKENS = 2000;
 export const CLOUDFLARE_JSON_MAX_TOKENS = 1500;
+export const CLOUDFLARE_JSON_TIMEOUT_MS = 30_000;
+export const CLOUDFLARE_DRAFT_TIMEOUT_MS = 75_000;
 
 const ALLOWED_MODELS = new Set([
   "@cf/google/gemma-4-26b-a4b-it",
@@ -300,8 +302,45 @@ function shapeError(): AiProviderError {
   });
 }
 
+/** Thinking stays off unless CLOUDFLARE_DISABLE_THINKING is exactly "0". */
+export function cloudflareThinkingDisabled(): boolean {
+  return process.env.CLOUDFLARE_DISABLE_THINKING?.trim() !== "0";
+}
+
+function draftTask(task: string, drafting: boolean): boolean {
+  return drafting || task === "answer.generate" || task === "answer.repair";
+}
+
+function readTimeoutMs(raw: string | undefined, fallback: number): number {
+  const text = raw?.trim() ?? "";
+  if (!text) return fallback;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(120_000, Math.max(10_000, Math.trunc(parsed)));
+}
+
+let timeoutOverrideMs: number | null = null;
+
+/** Drafting and answer generation use the longer timeout. Other tasks stay at the JSON timeout. */
+export function cloudflareRequestTimeoutMs(task: string, drafting = false): number {
+  if (timeoutOverrideMs !== null) return timeoutOverrideMs;
+  return draftTask(task, drafting)
+    ? readTimeoutMs(process.env.CLOUDFLARE_DRAFT_TIMEOUT_MS, CLOUDFLARE_DRAFT_TIMEOUT_MS)
+    : readTimeoutMs(process.env.CLOUDFLARE_JSON_TIMEOUT_MS, CLOUDFLARE_JSON_TIMEOUT_MS);
+}
+
+const REQUEST_BUDGET_MARGIN_MS = 1_000;
+
+/** The armed timer is the task timeout, or the time left before the 270s request deadline. */
+export function cloudflareArmedTimeoutMs(task: string, drafting = false, now = Date.now(), budgetDeadlineAt?: number): number {
+  const taskTimeout = cloudflareRequestTimeoutMs(task, drafting);
+  if (budgetDeadlineAt === undefined || !Number.isFinite(budgetDeadlineAt)) return taskTimeout;
+  const remaining = Math.trunc(budgetDeadlineAt - now - REQUEST_BUDGET_MARGIN_MS);
+  return Math.min(taskTimeout, Math.max(0, remaining));
+}
+
 function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextRequest["task"], systemInstruction: string, prompt: string, temperature: number | undefined, drafting: boolean, model: string): string {
-  const cap = drafting || task === "answer.generate" || task === "answer.repair"
+  const cap = draftTask(task, drafting)
     ? CLOUDFLARE_ANSWER_MAX_TOKENS
     : CLOUDFLARE_JSON_MAX_TOKENS;
   const limit = model === "@cf/openai/gpt-oss-120b"
@@ -316,6 +355,22 @@ function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextReques
     // Gemini's own default is 0.2. A validator call passes 0 and must stay at 0.
     temperature: temperature ?? 0.2,
     ...limit,
+    // Only Gemma documents enable_thinking. Other allow-listed models omit the field.
+    ...(model === CLOUDFLARE_FREE_TIER_MODEL && cloudflareThinkingDisabled()
+      ? { chat_template_kwargs: { enable_thinking: false } }
+      : {}),
+  });
+}
+
+function providerTimeoutError(): AiProviderError {
+  return new AiProviderError({
+    message: "The AI provider timed out.",
+    kind: "unavailable",
+    retryable: true,
+    provider: PROVIDER_ID,
+    statusCode: null,
+    rawMessage: "cloudflare_timeout",
+    cause: { code: "DEADLINE_EXCEEDED" },
   });
 }
 
@@ -378,15 +433,12 @@ async function readPayload(response: Response, signal: AbortSignal): Promise<unk
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-let requestTimeoutMs = DEFAULT_TIMEOUT_MS;
-
 export function setCloudflareRequestTimeoutForTests(ms: number): void {
-  requestTimeoutMs = ms;
+  timeoutOverrideMs = ms;
 }
 
 export function resetCloudflareRequestTimeoutForTests(): void {
-  requestTimeoutMs = DEFAULT_TIMEOUT_MS;
+  timeoutOverrideMs = null;
 }
 
 async function complete(
@@ -399,11 +451,12 @@ async function complete(
   onStart: (() => void) | undefined,
   drafting: boolean,
   model: string,
+  budgetDeadlineAt?: number,
 ): Promise<Exclude<Content, { kind: "missing" }>> {
   if (cloudflareQuotaSkipped()) throw cloudflareQuotaSkipError();
   if (callerSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
+  const timer = setTimeout(() => timeout.abort(), cloudflareArmedTimeoutMs(task, drafting, Date.now(), budgetDeadlineAt));
   const signal = callerSignal ? AbortSignal.any([callerSignal, timeout.signal]) : timeout.signal;
   try {
     onStart?.();
@@ -439,7 +492,11 @@ async function complete(
     return content;
   } catch (error) {
     if (error instanceof AiProviderError) throw error;
-    if (callerSignal?.aborted || timeout.signal.aborted || aborted(error, signal)) {
+    if (callerSignal?.aborted) {
+      throw new DOMException("The answer deadline elapsed.", "AbortError");
+    }
+    if (timeout.signal.aborted) throw providerTimeoutError();
+    if (aborted(error, signal)) {
       throw new DOMException("The answer deadline elapsed.", "AbortError");
     }
     const errno = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
@@ -478,7 +535,7 @@ export async function generateJson<T>(request: AiGenerateJsonRequest, fetchImpl:
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(model), false, model,
+      () => request.onProviderAttemptStart?.(model), false, model, request.budgetDeadlineAt,
     );
     const parsed = (content.kind === "object" ? content.value : parseJsonText(content.text)) as T;
     request.validate?.(parsed);
@@ -490,7 +547,7 @@ export async function generateJson<T>(request: AiGenerateJsonRequest, fetchImpl:
       throw error;
     }
     if (error instanceof AiProviderError) {
-      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
+      noteOutcome(request, error.rawMessage === "cloudflare_timeout" ? "timeout" : error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
       throw error;
     }
     noteOutcome(request, "other", model);
@@ -509,7 +566,7 @@ export async function streamText(request: AiStreamTextRequest, fetchImpl: FetchL
   try {
     const content = await complete(
       request.task, request.systemInstruction, request.prompt, request.temperature, request.signal, fetchImpl,
-      () => request.onProviderAttemptStart?.(model), true, model,
+      () => request.onProviderAttemptStart?.(model), true, model, request.budgetDeadlineAt,
     );
     const text = content.kind === "text" ? content.text : JSON.stringify(content.value);
     request.onChunk?.(text);
@@ -521,7 +578,7 @@ export async function streamText(request: AiStreamTextRequest, fetchImpl: FetchL
       throw error;
     }
     if (error instanceof AiProviderError) {
-      noteOutcome(request, error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
+      noteOutcome(request, error.rawMessage === "cloudflare_timeout" ? "timeout" : error.kind === "rate_limited" ? "429" : error.retryable ? "5xx" : "other", model);
       throw error;
     }
     noteOutcome(request, "other", model);
