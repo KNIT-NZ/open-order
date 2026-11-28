@@ -22,8 +22,11 @@ const SOURCE_PIN = String.raw`(?:\((?:\d+[a-z]*|[a-z]{1,4})\))+`;
 
 /** Parent authority for a citation. Letter-only, two-letter and deeper pins map back to that parent. */
 export function sourceLabel(citation: string): string {
-  const trimmed = citation.trim();
-  const mapped = new RegExp(`^(${SOURCE_PARENT})\\s*(?:${SOURCE_PIN}(?:\\s*[-–]\\s*${SOURCE_PIN})?)?$`, "i").exec(trimmed);
+  const trimmed = citation.trim().replace(/\s+/g, " ");
+  const normalized = trimmed.replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
+  const one = `${SOURCE_PIN}(?:\\s*(?:-|–|—|to|through)\\s*${SOURCE_PIN})?`;
+  const tail = `(?:\\s*${one}(?:\\s*(?:,|and|or)\\s*${one})*)?`;
+  const mapped = new RegExp(`^(${SOURCE_PARENT})${tail}$`, "i").exec(normalized);
   return (mapped ? mapped[1] : trimmed).replace(/\s+/g, " ");
 }
 function key(label: string): string {

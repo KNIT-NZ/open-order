@@ -272,6 +272,8 @@ type Item = {
   number: number | null;
   slash: boolean;
   range: boolean;
+  pinRange: boolean;
+  rangeEnd: string | null;
   open: boolean;
   year: number | null;
   yearBound: boolean;
@@ -352,6 +354,7 @@ function isStructuredGroup(body: string): boolean {
 }
 
 function isUnreadablePinGroup(body: string): boolean {
+  if (/^\((?:1[8-9]\d{2}|20\d{2})\s+edition\)$/i.test(body)) return false;
   if (body.startsWith("(") && (isValidPinGroup(body) || /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body) || isStructuredGroup(body))) return false;
   return body.length > 2;
 }
@@ -447,6 +450,8 @@ function makeItem(partial: Partial<Item> & Pick<Item, "kind" | "ref" | "textStar
     number: null,
     slash: false,
     range: false,
+    pinRange: false,
+    rangeEnd: null,
     open: false,
     year: null,
     yearBound: false,
@@ -496,6 +501,45 @@ function joinerAt(text: string, index: number): { end: number; text: string } | 
     return null;
   }
   return { end: index + match[0].length, text: match[0] };
+}
+
+function readEditionPhrase(text: string, index: number): { year: number; end: number } | null {
+  const wrapped = /^\s*\((1[8-9]\d{2}|20\d{2})\s+edition\)/i.exec(text.slice(index));
+  if (wrapped) return { year: Number(wrapped[1]), end: index + wrapped[0].length };
+  const comma = /^\s*,\s*(1[8-9]\d{2}|20\d{2})\s+edition\b/i.exec(text.slice(index));
+  if (comma) return { year: Number(comma[1]), end: index + comma[0].length };
+  return null;
+}
+
+function readPinRange(text: string, index: number): { pin: string; end: number } | null {
+  const match = /^\s*(?:-|–|—|to|through)\s*(\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\))/i.exec(text.slice(index));
+  if (!match) return null;
+  if (/^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(match[1])) return null;
+  return { pin: match[1], end: index + match[0].length };
+}
+
+function pinToken(key: string): string {
+  return (/\(([^()]*)\)$/.exec(key)?.[1] ?? "").toLowerCase();
+}
+
+function pinsInOrder(start: string, end: string): boolean {
+  const left = pinToken(start);
+  const right = pinToken(end);
+  const leftNumber = /^(\d+)([a-z]*)$/i.exec(left);
+  const rightNumber = /^(\d+)([a-z]*)$/i.exec(right);
+  if (leftNumber && rightNumber) {
+    const delta = Number(leftNumber[1]) - Number(rightNumber[1]);
+    if (delta !== 0) return delta < 0;
+    return leftNumber[2].toLowerCase() <= rightNumber[2].toLowerCase();
+  }
+  return left <= right;
+}
+
+/** A section or pin number range. Letter ranges are a separate check. */
+export function isNumberRangeBracket(text: string): boolean {
+  const flat = text.replace(/\s+/g, " ");
+  if (/\(\d+[A-Za-z]*\)\s*(?:-|–|—|to|through)\s*\(\d+/i.test(flat)) return true;
+  return /\d+[A-Za-z]*(?:\s*\/\s*\d+)?\s*(?:-|–|—|to|through)\s*\d+/i.test(flat);
 }
 
 function rangeAt(text: string, index: number): { end: number } | null {
@@ -575,7 +619,7 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       cursor = xref.end;
       break;
     }
-    const year = readYear(text, cursor);
+    const year = readYear(text, cursor) ?? readEditionPhrase(text, cursor);
     if (year && items.length === 1) {
       const item = items[0];
       item.year = year.year;
@@ -592,6 +636,17 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       items.push(makeItem({ kind: "open_range", ref: "OPEN", open: true, textStart: start, textEnd: end }));
       cursor = end;
       break;
+    }
+    const continued = items[items.length - 1];
+    const pinRange = continued?.pins ? readPinRange(text, cursor) : null;
+    if (pinRange && continued?.cpk) {
+      const parent = continued.cpk.replace(/\([^()]*\)$/, "");
+      continued.pinRange = true;
+      continued.rangeEnd = `${parent}${pinRange.pin}`;
+      continued.textEnd = pinRange.end;
+      continued.ref = `${continued.cpk}..${pinRange.pin}`;
+      cursor = pinRange.end;
+      continue;
     }
     const range = rangeAt(text, cursor);
     if (range && items[items.length - 1].number !== null) {
@@ -764,6 +819,20 @@ function readRuling(text: string, index: number, numberAt: number, inBracket: bo
   if (pinTail.end > pinTail.start) {
     const base = makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end });
     return { plural: false, end: pinTail.end, items: [base, pinResidue(text, pinTail.start, pinTail.end)] };
+  }
+  const edition = readEditionPhrase(text, end);
+  if (edition) {
+    const item = makeItem({
+      kind: "speakers_ruling",
+      ref: cpk.replace(/^R /, "SR "),
+      cpk,
+      pins: pins.pins,
+      year: edition.year,
+      yearBound: edition.year !== 2023,
+      textStart: index,
+      textEnd: edition.end,
+    });
+    return { plural: false, end: edition.end, items: [item] };
   }
   const range = rangeAt(text, end);
   if (range) {
@@ -1067,7 +1136,22 @@ function isRevoked(cpk: string): boolean {
   return false;
 }
 
+function gradePinRange(item: Item, admitted: Set<string>, trees: TreeIndex): { status: PartStatus; code: RuleCode; cpk: string | null } {
+  const start = item.cpk;
+  const end = item.rangeEnd;
+  if (!start || !end) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
+  const ancestor = ancestorOf(start, admitted);
+  if (!ancestor) return { status: "ungrounded", code: "ungrounded-not-admitted", cpk: start };
+  if (trees.unknown.has(ancestor)) return { status: "ungrounded", code: "unknown-tree", cpk: start };
+  const nodes = trees.nodes.get(ancestor);
+  if (!nodes) return { status: "ungrounded", code: "unknown-tree", cpk: start };
+  if (!nodes.has(start) || !nodes.has(end)) return { status: "ungrounded", code: "ungrounded-nonexistent", cpk: start };
+  if (!pinsInOrder(start, end)) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
+  return { status: "grounded", code: "grounded-pinpoint", cpk: start };
+}
+
 function gradeItem(item: Item, admitted: Set<string>, trees: TreeIndex, tags: Set<string>, where: "bracket" | "prose"): { status: PartStatus; code: RuleCode; cpk: string | null } {
+  if (item.pinRange) return gradePinRange(item, admitted, trees);
   if (item.quantity) return { status: "not_citation", code: "quantity", cpk: null };
   if (item.editorial) return { status: "not_citation", code: "neutral", cpk: null };
   if (item.title && !item.superseded) return { status: "not_citation", code: "neutral", cpk: null };

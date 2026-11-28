@@ -4,6 +4,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 import type { AiGenerateJsonRequest, AiStreamTextRequest } from "../lib/ai/types";
 import type { ProceduralSearchResponse, ProceduralSearchResult } from "../lib/procedural-search";
+import { ANSWER_STREAM_DEADLINE_MS } from "../lib/open-order/answer-stream";
 import { EMPTY_AI_DIAGNOSTICS } from "../lib/open-order/types";
 import { formatAiDebugSnapshot } from "../lib/open-order/format";
 import { publicFailureReason } from "../lib/ai/provider-resilience";
@@ -668,7 +669,7 @@ function source(sectionContent = QUOTE, citationLabel = "SO 1"): ProceduralSearc
 
 async function probe(
   mode: "no_grounded_claims" | "no_authority_selected" | "named_admitted_source" | "forged_suffix",
-  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean; bodies?: Record<string, string> },
+  options?: { sectionContent?: string; draft?: string; repairText?: string; bottomLine?: string; admit?: boolean; citationLabel?: string; labels?: string[]; support?: boolean; bodies?: Record<string, string>; onRequest?: (kind: "json" | "text", budgetDeadlineAt: number | undefined) => void },
 ) {
   const labels = options?.labels ?? [options?.citationLabel ?? "SO 1"];
   const pack = labels.map((label, index) => ({
@@ -684,6 +685,7 @@ async function probe(
     ? "Bottom line:\nThe House may suspend the sitting.\n\nBest authorities to inspect or cite:\n- [SO 1] Suspension\n\nSettlement: supported"
     : `Bottom line:\n${QUOTE} [SO 1]\n\nSettlement: supported`);
   const generateJson = async <T,>(request: AiGenerateJsonRequest): Promise<T> => {
+    options?.onRequest?.("json", request.budgetDeadlineAt);
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     if (request.systemInstruction.includes("ONLY planning targeted retrieval")) {
       const value = {
@@ -740,6 +742,7 @@ async function probe(
     return value as T;
   };
   const streamText = async (request: AiStreamTextRequest): Promise<string> => {
+    options?.onRequest?.("text", request.budgetDeadlineAt);
     request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
     request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
     if (options?.repairText && request.systemInstruction.includes("repairing an incomplete")) return options.repairText;
@@ -780,6 +783,52 @@ async function probe(
   assert.ok(done, "sent a done event");
   return done.data;
 }
+
+test("C3 an unvalidatable number range drops its line and the other lines are served", async () => {
+  const done = await probe("named_admitted_source", {
+    labels: ["SO 1", "SO 7"],
+    bodies: {
+      "SO 1": QUOTE,
+      "SO 7": "(1) first duty of the Speaker in the House\n(2) second duty of the Speaker in the House",
+    },
+    draft: [
+      "Bottom line:",
+      "The House may suspend the sitting [SO 1].",
+      "",
+      "What this means:",
+      "Both duties apply [SO 7(1) to (2)].",
+      "A wider range does not [SO 1 to 9].",
+      "",
+      "Settlement: supported",
+    ].join("\n"),
+  });
+  assert.notEqual(done.fallbackCode, "invalid_citations");
+  assert.equal(done.abstained, false);
+  const text = String(done.answerText);
+  assert.match(text, /The House may suspend the sitting \[SO 1\]/);
+  assert.match(text, /\[SO 7\(1\) to \(2\)\]/);
+  assert.equal(text.includes("[SO 1 to 9]"), false);
+  assert.equal(text.includes("SO 1 to 9"), false);
+});
+
+test("the route passes one 270s budget to json and text calls", async () => {
+  const seen: Array<{ kind: "json" | "text"; budgetDeadlineAt: number | undefined }> = [];
+  const before = Date.now();
+  await probe("named_admitted_source", {
+    draft: `Bottom line:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+    onRequest: (kind, budgetDeadlineAt) => { seen.push({ kind, budgetDeadlineAt }); },
+  });
+  const after = Date.now();
+  const json = seen.filter((item) => item.kind === "json");
+  const text = seen.filter((item) => item.kind === "text");
+  assert.ok(json.length >= 1);
+  assert.ok(text.length >= 1);
+  const budgets = seen.map((item) => item.budgetDeadlineAt);
+  assert.equal(budgets.every((budget) => budget === budgets[0]), true);
+  const budget = budgets[0] ?? 0;
+  assert.ok(budget >= before + ANSWER_STREAM_DEADLINE_MS);
+  assert.ok(budget <= after + ANSWER_STREAM_DEADLINE_MS);
+});
 
 test("no_grounded_claims records why every uncited claim was removed", async () => {
   const done = await probe("no_grounded_claims");

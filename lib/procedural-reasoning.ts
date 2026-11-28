@@ -1835,7 +1835,8 @@ function citationCandidates(prefix: string, part: string): string[] {
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
-  const parts = citationParts(cited);
+  const normalized = cited.replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ").replace(/\s+/g, " ").trim();
+  const parts = citationParts(normalized);
   let prefix = "";
   let parent = "";
   let sawLabel = false;

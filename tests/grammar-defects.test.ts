@@ -438,6 +438,73 @@ test("OO-DEF-148 a spaced parenthesis after a label is left intact", () => {
   assert.equal(proseOut.includes("SO 7 "), true);
 });
 
+test("C1 a letter range is grounded only when both endpoints exist and are in order", () => {
+  const section = "(a) alpha duty of the member\n(b) beta duty of the member\n(c) gamma duty of the member";
+  const labels = authorities(["SO 7"], new Map([["SO 7", section]]));
+  const nested = "(2) the member must—\n(a) speak once\n(b) sit down\n(c) leave the chamber";
+  const deep = authorities(["SO 7"], new Map([["SO 7", nested]]));
+  const grounded = assessCitations("The member has those duties [SO 7(a) to (c)].", labels);
+  assert.equal(grounded.reasonCode, "served");
+  assert.equal(grounded.mentions.some((mention) => mention.status === "grounded" && mention.cpk === "SO 7(a)"), true);
+  for (const input of ["[SO 7(a) to (z)]", "[SO 7(c) to (a)]", "[SO 7(a)–(z)]"]) {
+    const assessed = assessCitations(`The member has those duties ${input}.`, labels);
+    assert.notEqual(assessed.reasonCode, "served", input);
+    assert.equal(assessed.mentions.some((mention) => mention.status === "ungrounded"), true, input);
+  }
+  const phantom = assessCitations("The member must speak [SO 7(2)(a)–(z)].", deep);
+  assert.notEqual(phantom.reasonCode, "served");
+  assert.equal(phantom.mentions.some((mention) => mention.cpk === "SO 7(2)(z)" || mention.status === "ungrounded"), true);
+});
+
+test("C3 a pin number range is grounded only when both endpoints exist in order", () => {
+  const section = "(1) first duty of the Speaker\n(2) second duty of the Speaker";
+  const labels = authorities(["SO 7"], new Map([["SO 7", section]]));
+  const served = assessCitations("Both duties apply [SO 7(1) to (2)].", labels);
+  assert.equal(served.reasonCode, "served");
+  const dashed = assessCitations("Both duties apply [SO 7(1)–(2)].", labels);
+  assert.equal(dashed.reasonCode, "served");
+  const missing = assessCitations("Both duties apply [SO 7(1) to (9)].", labels);
+  assert.notEqual(missing.reasonCode, "served");
+  const reversed = assessCitations("Both duties apply [SO 7(2) to (1)].", labels);
+  assert.notEqual(reversed.reasonCode, "served");
+  assert.equal(reversed.mentions.some((mention) => mention.code === "ungrounded-range"), true);
+});
+
+test("C2 the guard and the legacy validator accept forms the grammar grounds", () => {
+  const section = "(1) first duty of the Speaker\n(2) second duty of the Speaker";
+  const claims = [
+    { id: "join", text: "A member must sit [SO 7(1) and (2)].", citations: ["SO 7(1) and (2)"] },
+    { id: "long", text: "A member must sit [Standing Order 7(1)].", citations: ["Standing Order 7(1)"] },
+  ];
+  const rejected = findOmittedSourceQualifications({
+    claims,
+    authorities: [{ citationLabel: "SO 7", sectionContent: section }],
+  });
+  assert.deepEqual(rejected, []);
+  assert.equal(sourceLabel("SO 7(1) and (2)"), "SO 7");
+  assert.equal(sourceLabel("Standing Order 7(1)"), "SO 7");
+  assert.equal(sourceLabel("SO 5(abcde)"), "SO 5(abcde)");
+  const legacy = validateAnswerCitations({
+    answerText: "The House may sit [SO 7(1) and (2)]. Also [Standing Order 7(1)].",
+    authorities: [{ citationLabel: "SO 7" }],
+  });
+  assert.deepEqual(legacy, { ok: true });
+});
+
+test("OO-DEF-149 a current edition phrase is not a withhold and a superseded year is", () => {
+  const labels = authorities(["SO 7"], new Map([["SO 7", "(1) first duty"]]));
+  for (const input of ["[SO 7 (2026 edition)]", "[SO 7, 2026 edition]", "[SO 7(2026 edition)]"]) {
+    const assessed = assessCitations(`The House may sit ${input}.`, labels);
+    assert.equal(assessed.reasonCode, "served", input);
+    assert.equal(assessed.brackets[0]?.class, "grounded", input);
+  }
+  for (const input of ["[SO 7 (2023)]", "[SO 7 (2023 edition)]"]) {
+    const assessed = assessCitations(`The House may sit ${input}.`, labels);
+    assert.notEqual(assessed.reasonCode, "served", input);
+    assert.equal(assessed.mentions.some((mention) => mention.code === "ungrounded-edition"), true, input);
+  }
+});
+
 test("OO-DEF-146 a quote from another sub-item does not corroborate the cited pin", () => {
   const section = [
     "The Speaker may—",

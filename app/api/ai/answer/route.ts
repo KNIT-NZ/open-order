@@ -74,7 +74,7 @@ import {
 } from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
-import { applyStructuredHedge, assessCitations, rewriteByGrammar } from "@/lib/citations/grammar";
+import { applyStructuredHedge, assessCitations, isNumberRangeBracket, rewriteByGrammar } from "@/lib/citations/grammar";
 import {
   answerSectionHasContent,
   mentionRewriteEdit,
@@ -1297,8 +1297,22 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             const citationValidation = citeCheck(finalAnswer);
+            const withoutNumberRanges = (answerText: string, invalid: string[]): string | null => {
+              if (invalid.length === 0 || !invalid.every((item) => isNumberRangeBracket(item))) return null;
+              let next = answerText;
+              for (const item of invalid) next = next.split(`[${item}]`).join("");
+              next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
+              if (!next.trim() || !citeCheck(next).ok) return null;
+              return next;
+            };
 
             if (!citationValidation.ok) {
+              const kept = withoutNumberRanges(finalAnswer, citationValidation.invalidCitations);
+              if (kept) {
+                finalAnswer = kept;
+                outcomeState.pruned = true;
+                noteCheckedWithholding();
+              } else {
               outcomeState.fallbackCode = "invalid_citations";
               outcomeState.abstained = true;
               // Count only: the unretrieved labels stay off the client payload.
@@ -1336,6 +1350,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               });
 
               return;
+              }
             }
 
             if (!checkMentions(finalAnswer).ok) {
@@ -1366,7 +1381,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
               const recheckCitations = citeCheck(finalAnswer);
 
-              if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
+              const keptRanges = recheckCitations.ok ? null : withoutNumberRanges(finalAnswer, recheckCitations.invalidCitations);
+              if (keptRanges) {
+                finalAnswer = keptRanges;
+                outcomeState.pruned = true;
+                noteCheckedWithholding();
+              } else if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
                 outcomeState.fallbackCode = "ungrounded_mentions";
                 outcomeState.abstained = true;
                 const fallbackReason = "The AI draft mentioned or cited authorities that could not be grounded.";

@@ -6,6 +6,7 @@ import {
   cloudflareArmedTimeoutMs,
   cloudflareRequestTimeoutMs,
   cloudflareThinkingDisabled,
+  cloudflareThinkingKwargs,
   generateJson,
   isCloudflareConfigured,
   resetCloudflareModelWarningForTests,
@@ -565,6 +566,21 @@ test("cloudflare disables Gemma thinking, splits timeouts, and classifies its ow
   }
 });
 
+test("cloudflare thinking flag follows the Gemma family, not only the default constant", () => {
+  const previous = process.env.CLOUDFLARE_DISABLE_THINKING;
+  delete process.env.CLOUDFLARE_DISABLE_THINKING;
+  try {
+    assert.deepEqual(cloudflareThinkingKwargs(CLOUDFLARE_FREE_TIER_MODEL), { chat_template_kwargs: { enable_thinking: false } });
+    assert.deepEqual(cloudflareThinkingKwargs("@cf/google/gemma-7b-it"), { chat_template_kwargs: { enable_thinking: false } });
+    assert.deepEqual(cloudflareThinkingKwargs("@cf/openai/gpt-oss-120b"), {});
+    process.env.CLOUDFLARE_DISABLE_THINKING = "0";
+    assert.deepEqual(cloudflareThinkingKwargs("@cf/google/gemma-7b-it"), {});
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDFLARE_DISABLE_THINKING;
+    else process.env.CLOUDFLARE_DISABLE_THINKING = previous;
+  }
+});
+
 test("cloudflare arms the env timer, clears it, and caps a late call", async () => {
   process.env.CLOUDFLARE_API_TOKEN = "token";
   process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT;
@@ -629,6 +645,38 @@ test("cloudflare arms the env timer, clears it, and caps a late call", async () 
     assert.equal(diagnostic.code, "DEADLINE_EXCEEDED");
     assert.equal(diagnostic.httpStatus, null);
     assert.equal(pending.size, 0);
+
+    assert.equal(
+      cloudflareArmedTimeoutMs("answer.validate", false, 1_000, Number.NaN),
+      cloudflareRequestTimeoutMs("answer.validate", false),
+    );
+    const near = Date.now() + 1_500;
+    await generateJson({
+      task: "answer.validate",
+      systemInstruction: "A",
+      prompt: "B",
+      budgetDeadlineAt: near,
+    }, async () => ok());
+    const jsonArmed = delays.at(-1) ?? -1;
+    assert.ok(jsonArmed > 0 && jsonArmed <= 1_000);
+
+    let fetches = 0;
+    let starts = 0;
+    const exhausted = await generateJson({
+      task: "answer.validate",
+      systemInstruction: "A",
+      prompt: "B",
+      budgetDeadlineAt: Date.now() - 5_000,
+      onProviderAttemptStart: () => { starts += 1; },
+    }, async () => {
+      fetches += 1;
+      return ok();
+    }).catch((error: unknown) => error);
+    assert.equal(fetches, 0);
+    assert.equal(starts, 0);
+    assert.ok(exhausted instanceof AiProviderError);
+    assert.equal(exhausted.rawMessage, "cloudflare_timeout");
+    assert.equal(classifyAiError(exhausted, "claim_validation").code, "DEADLINE_EXCEEDED");
   } finally {
     mock.timers.reset();
     delete process.env.CLOUDFLARE_JSON_TIMEOUT_MS;

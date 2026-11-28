@@ -307,6 +307,12 @@ export function cloudflareThinkingDisabled(): boolean {
   return process.env.CLOUDFLARE_DISABLE_THINKING?.trim() !== "0";
 }
 
+/** Gemma-family models accept enable_thinking. The free-tier default is one of them, not the key. */
+export function cloudflareThinkingKwargs(model: string): { chat_template_kwargs?: { enable_thinking: false } } {
+  if (!cloudflareThinkingDisabled() || !/gemma/i.test(model)) return {};
+  return { chat_template_kwargs: { enable_thinking: false } };
+}
+
 function draftTask(task: string, drafting: boolean): boolean {
   return drafting || task === "answer.generate" || task === "answer.repair";
 }
@@ -355,10 +361,7 @@ function generationBody(task: AiGenerateJsonRequest["task"] | AiStreamTextReques
     // Gemini's own default is 0.2. A validator call passes 0 and must stay at 0.
     temperature: temperature ?? 0.2,
     ...limit,
-    // Only Gemma documents enable_thinking. Other allow-listed models omit the field.
-    ...(model === CLOUDFLARE_FREE_TIER_MODEL && cloudflareThinkingDisabled()
-      ? { chat_template_kwargs: { enable_thinking: false } }
-      : {}),
+    ...cloudflareThinkingKwargs(model),
   });
 }
 
@@ -455,8 +458,10 @@ async function complete(
 ): Promise<Exclude<Content, { kind: "missing" }>> {
   if (cloudflareQuotaSkipped()) throw cloudflareQuotaSkipError();
   if (callerSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
+  const armed = cloudflareArmedTimeoutMs(task, drafting, Date.now(), budgetDeadlineAt);
+  if (armed <= 0) throw providerTimeoutError();
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), cloudflareArmedTimeoutMs(task, drafting, Date.now(), budgetDeadlineAt));
+  const timer = setTimeout(() => timeout.abort(), armed);
   const signal = callerSignal ? AbortSignal.any([callerSignal, timeout.signal]) : timeout.signal;
   try {
     onStart?.();
