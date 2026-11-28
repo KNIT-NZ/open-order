@@ -998,14 +998,13 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const checkMentions = (answerText: string) => {
             const assessed = assessCitations(answerText, grammarAuthorities);
             const invalid = assessed.mentions.filter((mention) => mention.where === "prose" && mention.status === "ungrounded");
-            return invalid.length === 0
-              ? { ok: true as const }
-              : { ok: false as const, invalidAuthorityMentions: invalid.map((mention) => mention.ref) };
+            if (invalid.length === 0 && assessed.stripSpans.length === 0) return { ok: true as const };
+            return { ok: false as const, invalidAuthorityMentions: invalid.map((mention) => mention.ref) };
           };
           const rewriteDraft = (answerText: string) => {
             const assessed = assessCitations(answerText, grammarAuthorities);
             const rewrite = rewriteByGrammar(answerText, assessed);
-            if (rewrite.removed === 0) return { text: answerText, removed: 0 };
+            if (rewrite.text === answerText) return { text: answerText, removed: 0 };
             return { text: normalizeAnswerFormatting(rewrite.text), removed: rewrite.removed };
           };
           const commitRewrites = (removed: number) => {

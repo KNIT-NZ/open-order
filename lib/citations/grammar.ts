@@ -133,66 +133,6 @@ function classOf(ch: string): "digit" | "upper" | "letter" | "other" {
 }
 
 export function normalizeGrammarText(input: string): Norm {
-  const chars = [...input];
-  const out: string[] = [];
-  const starts: number[] = [];
-  const origAt: number[] = [];
-  let orig = 0;
-  for (const ch of chars) {
-    const cp = ch.codePointAt(0) ?? 0;
-    const start = orig;
-    orig += ch.length;
-    if (isSep(cp)) {
-      if (out[out.length - 1] !== " ") {
-        out.push(" ");
-        starts.push(start);
-        origAt.push(start);
-      }
-      continue;
-    }
-    if (FORMAT.has(cp)) {
-      let next = "";
-      let look = orig;
-      const rest = input.slice(orig);
-      for (const n of rest) {
-        const ncp = n.codePointAt(0) ?? 0;
-        if (FORMAT.has(ncp)) { look += n.length; continue; }
-        next = n;
-        break;
-      }
-      const prev = out[out.length - 1] ?? "";
-      const prevClass = prev ? classOf(prev) : "other";
-      const nextClass = next ? classOf(next) : "other";
-      const bothLetters = (prevClass === "letter" || prevClass === "upper") && (nextClass === "letter" || nextClass === "upper");
-      const bothDigits = prevClass === "digit" && nextClass === "digit";
-      const digitUpper = prevClass === "digit" && nextClass === "upper";
-      const letterDigit = ((prevClass === "letter" || prevClass === "upper") && nextClass === "digit")
-        || (prevClass === "digit" && (nextClass === "letter" || nextClass === "upper"));
-      if (bothLetters || bothDigits || digitUpper) continue;
-      if (letterDigit && out[out.length - 1] !== " ") {
-        out.push(" ");
-        starts.push(start);
-        origAt.push(start);
-      }
-      continue;
-    }
-    let emitted = ch;
-    if (isSlash(cp)) emitted = "/";
-    else if (isDash(cp)) emitted = "-";
-    else if (isApos(cp)) emitted = "'";
-    out.push(emitted);
-    starts.push(start);
-    origAt.push(start);
-  }
-  let text = out.join("");
-  const mapped = starts.slice();
-  text = text.replace(/ \/|\/ /g, (piece, offset: number) => {
-    if (piece === " /") mapped.splice(offset, 1);
-    else mapped.splice(offset + 1, 1);
-    return "/";
-  });
-  // The replace above used the pre-mutation offset incorrectly for successive matches.
-  // Rebuild slash spacing from a second walk instead.
   return normalizeGrammarTextStable(input);
 }
 
@@ -344,7 +284,7 @@ type Item = {
   revokedHint: boolean;
 };
 
-const UNIT = /^(?:members?|mps?|people|persons?|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|calendar\s+days?|working\s+days?|sitting\s+days?|weeks?|months?|years?|per\s+cent|percent|%|votes?|times?)\b/i;
+const UNIT = /^(?:(?:members?|mps?|people|persons?|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|calendar\s+days?|working\s+days?|sitting\s+days?|weeks?|months?|years?|per\s+cent|percent|votes?|times?)\b|%)/i;
 const GATED = /^(?:bills?|questions?|motions?|amendments?|readings?|speakers?|part(?:y|ies))\b/i;
 const CLOCK = /^(?:am|pm|a\.m\.|p\.m\.|o'clock)\b/i;
 
@@ -486,6 +426,11 @@ function readSoNumber(text: string, index: number, allowParen: boolean): { raw: 
   return { raw: `${token.raw}`, value: token.suffix ? null : token.value, pins: pins.pins, end: pins.end };
 }
 
+function skipSpace(text: string, index: number): number {
+  const spaced = /^\s*/.exec(text.slice(index));
+  return index + (spaced?.[0].length ?? 0);
+}
+
 function joinerAt(text: string, index: number): { end: number; text: string } | null {
   const match = /^\s*(?:,(?:\s+(?:and|or))?|;|:|&|\+|see also\b|see\b|cf\.|cf\b|and\b|or\b|with\b)/i.exec(text.slice(index));
   if (!match) return null;
@@ -538,7 +483,7 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
   }
   const prefix = readPrefix(text, index);
   if (!prefix) return readBare(text, index, inBracket);
-  if (prefix.family === "sr") return readRuling(text, index, prefix.end);
+  if (prefix.family === "sr") return readRuling(text, index, prefix.end, inBracket);
   let cursor = skipNumberWord(text, prefix.end);
   const slash = readSlash(text, cursor);
   if (slash) {
@@ -588,6 +533,12 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     const range = rangeAt(text, cursor);
     if (range && items[items.length - 1].number !== null) {
       const next = readSoNumber(text, range.end, false);
+      if (next && next.value !== null && isQuantityTail(text, next.end, false, "")) {
+        const start = skipSpace(text, range.end);
+        items.push(makeItem({ kind: "quantity", ref: "QTY", quantity: true, textStart: start, textEnd: endOfQuantity(text, next.end) }));
+        cursor = endOfQuantity(text, next.end);
+        break;
+      }
       if (next && next.value !== null && items[items.length - 1].number !== null) {
         const from = items[items.length - 1].number as number;
         const to = next.value;
@@ -636,33 +587,34 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       cursor = pinOnly.end;
       continue;
     }
-    const nested = readPrefix(text, after);
+    const at = skipSpace(text, after);
+    const nested = readPrefix(text, at);
     if (nested) {
-      const inner = readProvisionAt(text, after, inBracket, false);
+      const inner = readProvisionAt(text, at, inBracket, false);
       if (!inner) break;
       items.push(...inner.items);
       cursor = inner.end;
       continue;
     }
-    const appendix = readAppendix(text, after);
+    const appendix = readAppendix(text, at);
     if (appendix) {
       items.push(...appendix.items);
       cursor = appendix.end;
       continue;
     }
-    const nextNum = readSoNumber(text, after, false);
+    const nextNum = readSoNumber(text, at, false);
     if (!nextNum) {
-      const rest = text.slice(after);
-      const cut = rest.search(/[\]\n]/);
-      const residueEnd = after + (cut < 0 ? Math.min(rest.length, 80) : cut);
-      if (/\d/.test(text.slice(after, residueEnd)) || readCardinal(text, after)) {
-        items.push(makeItem({ kind: "residue", ref: text.slice(after, residueEnd).trim().slice(0, 40), residue: true, textStart: after, textEnd: residueEnd }));
-        cursor = residueEnd;
+      const tight = /^\s*((?:para(?:graph)?|note|subclause|clause|cl\.?)\s+\d+[A-Za-z]*)/i.exec(text.slice(after));
+      if (tight) {
+        const start = skipSpace(text, after);
+        const end = after + tight[0].length;
+        items.push(makeItem({ kind: "residue", ref: tight[1], residue: true, textStart: start, textEnd: end }));
+        cursor = end;
       }
       break;
     }
     if (isQuantityTail(text, nextNum.end, prefix.singular && /^\s*,/.test(join.text), join.text)) {
-      items.push(makeItem({ kind: "quantity", ref: "QTY", quantity: true, textStart: after, textEnd: endOfQuantity(text, nextNum.end) }));
+      items.push(makeItem({ kind: "quantity", ref: "QTY", quantity: true, textStart: at, textEnd: endOfQuantity(text, nextNum.end) }));
       cursor = endOfQuantity(text, nextNum.end);
       break;
     }
@@ -672,7 +624,7 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       cpk: soCpk(nextNum.raw, nextNum.pins),
       pins: nextNum.pins,
       number: nextNum.value,
-      textStart: after,
+      textStart: at,
       textEnd: nextNum.end,
     }));
     cursor = nextNum.end;
@@ -721,9 +673,11 @@ function readSlash(text: string, index: number): Item | null {
   });
 }
 
-function readRuling(text: string, index: number, numberAt: number): { items: Item[]; end: number; plural: boolean } | null {
+function readRuling(text: string, index: number, numberAt: number, inBracket: boolean): { items: Item[]; end: number; plural: boolean } | null {
   const num = /^\s*(\d+)\s*\/\s*(\d+)/.exec(text.slice(numberAt));
   if (!num) {
+    // "ruling" and "rulings" in prose are ordinary words unless a ruling number follows.
+    if (!inBracket) return null;
     return { plural: false, end: numberAt, items: [makeItem({ kind: "unresolvable", ref: text.slice(index, numberAt).trim(), residue: true, textStart: index, textEnd: numberAt })] };
   }
   let end = numberAt + num[0].length;
@@ -756,7 +710,7 @@ function readRuling(text: string, index: number, numberAt: number): { items: Ite
 function readBare(text: string, index: number, inBracket: boolean): { items: Item[]; end: number; plural: boolean } | null {
   if (!inBracket && !/^\d+\s*\//.test(text.slice(index))) return null;
   if (/^\d+\s*\//.test(text.slice(index)) && boundary(text, index)) {
-    const ruling = readRuling(text, index, index);
+    const ruling = readRuling(text, index, index, inBracket);
     if (ruling && ruling.items[0] && !ruling.items[0].residue) return ruling;
   }
   return null;
@@ -869,11 +823,26 @@ function scanRegion(text: string, from: number, to: number, where: "bracket" | "
   while (cursor < to) {
     while (text[cursor] === " ") cursor += 1;
     if (cursor >= to) break;
-    const title = where === "prose" || true ? readTitle(text, cursor) : null;
+    const title = readTitle(text, cursor);
     if (title && title.textEnd <= to + 1) {
       title.textStart = cursor;
       items.push(title);
       cursor = title.textEnd;
+      if (/standing orders/i.test(title.ref)) {
+        const at = skipSpace(text, cursor);
+        const probe = readSoNumber(text, at, false);
+        if (probe && probe.value !== null && probe.end <= to && !isQuantityTail(text, probe.end, false, "")) {
+          const prefix = "SOs ";
+          const parsed = readProvisionAt(`${prefix}${text.slice(at, to)}`, 0, where === "bracket", false);
+          if (parsed) {
+            const delta = at - prefix.length;
+            for (const item of parsed.items) {
+              items.push({ ...item, textStart: Math.max(at, item.textStart + delta), textEnd: item.textEnd + delta });
+            }
+            cursor = Math.min(to, parsed.end + delta);
+          }
+        }
+      }
       continue;
     }
     const appendix = readAppendix(text, cursor);
@@ -921,6 +890,17 @@ function scanRegion(text: string, from: number, to: number, where: "bracket" | "
         }
       }
     }
+    const wrapped = /^\s*\(\s*/.exec(text.slice(cursor));
+    if (wrapped && cursor + wrapped[0].length < to) {
+      const innerAt = cursor + wrapped[0].length;
+      const inner = readProvisionAt(text, innerAt, where === "bracket", false);
+      if (inner && inner.end <= to && inner.items.some((item) => item.cpk || item.kind === "standing_order" || item.kind === "speakers_ruling" || item.kind === "appendix")) {
+        items.push(...inner.items);
+        cursor = inner.end;
+        if (text[cursor] === ")") cursor += 1;
+        continue;
+      }
+    }
     if (where === "bracket" && items.length > 0 && /\d/.test(text.slice(cursor, to))) {
       items.push(makeItem({
         kind: "residue",
@@ -934,8 +914,10 @@ function scanRegion(text: string, from: number, to: number, where: "bracket" | "
     if (where === "bracket" && items.length === 0) {
       const body = text.slice(cursor, to).trim();
       const url = /^https?:\/\/|^www\./i.test(body);
-      const digit = /\d/.test(body) || readCardinal(body, 0);
-      const editorial = !digit || url || body === "..." || body === "?" || body === "-" || body === "";
+      const backref = /^(?:ibid\.?|op\.?\s*cit\.?|see above|see infra|see supra)$/i.test(body);
+      const orphan = /^\([0-9]+[A-Za-z]*\)$/.test(body) || /^\([a-z]{1,2}\)$/i.test(body) || /^\([ivxlcdm]+\)$/i.test(body);
+      const digit = /\d/.test(body) || Boolean(readCardinal(body, 0));
+      const editorial = !backref && !orphan && (!digit || url || body === "..." || body === "?" || body === "-" || body === "");
       items.push(makeItem({
         kind: editorial ? "editorial" : "unresolvable",
         ref: body || "blank",
@@ -1003,13 +985,6 @@ function gradeItem(item: Item, admitted: Set<string>, trees: TreeIndex, tags: Se
   if (item.residue || item.kind === "unresolvable") return { status: "ungrounded", code: "ungrounded-residue", cpk: null };
   if (item.yearBound) return { status: "ungrounded", code: "ungrounded-edition", cpk: item.cpk };
   if (item.kind === "speakers_ruling" && item.pins) return { status: "ungrounded", code: "deferred-ruling-index", cpk: item.cpk };
-  const cpk = item.cpk;
-  if (!cpk) return { status: "ungrounded", code: "ungrounded-residue", cpk: null };
-  if (isRevoked(cpk)) return { status: "ungrounded", code: "ungrounded-revoked", cpk };
-  if (admitted.has(cpk)) {
-    if (item.year && !item.yearBound) return { status: "grounded", code: "grounded", cpk };
-    return { status: "grounded", code: "grounded", cpk };
-  }
   if (item.ref.startsWith("SO ") && item.ref.includes("..")) {
     const span = /^SO (\d+)\.\.(\d+)$/.exec(item.ref);
     if (span) {
@@ -1020,6 +995,13 @@ function gradeItem(item: Item, admitted: Set<string>, trees: TreeIndex, tags: Se
       if (all) return { status: "grounded", code: "grounded", cpk: null };
       return { status: "ungrounded", code: "ungrounded-not-admitted", cpk: null };
     }
+  }
+  const cpk = item.cpk;
+  if (!cpk) return { status: "ungrounded", code: "ungrounded-residue", cpk: null };
+  if (isRevoked(cpk)) return { status: "ungrounded", code: "ungrounded-revoked", cpk };
+  if (admitted.has(cpk)) {
+    if (item.year && !item.yearBound) return { status: "grounded", code: "grounded", cpk };
+    return { status: "grounded", code: "grounded", cpk };
   }
   const ancestor = ancestorOf(cpk, admitted);
   if (!ancestor || ancestor === cpk) {
@@ -1066,56 +1048,105 @@ function verdictOf(parts: Array<{ status: PartStatus }>): RowVerdict {
   return "no";
 }
 
+const ROMAN_GLYPHS: Array<[number, string]> = [
+  [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"],
+  [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+];
+
+function canonicalRoman(value: number): string {
+  let rest = value;
+  let out = "";
+  for (const [amount, glyph] of ROMAN_GLYPHS) {
+    while (rest >= amount) {
+      out += glyph;
+      rest -= amount;
+    }
+  }
+  return out;
+}
+
+function romanValue(token: string): number | null {
+  const lower = token.toLowerCase();
+  if (!/^[ivxlcdm]+$/.test(lower)) return null;
+  const digit: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  let total = 0;
+  let previous = 0;
+  for (let index = lower.length - 1; index >= 0; index -= 1) {
+    const value = digit[lower[index]] ?? 0;
+    if (value < previous) total -= value;
+    else {
+      total += value;
+      previous = value;
+    }
+  }
+  if (total <= 0 || canonicalRoman(total) !== lower) return null;
+  return total;
+}
+
 function buildTree(label: string, sectionContent: string): { nodes: Set<string>; revoked: string[] } {
   const cpk = labelToCpk(label) ?? label;
   const norm = normalizeGrammarTextStable(sectionContent).text;
   const nodes = new Set<string>([cpk]);
-  const revoked: string[] = [];
-  const lines = norm.split(/\n/);
-  type Frame = { key: string; letters: Map<string, number> };
-  const stack: Frame[] = [{ key: cpk, letters: new Map() }];
+  const revoked = new Set<string>();
+  const letterCounts = new Map<string, Map<string, number>>();
   const ambiguous = new Set<string>();
-  const romanRun = new Set<string>();
-  for (const line of lines) {
-    if (/^\s*\[revoked/i.test(line)) {
-      const top = stack[stack.length - 1];
-      if (top) revoked.push(top.key);
+  let letterParent = cpk;
+  let lastLetter: string | null = null;
+  let letterHost: string | null = null;
+  let romanOpen = false;
+  let lastRoman = 0;
+  const noteLetter = (parent: string, letter: string) => {
+    const counts = letterCounts.get(parent) ?? new Map<string, number>();
+    const count = (counts.get(letter) ?? 0) + 1;
+    counts.set(letter, count);
+    letterCounts.set(parent, counts);
+    if (count > 1) ambiguous.add(parent);
+  };
+  for (const line of norm.split(/\n/)) {
+    const marker = /^\s*\(([0-9]+[A-Z]*|[a-z]{1,4}|[ivxlcdm]+)\)\s*([\s\S]*)$/i.exec(line);
+    if (!marker) {
+      if (/^\s*\[revoked/i.test(line)) revoked.add(cpk);
       continue;
     }
-    const marker = /^\s*(\(([0-9]+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\))/i.exec(line);
-    if (!marker) continue;
-    const token = marker[2];
-    const isNumber = /^[0-9]/.test(token);
-    const isRoman = /^[ivxlcdm]+$/i.test(token) && !/^i$/i.test(token) || (token.toLowerCase() === "i" && !romanRun.has("letter-i-context"));
-    let parent = stack[0];
-    if (isNumber) {
-      while (stack.length > 1) stack.pop();
-      parent = stack[0];
-      const key = `${cpk}(${token})`;
-      nodes.add(key);
-      stack.push({ key, letters: new Map() });
-      romanRun.clear();
-      continue;
-    }
+    const token = marker[1];
+    const rest = marker[2] ?? "";
     const lower = token.toLowerCase();
-    const letterAfterH = lower === "i" && stack[stack.length - 1]?.letters.has("h");
-    const roman = !letterAfterH && /^[ivxlcdm]+$/i.test(lower) && lower !== "i" ? true : (!letterAfterH && lower === "i" && (stack[stack.length - 1]?.letters.size ?? 0) === 0);
-    if (!isNumber && !roman) {
-      while (stack.length > 2 && !/^\d/.test(stack[stack.length - 1].key.slice(cpk.length))) stack.pop();
-      if (stack.length > 1 && /\([ivx]+\)$/i.test(stack[stack.length - 1].key)) stack.pop();
-      parent = stack[stack.length - 1];
-      const count = (parent.letters.get(lower) ?? 0) + 1;
-      parent.letters.set(lower, count);
-      if (count > 1) ambiguous.add(parent.key);
-      const key = `${parent.key}(${lower})`;
-      nodes.add(key);
-      stack.push({ key, letters: new Map() });
+    const revokedHere = /^\s*\[revoked/i.test(rest);
+    if (/^[0-9]/.test(token)) {
+      const key = `${cpk}(${token})`;
+      letterParent = key;
+      lastLetter = null;
+      letterHost = null;
+      romanOpen = false;
+      lastRoman = 0;
+      if (revokedHere) revoked.add(key);
+      else nodes.add(key);
       continue;
     }
-    parent = stack[stack.length - 1];
-    const key = `${parent.key}(${lower})`;
-    nodes.add(key);
-    romanRun.add(key);
+    const rom = romanValue(lower);
+    const continuesLetter = lastLetter !== null && lastLetter.length === 1 && lower.length === 1
+      && lower.charCodeAt(0) === lastLetter.charCodeAt(0) + 1;
+    // (aa) and (ab) are letters. (ii) and (iv) are roman, even though they are two letters.
+    const asLetter = (/^[a-z]{2}$/.test(lower) && rom === null) || continuesLetter || (/^[a-z]$/.test(lower) && rom === null);
+    if (asLetter) {
+      const key = `${letterParent}(${lower})`;
+      noteLetter(letterParent, lower);
+      lastLetter = lower;
+      letterHost = key;
+      romanOpen = false;
+      lastRoman = 0;
+      if (revokedHere) revoked.add(key);
+      else nodes.add(key);
+      continue;
+    }
+    if (rom !== null && (!romanOpen || rom === lastRoman + 1)) {
+      const parent = letterHost ?? letterParent;
+      const key = `${parent}(${lower})`;
+      if (revokedHere) revoked.add(key);
+      else nodes.add(key);
+      romanOpen = true;
+      lastRoman = rom;
+    }
   }
   for (const parent of ambiguous) {
     for (const node of [...nodes]) {
@@ -1123,7 +1154,12 @@ function buildTree(label: string, sectionContent: string): { nodes: Set<string>;
     }
   }
   for (const node of revoked) nodes.delete(node);
-  return { nodes, revoked };
+  return { nodes, revoked: [...revoked] };
+}
+
+/** Structural subdivisions of one provision, from its full section text. */
+export function buildProvisionTree(label: string, sectionContent: string): string[] {
+  return [...buildTree(label, sectionContent).nodes].sort();
 }
 
 function indexTrees(authorities: GrammarAuthority[], override: Record<string, string[]> | null | undefined): { admitted: Set<string>; trees: TreeIndex } {
@@ -1271,13 +1307,28 @@ const FORUM_QUALIFICATION = "has not been confirmed to be the body the question 
 const SUBSTANTIVE = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
 const AUTHORITY_HEADINGS = new Set(["Best authorities to inspect or cite:", "Possibly relevant, not confirmed to apply:"]);
 
+function lineCitesKey(line: string, key: string): boolean {
+  for (const match of line.matchAll(/\[([^\[\]]+)\]/g)) {
+    for (const part of match[1].split(/[;,]/)) {
+      const parsed = labelToCpk(part.trim());
+      if (parsed === key || (parsed !== null && parsed.startsWith(`${key}(`))) return true;
+    }
+  }
+  return false;
+}
+
 /** Append main's qualification only where the parser says the claim is qualified or still ungrounded. */
 export function applyStructuredHedge(answerText: string, assessment: GrammarAssessment, input: {
   actLabels?: string[];
   forumLabels?: string[];
 }): string {
-  const act = new Set((input.actLabels ?? []).map((label) => labelToCpk(label)).filter((label): label is string => Boolean(label)));
-  const forum = new Set((input.forumLabels ?? []).map((label) => labelToCpk(label)).filter((label): label is string => Boolean(label)));
+  if (answerText == null || answerText === "") {
+    throw new TypeError("answer text is empty");
+  }
+  const actLabels = input.actLabels ?? [];
+  const forumLabels = input.forumLabels ?? [];
+  const act = new Set(actLabels.map((label) => labelToCpk(label)).filter((label): label is string => Boolean(label)));
+  const forum = new Set(forumLabels.map((label) => labelToCpk(label)).filter((label): label is string => Boolean(label)));
   const lines = answerText.split("\n");
   let offset = 0;
   let section: string | null = null;
@@ -1292,32 +1343,39 @@ export function applyStructuredHedge(answerText: string, assessment: GrammarAsse
     }
     if (section && SUBSTANTIVE.has(section) && trimmed) claimAt.set(index, start);
   });
-  const placed = new Set<string>();
+  const placedAct = new Set<string>();
+  const placedForum = new Set<string>();
+  const appendSentence = (index: number, sentence: string) => {
+    if (!lines[index].includes(sentence)) lines[index] = `${lines[index]} ${sentence}`;
+  };
   for (const [index, start] of claimAt) {
     const end = start + lines[index].length;
     const parts = assessment.mentions.filter((mention) => mention.end > start && mention.start < end && mention.kind !== "quantity" && mention.kind !== "editorial" && mention.kind !== "edition_qualifier" && mention.kind !== "instrument_title");
     const citationParts = parts.filter((part) => part.cpk);
-    const allGrounded = citationParts.length > 0 && citationParts.every((part) => part.status === "grounded");
-    const qualified = citationParts.filter((part) => part.cpk && (act.has(part.cpk) || forum.has(part.cpk)));
-    if (allGrounded && qualified.length === 0) continue;
-    for (const part of qualified) {
-      const sentence = act.has(part.cpk as string)
-        ? `[${displayLabel(part.cpk as string, input.actLabels ?? [])}] ${ACT_QUALIFICATION}`
-        : `[${displayLabel(part.cpk as string, input.forumLabels ?? [])}] ${FORUM_QUALIFICATION}`;
-      placed.add(part.cpk as string);
-      if (!lines[index].includes(sentence)) lines[index] = `${lines[index]} ${sentence}`;
+    const sureGrounded = citationParts.length > 0 && citationParts.every((part) => part.status === "grounded");
+    const cited = (key: string) => citationParts.some((part) => part.cpk === key || part.cpk?.startsWith(`${key}(`)) || lineCitesKey(lines[index], key);
+    const actHits = [...act].filter(cited);
+    const forumHits = [...forum].filter(cited);
+    if (sureGrounded && actHits.length === 0 && forumHits.length === 0) continue;
+    for (const key of actHits) {
+      appendSentence(index, `[${displayLabel(key, actLabels)}] ${ACT_QUALIFICATION}`);
+      placedAct.add(key);
+    }
+    for (const key of forumHits) {
+      appendSentence(index, `[${displayLabel(key, forumLabels)}] ${FORUM_QUALIFICATION}`);
+      placedForum.add(key);
     }
   }
   const qualificationLines: string[] = [];
-  for (const label of input.actLabels ?? []) {
+  for (const label of actLabels) {
     const key = labelToCpk(label);
-    if (!key || placed.has(key)) continue;
+    if (!key || placedAct.has(key)) continue;
     const sentence = `[${label}] ${ACT_QUALIFICATION}`;
     if (!answerText.includes(sentence)) qualificationLines.push(sentence);
   }
-  for (const label of input.forumLabels ?? []) {
+  for (const label of forumLabels) {
     const key = labelToCpk(label);
-    if (!key || placed.has(key)) continue;
+    if (!key || placedForum.has(key)) continue;
     const sentence = `[${label}] ${FORUM_QUALIFICATION}`;
     if (!answerText.includes(sentence)) qualificationLines.push(sentence);
   }
@@ -1331,16 +1389,27 @@ function displayLabel(cpk: string, labels: string[]): string {
 }
 
 export function rewriteByGrammar(text: string, assessment: GrammarAssessment): { text: string; removed: number } {
-  const spans = [...assessment.rewriteSpans].sort((a, b) => b.start - a.start);
+  type Edit = { start: number; end: number; kind: "rewrite" | "strip" };
+  const edits: Edit[] = [
+    ...assessment.rewriteSpans.map((span) => ({ start: span.start, end: span.end, kind: "rewrite" as const })),
+    ...assessment.stripSpans.map((span) => ({ start: span.start, end: span.end, kind: "strip" as const })),
+  ].sort((a, b) => b.start - a.start || b.end - a.end);
   let next = text;
-  for (const span of spans) {
-    if (span.start < 0 || span.end > next.length || span.end <= span.start) continue;
-    next = `${next.slice(0, span.start)}${"a provision that was not retrieved"}${next.slice(span.end)}`;
+  let removed = 0;
+  let lastStart = Number.POSITIVE_INFINITY;
+  for (const edit of edits) {
+    if (edit.start === lastStart) continue;
+    lastStart = edit.start;
+    if (edit.start < 0 || edit.end > next.length || edit.end <= edit.start) continue;
+    if (edit.kind === "strip") {
+      const slice = next.slice(edit.start, edit.end);
+      const stripped = slice.replace(/\s*\(referred to in[^)]*not retrieved\)/i, "");
+      if (stripped === slice) continue;
+      next = `${next.slice(0, edit.start)}${stripped}${next.slice(edit.end)}`;
+      continue;
+    }
+    next = `${next.slice(0, edit.start)}a provision that was not retrieved${next.slice(edit.end)}`;
+    removed += 1;
   }
-  for (const span of assessment.stripSpans.sort((a, b) => b.start - a.start)) {
-    const slice = next.slice(span.start, span.end);
-    const stripped = slice.replace(/\s*\(referred to in[^)]*not retrieved\)/i, "");
-    if (stripped !== slice) next = `${next.slice(0, span.start)}${stripped}${next.slice(span.end)}`;
-  }
-  return { text: next, removed: spans.length };
+  return { text: next, removed };
 }
