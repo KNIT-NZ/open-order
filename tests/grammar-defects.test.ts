@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { sourceLabel } from "../lib/ai/claim-appeal";
+import { citedSubitemText, corroborateClaimAppeal, sourceLabel } from "../lib/ai/claim-appeal";
 import { buildAnswerClaimValidationPrompt } from "../lib/ai/prompts";
 import { findOmittedSourceQualifications } from "../lib/ai/qualification-guard";
 import {
@@ -353,19 +353,128 @@ test("OO-DEF-142 an appendix pinpoint keeps the parent authorities entry", () =>
 });
 
 test("OO-DEF-143 placeholders keep the separating space", () => {
-  const cases = [
-    "SO 1 et seq. apply [SO 1].",
-    "SR 2/3 to 5 apply [SO 1].",
-    "SO 12 /9 lets the House sit late.",
-    "Standing Order one hundred and forty-six applies [SO 1].",
-  ];
-  for (const input of cases) {
-    const assessed = assessCitations(input, authorities(["SO 1"]), { provisionTree: {} });
-    const rewritten = rewriteByGrammar(input, assessed).text;
-    assert.equal(/[A-Za-z]a provision that was not retrieved/.test(rewritten), false, input);
-    assert.equal(/not retrieved[A-Za-z0-9\]]/.test(rewritten), false, input);
-    assert.equal(rewritten.includes("forty-six"), false, input);
+  const admitted = authorities(["SO 1"]);
+  const rewrite = (input: string) => rewriteByGrammar(input, assessCitations(input, admitted, { provisionTree: {} })).text;
+  assert.equal(rewrite("SO 1 et seq. apply [SO 1]."), "a provision that was not retrieved apply [SO 1].");
+  assert.equal(rewrite("SR 2/3 to 5 apply [SO 1]."), "a provision that was not retrieved apply [SO 1].");
+  assert.equal(rewrite("SO 12 /9 lets the House sit late."), "a provision that was not retrieved lets the House sit late.");
+  assert.equal(rewrite("Under SO 12/9 the House may sit late [SO 1]."), "Under a provision that was not retrieved the House may sit late [SO 1].");
+  assert.equal(rewrite("SO 1 and 12/9 apply [SO 1]."), "SO 1 and a provision that was not retrieved apply [SO 1].");
+  assert.equal(rewrite("Standing Order one hundred and forty-six applies [SO 1].").includes("forty-six"), false);
+  assert.equal(/[A-Za-z]a provision|anda provision|SO 1a provision/.test(rewrite("SO 1 et seq. apply [SO 1].")), false);
+});
+
+test("OO-DEF-145 an unreadable pin group is residue and is not served", () => {
+  const section = "The Speaker may—\n(a) name a member; or\n(b) suspend the sitting.";
+  const labels = authorities(["SO 7"], new Map([["SO 7", section]]));
+  for (const shape of ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)", "(b)(xyz)", "(-)(iv)"]) {
+    const assessed = assessCitations(`The Speaker may name a member [SO 7${shape}].`, labels);
+    assert.notEqual(assessed.reasonCode, "served", shape);
+    assert.equal(assessed.mentions.some((mention) => mention.status === "ungrounded"), true, shape);
   }
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const content = new Map(pack.sections.map((section) => [section.citation_label, section.content]));
+  const nested = assessCitations("The House may sit [SO 80(1)(abc)].", authorities(["SO 80"], content));
+  assert.notEqual(nested.reasonCode, "served");
+});
+
+test("OO-DEF-145 pin-shape fuzz serves no nonexistent label", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const sections = pack.sections.filter((section) => section.citation_label.startsWith("SO "));
+  const trees = new Map(sections.map((section) => [section.citation_label, new Set(buildProvisionTree(section.citation_label, section.content))]));
+  const garbage = ["(abcd)", "(abc)", "(xyz)", "(a.)", "( a )", "(-)", "(ⅰ)", "(a1)"];
+  let servedFake = 0;
+  const rand = rng(145);
+  for (let index = 0; index < 5000; index += 1) {
+    const section = sections[Math.floor(rand() * sections.length)];
+    const tree = trees.get(section.citation_label) ?? new Set<string>();
+    const real = [...tree].filter((key) => key !== section.citation_label);
+    const pin = rand() < 0.5 && real.length > 0
+      ? real[Math.floor(rand() * real.length)].slice(section.citation_label.length)
+      : garbage[Math.floor(rand() * garbage.length)];
+    const input = `The House may sit [${section.citation_label}${pin}].`;
+    const assessed = assessCitations(input, [{ citationLabel: section.citation_label, sectionContent: section.content }]);
+    if (assessed.reasonCode !== "served") continue;
+    const shown = assessed.brackets.map((bracket) => bracket.text).join(" ");
+    const missing = [...shown.matchAll(/\(([^)]*)\)/g)].some((match) => {
+      const group = `(${match[1].replace(/\s+/g, "")})`;
+      return ![...tree].some((key) => key.includes(group));
+    });
+    if (missing) servedFake += 1;
+  }
+  console.log(JSON.stringify({ pinShapeFuzz: 5000, servedFake }));
+  assert.equal(servedFake, 0);
+});
+
+test("OO-DEF-146 a quote from another sub-item does not corroborate the cited pin", () => {
+  const section = [
+    "The Speaker may—",
+    "(a) name a member who has been disorderly in the chamber; or",
+    "(b) suspend the sitting until the House is ready to proceed.",
+  ].join("\n");
+  const claim = {
+    id: "claim-1",
+    text: "The Speaker may suspend the sitting [SO 7(b)].",
+    citations: ["SO 7(b)"],
+    lineIndex: 1,
+  };
+  const verdict = {
+    id: "claim-1",
+    supported: true,
+    reason: "The cited sub-item allows the Speaker to act.",
+    witnesses: [{ citationLabel: "SO 7", exactQuote: "name a member who has been disorderly" }],
+  };
+  const authorities = [{ citationLabel: "SO 7", sectionContent: section }];
+  assert.equal(citedSubitemText(section, "SO 7(b)")?.includes("suspend the sitting"), true);
+  assert.equal(citedSubitemText(section, "SO 7(b)")?.includes("name a member"), false);
+  const wrong = corroborateClaimAppeal({ claim, verdict, authorities });
+  assert.equal(wrong.accepted, false);
+  const right = corroborateClaimAppeal({
+    claim,
+    verdict: { ...verdict, witnesses: [{ citationLabel: "SO 7(b)", exactQuote: "suspend the sitting until the House" }] },
+    authorities,
+  });
+  assert.equal(right.accepted, true);
+});
+
+test("OO-DEF-144 an unmappable pin on a categorical claim is rejected", () => {
+  const rejections = findOmittedSourceQualifications({
+    claims: [{
+      id: "claim-1",
+      text: "A member must not disclose evidence taken in private [SO 5(abcde)].",
+      citations: ["SO 5(abcde)"],
+    }, {
+      id: "claim-2",
+      text: "A member must not disclose evidence taken in private [SO 5(a.)].",
+      citations: ["SO 5(a.)"],
+    }],
+    authorities: [{
+      citationLabel: "SO 5",
+      sectionContent: "A member must not disclose evidence taken in private unless the House authorises the disclosure.",
+    }],
+  });
+  assert.deepEqual(rejections.map((item) => item.claimId), ["claim-1", "claim-2"]);
+  assert.equal(rejections.every((item) => item.reason.includes("could not be mapped")), true);
+});
+
+test("OO-DEF-132 every section pin set matches the committed build", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const expected = JSON.parse(readFileSync(new URL("./fixtures/provision-trees.json", import.meta.url), "utf8")) as Record<string, string[]>;
+  assert.equal(pack.sections.length, 561);
+  assert.equal(Object.keys(expected).length, 561);
+  let differences = 0;
+  for (const section of pack.sections) {
+    const built = buildProvisionTree(section.citation_label, section.content);
+    const want = expected[section.citation_label];
+    if (!want || built.join("\n") !== want.join("\n")) differences += 1;
+  }
+  assert.equal(differences, 0);
 });
 
 test("OO-DEF-134 an admitted cf see or also cross-reference stays a citation", () => {

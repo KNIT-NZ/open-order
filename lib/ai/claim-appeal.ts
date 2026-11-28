@@ -27,6 +27,46 @@ export function sourceLabel(citation: string): string {
 function key(label: string): string {
   return label.trim().replace(/\s+/g, " ").toLowerCase();
 }
+
+function pinGroups(citation: string): string[] {
+  const trimmed = citation.trim().replace(/\s+/g, " ");
+  const parent = sourceLabel(citation).replace(/\s+/g, " ");
+  if (!trimmed.toLowerCase().startsWith(parent.toLowerCase())) return [];
+  return [...trimmed.slice(parent.length).matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim().toLowerCase()).filter(Boolean);
+}
+
+function markerOf(line: string): string | null {
+  const match = /^\s*\(([^)]+)\)/.exec(line);
+  return match ? match[1].trim().toLowerCase() : null;
+}
+
+function markerDepth(token: string): number {
+  if (/^\d/.test(token)) return 1;
+  if (/^(?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)$/.test(token)) return 3;
+  return 2;
+}
+
+/** Text of the cited pin, including its child markers, or null when that pin is not in the source. */
+export function citedSubitemText(sectionContent: string, citation: string): string | null {
+  const pins = pinGroups(citation);
+  if (pins.length === 0) return sectionContent;
+  let lines = sectionContent.split("\n");
+  for (const pin of pins) {
+    const start = lines.findIndex((line) => markerOf(line) === pin);
+    if (start < 0) return null;
+    const depth = markerDepth(pin);
+    let end = lines.length;
+    for (let index = start + 1; index < lines.length; index += 1) {
+      const next = markerOf(lines[index] ?? "");
+      if (next && markerDepth(next) <= depth) {
+        end = index;
+        break;
+      }
+    }
+    lines = lines.slice(start, end);
+  }
+  return lines.join("\n");
+}
 function normaliseSourceWhitespace(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim();
 }
@@ -61,6 +101,12 @@ export function corroborateClaimAppeal(input: {
     if (!source || quote.length < 24 || quote.length > 500 || !normaliseSourceWhitespace(source).includes(quote)) {
       return { accepted: false, reason: "Source quotation not found verbatim in selected authority" };
     }
+    const pinned = claim.citations.filter((citation) => key(sourceLabel(citation)) === label && pinGroups(citation).length > 0);
+    const insidePin = pinned.length === 0 || pinned.some((citation) => {
+      const region = citedSubitemText(source, citation);
+      return region !== null && normaliseSourceWhitespace(region).includes(quote);
+    });
+    if (!insidePin) return { accepted: false, reason: "Source quotation is outside the cited sub-item" };
     covered.add(label);
   }
   if ([...allowed].some((label) => !covered.has(label))) {

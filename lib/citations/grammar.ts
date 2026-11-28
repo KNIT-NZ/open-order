@@ -336,6 +336,46 @@ function readPins(text: string, index: number): { pins: string; end: number } {
   return { pins, end };
 }
 
+function isUnreadablePinGroup(body: string): boolean {
+  const inner = body.slice(1, -1);
+  if (/^\s*(?:ibid\.?|op\.?\s*cit\.?|idem|supra|infra|above|note)\s*$/i.test(inner)) return false;
+  if (inner.trim().split(/\s+/).length > 1) return false;
+  const year = /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body);
+  const valid = !year && /^\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\)$/i.test(body);
+  return !valid && !year && inner.trim().length > 0 && inner.trim().length <= 12;
+}
+
+/** A parenthesised group that is not a pin, plus every pin group after it. Years and asides stay put. */
+function unreadablePinTail(text: string, index: number): number {
+  let end = index;
+  let started = false;
+  for (;;) {
+    const group = /^\s*(\([^)]*\))/.exec(text.slice(end));
+    if (!group) break;
+    const body = group[1];
+    const year = /^\((?:1[8-9]\d{2}|20\d{2})\)$/.test(body);
+    const valid = !year && /^\((?:\d+[A-Z]*|[a-z]{1,2}|[ivxlcdm]+)\)$/i.test(body);
+    if (!started) {
+      if (!isUnreadablePinGroup(body)) break;
+      started = true;
+    } else if (!valid && !isUnreadablePinGroup(body)) {
+      break;
+    }
+    end += group[0].length;
+  }
+  return end;
+}
+
+function pinResidue(text: string, start: number, end: number): Item {
+  return makeItem({
+    kind: "residue",
+    ref: text.slice(start, end).trim().slice(0, 40) || "pin",
+    residue: true,
+    textStart: start,
+    textEnd: end,
+  });
+}
+
 function readYear(text: string, index: number): { year: number; end: number } | null {
   const year = /^\s*\((1[8-9]\d{2}|20\d{2})\)/.exec(text.slice(index));
   if (!year) return null;
@@ -413,19 +453,23 @@ function soCpk(raw: string, pins: string): string {
   return `SO ${raw}${pins}`;
 }
 
-function readSoNumber(text: string, index: number, allowParen: boolean): { raw: string; value: number | null; pins: string; end: number } | null {
+function readSoNumber(text: string, index: number, allowParen: boolean): { raw: string; value: number | null; pins: string; end: number; residueStart: number | null } | null {
   const spaced = /^\s*/.exec(text.slice(index));
   const at = index + (spaced?.[0].length ?? 0);
+  const finish = (raw: string, value: number | null, pinEnd: number, pins: string) => {
+    const tail = unreadablePinTail(text, pinEnd);
+    return { raw, value, pins, end: tail, residueStart: tail > pinEnd ? pinEnd : null };
+  };
   if (!allowParen && /^\(\d+\)/.test(text.slice(at)) && !/^\(\d{4}\)/.test(text.slice(at))) {
     const paren = /^\((\d+)\)/.exec(text.slice(at));
     if (!paren) return null;
     const pins = readPins(text, at + paren[0].length);
-    return { raw: paren[1], value: Number(paren[1]), pins: pins.pins, end: pins.end };
+    return finish(paren[1], Number(paren[1]), pins.end, pins.pins);
   }
   const token = readNumberToken(text, at);
   if (!token) return null;
   const pins = readPins(text, token.end);
-  return { raw: `${token.raw}`, value: token.suffix ? null : token.value, pins: pins.pins, end: pins.end };
+  return finish(`${token.raw}`, token.suffix ? null : token.value, pins.end, pins.pins);
 }
 
 function skipSpace(text: string, index: number): number {
@@ -489,6 +533,7 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
   let cursor = skipNumberWord(text, prefix.end);
   const slash = readSlash(text, cursor);
   if (slash) {
+    slash.textStart = index;
     return { plural: prefix.plural, end: slash.textEnd, items: [finishYear(text, slash)] };
   }
   const first = readSoNumber(text, cursor, true);
@@ -506,8 +551,9 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     pins: first.pins,
     number: first.value,
     textStart: index,
-    textEnd: cursor,
+    textEnd: first.residueStart ?? cursor,
   })];
+  if (first.residueStart !== null) items.push(pinResidue(text, first.residueStart, first.end));
   let plural = prefix.plural;
   for (;;) {
     const xref = readXrefSuffix(text, cursor);
@@ -528,9 +574,11 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     }
     const open = /^\s*(?:et\s+seq\.?|ff\.?|and\s+following)\b/i.exec(text.slice(cursor));
     if (open) {
-      const lead = open[0].length - open[0].trimStart().length;
-      items.push(makeItem({ kind: "open_range", ref: "OPEN", open: true, textStart: cursor + lead, textEnd: cursor + open[0].length }));
-      cursor += open[0].length;
+      let end = cursor + open[0].length;
+      if (text[end] === ".") end += 1;
+      const start = items[0]?.textStart ?? cursor + (open[0].length - open[0].trimStart().length);
+      items.push(makeItem({ kind: "open_range", ref: "OPEN", open: true, textStart: start, textEnd: end }));
+      cursor = end;
       break;
     }
     const range = rangeAt(text, cursor);
@@ -572,11 +620,12 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
     const continuedSlash = /^\s*\d+(?:\([^)]+\))?\/\d+/.exec(text.slice(after));
     if (continuedSlash) {
       const lead = continuedSlash[0].length - continuedSlash[0].trimStart().length;
+      const numberAt = after + lead;
       items.push(makeItem({
         kind: "standing_order",
-        ref: continuedSlash[0].trim(),
+        ref: `SO ${continuedSlash[0].trim()}`,
         slash: true,
-        textStart: after + lead,
+        textStart: numberAt,
         textEnd: after + continuedSlash[0].length,
       }));
       cursor = after + continuedSlash[0].length;
@@ -587,8 +636,17 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       const prev = items[items.length - 1];
       const base = (prev.cpk ?? "").replace(/\([^)]*\)$/, "");
       const cpk = `${base}${pinOnly.pins}`;
-      items.push(makeItem({ kind: "standing_order", ref: cpk, cpk, pins: pinOnly.pins, textStart: after, textEnd: pinOnly.end }));
-      cursor = pinOnly.end;
+      const tail = unreadablePinTail(text, pinOnly.end);
+      items.push(makeItem({ kind: "standing_order", ref: cpk, cpk, pins: pinOnly.pins, textStart: skipSpace(text, after), textEnd: pinOnly.end }));
+      if (tail > pinOnly.end) items.push(pinResidue(text, pinOnly.end, tail));
+      cursor = tail;
+      continue;
+    }
+    const badPin = unreadablePinTail(text, skipSpace(text, after));
+    if (badPin > skipSpace(text, after)) {
+      const start = skipSpace(text, after);
+      items.push(pinResidue(text, start, badPin));
+      cursor = badPin;
       continue;
     }
     const at = skipSpace(text, after);
@@ -629,8 +687,9 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       pins: nextNum.pins,
       number: nextNum.value,
       textStart: at,
-      textEnd: nextNum.end,
+      textEnd: nextNum.residueStart ?? nextNum.end,
     }));
+    if (nextNum.residueStart !== null) items.push(pinResidue(text, nextNum.residueStart, nextNum.end));
     cursor = nextNum.end;
     plural = true;
   }
@@ -689,6 +748,11 @@ function readRuling(text: string, index: number, numberAt: number, inBracket: bo
   const pins = readPins(text, end);
   end = pins.end;
   const cpk = `R ${num[1]}/${num[2]}${pins.pins}`;
+  const pinTail = unreadablePinTail(text, end);
+  if (pinTail > end) {
+    const base = makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end });
+    return { plural: false, end: pinTail, items: [base, pinResidue(text, end, pinTail)] };
+  }
   const range = rangeAt(text, end);
   if (range) {
     const next = /^\s*(\d+)\s*\/\s*(\d+)/.exec(text.slice(range.end));
@@ -701,11 +765,19 @@ function readRuling(text: string, index: number, numberAt: number, inBracket: bo
     }
     const bare = /^\s*(\d+)\b/.exec(text.slice(range.end));
     if (bare) {
-      const base = makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end });
-      const continuation = makeItem({
-        kind: "speakers_ruling", ref: `R ..${bare[1]}`, range: true, cpk, textStart: skipSpace(text, end), textEnd: range.end + bare[0].length,
-      });
-      return { plural: false, end: continuation.textEnd, items: [base, continuation] };
+      const endAll = range.end + bare[0].length;
+      return {
+        plural: false,
+        end: endAll,
+        items: [makeItem({
+          kind: "speakers_ruling",
+          ref: `${cpk}..${bare[1]}`,
+          range: true,
+          cpk,
+          textStart: index,
+          textEnd: endAll,
+        })],
+      };
     }
   }
   const item = finishYear(text, makeItem({ kind: "speakers_ruling", ref: cpk.replace(/^R /, "SR "), cpk, pins: pins.pins, textStart: index, textEnd: end }));
@@ -743,7 +815,10 @@ function readAppendix(text: string, index: number): { items: Item[]; end: number
   if (clause) {
     const pins = readPins(text, index + clause[0].length);
     const cpk = `APP ${clause[1].toUpperCase()} cl ${clause[2]}${pins.pins}`;
-    return { end: pins.end, items: [makeItem({ kind: "appendix", ref: cpk, cpk, pins: pins.pins, textStart: index, textEnd: pins.end })] };
+    const tail = unreadablePinTail(text, pins.end);
+    const clauseItems = [makeItem({ kind: "appendix", ref: cpk, cpk, pins: pins.pins, textStart: index, textEnd: pins.end })];
+    if (tail > pins.end) clauseItems.push(pinResidue(text, pins.end, tail));
+    return { end: tail, items: clauseItems };
   }
   const ofApp = /^(?:clauses|clause|cl\.?)\s+(\d+[A-Za-z]*)([\s\S]*?)\s+of\s+appendix\s+([a-f])/i.exec(slice);
   if (ofApp && ofApp[0].length < 120) {
