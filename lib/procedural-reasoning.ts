@@ -1848,6 +1848,7 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedFo
   const parts = citationParts(cited);
   let prefix = "";
   let parent = "";
+  let sawLabel = false;
   for (const part of parts) {
     if (/^\([0-9a-z]+\)$/i.test(part)) {
       const continued = parent ? citationCandidates("", `${parent}${part}`) : [];
@@ -1856,11 +1857,13 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedFo
       if (!ok) return false;
       continue;
     }
-    if (QUANTITY_CONTINUATION.test(part)) continue;
+    // A quantity is not a provision only when it continues a label already admitted.
+    if (parent !== "" && QUANTITY_CONTINUATION.test(part)) continue;
     if (/^\d+[a-z]*$/i.test(part)) {
       const resolved = citationCandidates(prefix, part).find((item) => isCitationAllowed(item, allowedLabels));
       if (!resolved) return false;
       parent = resolved.replace(/\(.*/, "");
+      sawLabel = true;
       continue;
     }
     if (!isCitationAllowed(part, allowedLabels)) return false;
@@ -1868,7 +1871,9 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedFo
     parent = (head?.[1] ?? part).replace(/\(.*/, "");
     const lead = part.match(/^(.*?)(?=\d)/);
     prefix = lead?.[1] ?? prefix;
+    sawLabel = true;
   }
+  if (!sawLabel) return false;
   return mentionSpans(cited, allowedForms).every((span) => span.admitted && !span.suffix);
 }
 
@@ -1892,12 +1897,13 @@ const WS1 = `[${WS_CLASS}]+`;
 // All or nothing: a short number cannot stop before another digit or a slash, and a longer number is taken whole.
 const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
 const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
-// A joined number is a provision unless a curated follower comes next. Any other word stays a provision.
+// Units, times, and people counts are followers. Procedural nouns are followers only after "or more/fewer/less".
 // A word followed by an apostrophe is not a follower: "Members' bills" still names 99.
-const FOLLOWER = String.raw`(?:per${WS1}cent|calendar${WS1}days?|working${WS1}days?|sitting${WS1}days?|members?|mps?|people|persons?|questions?|bills?|motions?|amendments?|readings?|speakers?|parties|party|votes?|times?|percent|days?|hours?|hrs?|minutes?|mins?|seconds?|secs|weeks?|months?|years?|noon|am|pm|o'clock)`;
-const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1})?${FOLLOWER}(?!['’])`;
+const UNIT = String.raw`(?:per${WS1}cent|calendar${WS1}days?|working${WS1}days?|sitting${WS1}days?|members?|mps?|people|persons?|speakers?|parties|party|votes?|times?|percent|days?|hours?|hrs?|minutes?|mins?|seconds?|secs|weeks?|months?|years?|noon|am|pm|o'clock)`;
+const PROCEDURAL = String.raw`(?:questions?|bills?|motions?|amendments?|readings?)`;
+const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1}(?:${UNIT}|${PROCEDURAL})|${UNIT})(?!['’])`;
 const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.)|${WS}%)`;
-const QUANTITY_CONTINUATION = new RegExp(String.raw`^\d{1,6}[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?${WS1}(?:or${WS1}(?:more|fewer|less)${WS1})?(?:${FOLLOWER}(?!['’])\b|a\.m\.|p\.m\.|%)$`, "i");
+const QUANTITY_CONTINUATION = new RegExp(String.raw`^\d{1,6}[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.|%)$`, "i");
 const LIST_SPAN = `${SO_NUM}(?:${JOINED})*`;
 const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
 const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;

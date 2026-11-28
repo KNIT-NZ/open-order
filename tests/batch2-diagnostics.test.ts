@@ -167,8 +167,6 @@ test("a joined number after one name is a provision unless a quantity word follo
     "SOs 1, 40 minutes",
     "SO 1, 40 MPs",
     "SO 1, 40 people",
-    "SO 1, 2 questions",
-    "SO 1 and 2 Bills",
     "SO 1, 20 per cent",
     "SO 1, 3 calendar days",
     "SO 1, 2 working days",
@@ -180,8 +178,8 @@ test("a joined number after one name is a provision unless a quantity word follo
     "SO 1, 5 a.m.",
     "SO 1, 5 p.m.",
     "SO 1, 5 o'clock",
-    "SO 1 and 2 motions",
-    "SO 1, 3 amendments",
+    "SO 1 and 2 or more Bills",
+    "SO 1, 2 or fewer questions",
     "SO 1, 1 hour",
     "SO 1, 1 day",
     "SO 1, 1 minute",
@@ -193,12 +191,6 @@ test("a joined number after one name is a provision unless a quantity word follo
     "SO 1, 1 member",
     "SO 1, 1 MP",
     "SO 1, 1 person",
-    "SO 1, 1 question",
-    "SO 1 and 1 Bill",
-    "SO 1, 1 motion",
-    "SO 1, 1 amendment",
-    "SO 1, 1 reading",
-    "SO 1, 2 readings",
     "SO 1, 12 noon",
     "SO 1, 1 speaker",
     "SO 1, 2 speakers",
@@ -223,6 +215,17 @@ test("a joined number after one name is a provision unless a quantity word follo
     authorities: admitted,
   });
   assert.equal(article.rewrittenText.includes("99"), false);
+  for (const procedural of [
+    "SO 1 and 99 Bills are introduced",
+    "SO 1 and 99 questions",
+    "SO 1 and 99 motions",
+    "SO 1 and 99 amendments",
+    "SO 1 and 99 readings",
+    "SO 1 and 99 or more",
+  ]) {
+    const flaggedProcedural = rewriteForbiddenAuthorityMentions({ answerText: procedural, authorities: admitted });
+    assert.equal(flaggedProcedural.rewrittenText.includes("99"), false, procedural);
+  }
   for (const possessive of ["SO 1 and 99 Members' bills", "SO 1 and 99 days' notice"]) {
     const keptNumber = rewriteForbiddenAuthorityMentions({ answerText: possessive, authorities: admitted });
     assert.equal(keptNumber.rewrittenText.includes("99"), false, possessive);
@@ -763,8 +766,7 @@ test("a quantity follower is served unchanged, and a bare joined number is not",
   const served = [
     "SO 1, 40 MPs may attend [SO 1].",
     "SO 1, 40 people may attend [SO 1].",
-    "SO 1, 2 questions may be asked [SO 1].",
-    "SO 1 and 2 Bills may be read [SO 1].",
+    "SO 1 and 2 or more Bills may be introduced [SO 1].",
     "SO 1, 20 per cent may object [SO 1].",
     "SO 1, 3 calendar days notice is given [SO 1].",
     "SO 1, 2 working days notice is given [SO 1].",
@@ -786,6 +788,11 @@ test("a quantity follower is served unchanged, and a bare joined number is not",
   });
   assert.equal(String(flagged.answerText).includes("99"), false);
   assert.equal(String(flagged.answerText).includes(joined), false);
+  const bills = "SO 1 and 99 Bills are introduced [SO 1].";
+  const flaggedBills = await probe("named_admitted_source", {
+    draft: `Bottom line:\n${bills}\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+  });
+  assert.equal(String(flaggedBills.answerText).includes("99"), false);
 });
 
 test("a bracket that names an unadmitted label is not a supported citation", async () => {
@@ -815,12 +822,48 @@ test("an appendix note inside a standing-order bracket is withheld", async () =>
   }
 });
 
+test("a quantity-only bracket is not a citation", () => {
+  const admitted = [{ citationLabel: "SO 1" }];
+  for (const form of ["[40 members]", "[2 days]", "[99 MPs]", "[99 Bills]"]) {
+    const checked = validateAnswerCitations({
+      answerText: `The House sits ${form}.`,
+      authorities: admitted,
+    });
+    assert.equal(checked.ok, false, form);
+  }
+  const continued = validateAnswerCitations({
+    answerText: "The House sits [SO 1 and 2 members].",
+    authorities: admitted,
+  });
+  assert.equal(continued.ok, true);
+});
+
+test("a quantity-only citation is not served", async () => {
+  const only = await probe("named_admitted_source", {
+    draft: "Bottom line:\nThe Speaker may adjourn the House at will [40 members].\n\nSettlement: supported",
+  });
+  assert.equal(only.answerState, "not_answered");
+  assert.notEqual(only.answerState, "supported");
+  const bottom = await probe("named_admitted_source", {
+    draft: `Bottom line:\nThe House sits [2 days].\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
+  });
+  assert.notEqual(bottom.answerState, "supported");
+  assert.equal(String(bottom.answerText).includes("[2 days]"), false);
+  const meaning = await probe("named_admitted_source", {
+    draft: `Bottom line:\n${QUOTE} [SO 1].\n\nWhat this means:\nMembers may demand a vote [99 members].\n\nSettlement: supported`,
+  });
+  assert.equal(String(meaning.answerText).includes("[99 members]"), false);
+  assert.equal(String(meaning.answerText).includes("Members may demand a vote"), false);
+  assert.match(String(meaning.answerText), /\[SO 1\]/);
+});
+
 test("a claim-check rejection after a rewrite still records the removed mention", async () => {
   const done = await probe("named_admitted_source", {
     support: false,
     draft: `Bottom line:\nStanding Order 39 lets the House sit [SO 1].\n\nWhat this means:\n${QUOTE} [SO 1].\n\nSettlement: supported`,
   });
   assert.equal(done.answerState, "not_answered");
+  assert.ok(done.fallbackCode === "validation_rejected" || done.fallbackCode === "bottom_line_lost");
   assert.ok((done.answerEdits as string[]).includes("removed_mentions=1"));
 });
 
