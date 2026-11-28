@@ -129,7 +129,18 @@ export function findOmittedSourceQualifications(input: {
       // reference alone must never manufacture another available source.
       const parent = sourceLabel(citation);
       const authority = authorityMap.get(normalise(parent));
-      if (!authority?.sectionContent) continue;
+      if (!authority?.sectionContent) {
+        // A pin that still does not name an admitted source must not skip the veto.
+        if (/\([^)]+\)/.test(citation) && normalise(parent) === normalise(citation)) {
+          rejected.push({
+            claimId: claim.id,
+            citationLabel: citation.trim(),
+            reason: "Pinpoint could not be mapped to an admitted source",
+          });
+          break;
+        }
+        continue;
+      }
       for (const subsection of numberedSubsections(authority.sectionContent)) {
         const operativeMatch = RESTRICTION.exec(subsection);
         if (!operativeMatch) continue;

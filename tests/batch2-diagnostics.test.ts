@@ -879,7 +879,11 @@ test("the route qualifies only the ungrounded and specially qualified claims", a
   const text = String(done.answerText);
   assert.ok(text.includes(`${grounded} ${model}`), text);
   assert.match(text, /\[SO 2\] has not been confirmed to govern the specific act asked about/);
-  assert.match(text, /a provision that was not retrieved was mentioned beside the sitting \[SO 1\]/);
+  // OO-DEF-125: this line is exact. Adding the bare hedge to every placeholder line fails it.
+  assert.equal(
+    text.split("\n").find((line) => line.includes("a provision that was not retrieved")),
+    "a provision that was not retrieved was mentioned beside the sitting [SO 1].",
+  );
   assert.equal(text.includes("[SO 5]"), false);
   assert.equal(text.includes("SO 5"), false);
   const groundedLine = text.split("\n").find((line) => line.includes(grounded)) ?? "";
@@ -1071,6 +1075,33 @@ test("a suffix that survives the mention check withholds the answer", async () =
   assert.equal(done.answerState, "not_answered");
   assert.equal(String(done.answerText).includes("referred to in"), false);
   assert.equal(String(done.answerText).includes("Standing Order 99"), false);
+});
+
+test("OO-DEF-141 a letter pin of an excepted rule is not served as supported", async () => {
+  const sectionContent = [
+    "A member must not disclose evidence taken in private—",
+    "(a) unless the House authorises it, or",
+    "(b) to the Clerk.",
+  ].join("\n");
+  const done = await probe("named_admitted_source", {
+    citationLabel: "SO 5",
+    sectionContent,
+    support: true,
+    draft: "Bottom line:\nA member must not disclose evidence taken in private [SO 5(a)].\n\nSettlement: supported",
+  });
+  assert.notEqual(done.answerState, "supported");
+  const trace = done.trace as { claimRemovalCounts?: Record<string, number> };
+  assert.ok((trace.claimRemovalCounts?.omitted_source_qualification ?? 0) >= 1);
+});
+
+test("OO-DEF-144 the route strips a false suffix on an admitted mention", async () => {
+  const done = await probe("named_admitted_source", {
+    support: true,
+    draft: `Bottom line:\nStanding Order 1 (referred to in SO 1; not retrieved) lets the House sit [SO 1].\n\nSettlement: supported`,
+  });
+  assert.equal(String(done.answerText).includes("not retrieved"), false);
+  assert.equal(String(done.answerText).includes("Standing Order 1"), true);
+  assert.notEqual(done.answerState, "not_answered");
 });
 
 test("the main-path rewrite note saturates at 99", async () => {

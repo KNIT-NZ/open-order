@@ -1,5 +1,9 @@
 {
   "files": {
+    "grammar/v1.3/GRAMMAR-v1.3.md": "ebf53142b9ffc68274233a5f4a0045bf6a02f785c9ea614eeb7864658098ba35",
+    "grammar/v1.3/HARNESS.md": "43b7562806428b41184daa9610d178ed376696646bd327ac9e89af976e9a98c4",
+    "grammar/v1.3/MUTATION-TESTS.md": "aeca0e2b06c45b1c7d4e337905a2a5f1ac8b82d382392170678f93612417f38c",
+    "grammar/v1.3/golden-corpus-v1.3.jsonl": "a76639986d8ac690ac3e1f0544670f94d079d2d5bb0743fb0515c33b97d6205c",
     "corpus-matrix-v1.1.json": "ac56e065d7fbc19b21df625a41e30c3149804a2816ad9a4395c7a795a5ec2e53",
     "corpus-matrix-v1.2.json": "b179d695ff005279318c0a888ac9bbae32da435095db1b3ca66bc86e4ba24519",
     "corpus-referents-v2.9.json": "f9326a7113183e99c878b7334d96a36d3889d889e860cf14432dbc422f242ee0",
@@ -23,6 +27,8 @@
     "forum-spec-v2.33.md": "9beed646a29d42ac3f00176aff8f09a99e941e42d7a545c22f3a86a689906bdc",
     "forum-spec-v2.6.json": "48845dea4e3abb66a19a9cf8c7bfd2ac7fc3084387fe1e4e27d0651fb4d112a3",
     "self-match-expected.json": "d8d424aa2c7a7745416d50ecc9123ee03c0a5ec727bf05027d945660af450974",
-    "so-pack.json": "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80"
+    "so-pack.json": "34b592454f44b03c69159aff140868c6c3c8b0b05faa91266676c21333533a80",
+    "pin-regions.json": "77f41613b9667bbb1ca52f27a260406db4c0d6a7920d447d07896647d6a511c0",
+    "provision-trees.json": "e7d45f748d00bc65d5b9b3efd5f65838470f7c90c614645c3f64b9cfffd84946"
   }
 }

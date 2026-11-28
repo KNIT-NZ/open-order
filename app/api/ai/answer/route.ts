@@ -74,9 +74,9 @@ import {
 } from "@/lib/ai/scenario-adjudication";
 import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim-appeal";
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
+import { applyStructuredHedge, assessCitations, rewriteByGrammar } from "@/lib/citations/grammar";
 import {
   answerSectionHasContent,
-  attachClaimQualifications,
   mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
@@ -95,12 +95,9 @@ import {
   pruneUnsupportedAnswerClaims,
   removeEmptyAnswerSections,
   pruneValidatedAnswerContent,
-  rewriteForbiddenAuthorityMentions,
   selectFinalAuthorities,
   selectV517ProductionAuthorities,
   type SearchExecution,
-  validateAnswerAuthorityMentions,
-  validateAnswerCitations,
 } from "@/lib/procedural-reasoning";
 
 const aiAnswerRequestSchema = z.object({
@@ -990,15 +987,28 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const declined = outcomeState.abstained === true || fallback !== "none";
             return declined ? cited.filter((item) => !item.unconfirmed) : cited;
           };
-          const mentionLabels = authorityPayload.map((authority) => ({ citationLabel: authority.citationLabel }));
-          const checkMentions = (answerText: string) => validateAnswerAuthorityMentions({
-            answerText,
-            authorities: mentionLabels,
-          });
+          const grammarAuthorities = finalAuthorities.map((authority) => ({
+            citationLabel: authority.citationLabel,
+            sectionContent: authority.sectionContent,
+          }));
+          const citeCheck = (answerText: string) => {
+            const assessed = assessCitations(answerText, grammarAuthorities);
+            const invalid = assessed.brackets.filter((bracket) => bracket.class === "ungrounded" || bracket.class === "partial");
+            return invalid.length === 0
+              ? { ok: true as const }
+              : { ok: false as const, invalidCitations: invalid.map((bracket) => bracket.text) };
+          };
+          const checkMentions = (answerText: string) => {
+            const assessed = assessCitations(answerText, grammarAuthorities);
+            const invalid = assessed.mentions.filter((mention) => mention.where === "prose" && mention.status === "ungrounded");
+            if (invalid.length === 0 && assessed.stripSpans.length === 0) return { ok: true as const };
+            return { ok: false as const, invalidAuthorityMentions: invalid.map((mention) => mention.ref) };
+          };
           const rewriteDraft = (answerText: string) => {
-            const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
-            if (rewrite.removedMentions.length === 0) return { text: answerText, removed: 0 };
-            return { text: normalizeAnswerFormatting(rewrite.rewrittenText), removed: rewrite.removedMentions.length };
+            const assessed = assessCitations(answerText, grammarAuthorities);
+            const rewrite = rewriteByGrammar(answerText, assessed);
+            if (rewrite.text === answerText) return { text: answerText, removed: 0 };
+            return { text: normalizeAnswerFormatting(rewrite.text), removed: rewrite.removed };
           };
           const commitRewrites = (removed: number) => {
             if (removed <= 0) return;
@@ -1286,10 +1296,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               return;
             }
 
-            const citationValidation = validateAnswerCitations({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
+            const citationValidation = citeCheck(finalAnswer);
 
             if (!citationValidation.ok) {
               outcomeState.fallbackCode = "invalid_citations";
@@ -1357,10 +1364,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
               const recheckMentions = checkMentions(finalAnswer);
 
-              const recheckCitations = validateAnswerCitations({
-                answerText: finalAnswer,
-                authorities: authorityPayload,
-              });
+              const recheckCitations = citeCheck(finalAnswer);
 
               if (!recheckMentions.ok || !recheckCitations.ok || !finalAnswer) {
                 outcomeState.fallbackCode = "ungrounded_mentions";
@@ -1521,9 +1525,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 repairedAnswer = repairedRewrite.text;
                 noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
-                const repairedCitations = validateAnswerCitations({
-                  answerText: repairedAnswer, authorities: authorityPayload,
-                });
+                const repairedCitations = citeCheck(repairedAnswer);
                 const repairedMentions = checkMentions(repairedAnswer);
                 const qualificationVetoes = findOmittedSourceQualifications({
                   claims: repairedClaims, authorities: finalAuthorities,
@@ -1753,10 +1755,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             let remainingClaims = extractAnswerClaims(finalAnswer);
-            let finalCitationValidation = validateAnswerCitations({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
+            let finalCitationValidation = citeCheck(finalAnswer);
             let finalMentionValidation = checkMentions(finalAnswer);
 
             let hasBottomLine = answerSectionHasContent(
@@ -1802,10 +1801,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
                   const candidateClaims = extractAnswerClaims(`Bottom line:\n${line}`);
-                  const citationOK = validateAnswerCitations({
-                    answerText: candidate,
-                    authorities: authorityPayload,
-                  }).ok;
+                  const citationOK = citeCheck(candidate).ok;
                   const mentionOK = checkMentions(candidate).ok;
                   const qualificationOK = findOmittedSourceQualifications({
                     claims: candidateClaims,
@@ -1830,10 +1826,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                         decisions.claims[0].supported === true) {
                       finalAnswer = removeEmptyAnswerSections(candidate);
                       remainingClaims = extractAnswerClaims(finalAnswer);
-                      finalCitationValidation = validateAnswerCitations({
-                        answerText: finalAnswer,
-                        authorities: authorityPayload,
-                      });
+                      finalCitationValidation = citeCheck(finalAnswer);
                       finalMentionValidation = checkMentions(finalAnswer);
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
@@ -1949,7 +1942,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
-            finalAnswer = attachClaimQualifications(finalAnswer, {
+            finalAnswer = applyStructuredHedge(finalAnswer, assessCitations(finalAnswer, grammarAuthorities), {
               actLabels: [...actLabels],
               forumLabels: [...forumLabels],
             });

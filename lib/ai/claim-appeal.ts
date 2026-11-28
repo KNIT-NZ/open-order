@@ -1,3 +1,5 @@
+import { buildProvisionTree } from "@/lib/citations/grammar";
+
 /**
  * v36: Independently corroborate a disputed bottom-line entailment finding.
  * A model cannot reverse its own rejection: an independent affirmative review
@@ -15,13 +17,85 @@ export type AppealVerdict = {
 };
 export type AppealCheck = { accepted: boolean; reason: string };
 
+const SOURCE_PARENT = String.raw`(?:SO\s+\d+[a-z]*|Appendix\s+[A-F]\s+cl\s+\d+[a-z]*|\d+\/\d+)`;
+const SOURCE_PIN = String.raw`(?:\((?:\d+[a-z]*|[a-z]{1,4})\))+`;
+
+/** Parent authority for a citation. Letter-only, two-letter and deeper pins map back to that parent. */
 export function sourceLabel(citation: string): string {
   const trimmed = citation.trim();
-  const m = /^((?:SO\s+\d+[a-z]*)|(?:Appendix\s+[A-F]\s+cl\s+\d+[a-z]*)|(?:\d+\/\d+))\s*(?:\(\d+[a-z]*\)(?:\([a-z]\))?(?:\s*[-–]\s*\(\d+[a-z]*\)(?:\([a-z]\))?)?)$/i.exec(trimmed);
-  return (m ? m[1] : trimmed).replace(/\s+/g, " ");
+  const mapped = new RegExp(`^(${SOURCE_PARENT})\\s*(?:${SOURCE_PIN}(?:\\s*[-–]\\s*${SOURCE_PIN})?)?$`, "i").exec(trimmed);
+  return (mapped ? mapped[1] : trimmed).replace(/\s+/g, " ");
 }
 function key(label: string): string {
   return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function pinGroups(citation: string): string[] {
+  const trimmed = citation.trim().replace(/\s+/g, " ");
+  const parent = sourceLabel(citation).replace(/\s+/g, " ");
+  if (!trimmed.toLowerCase().startsWith(parent.toLowerCase())) return [];
+  return [...trimmed.slice(parent.length).matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim().toLowerCase()).filter(Boolean);
+}
+
+function markerOf(line: string): string | null {
+  const match = /^\s*\(([^)]+)\)/.exec(line);
+  return match ? match[1].trim().toLowerCase() : null;
+}
+
+function childKey(tree: Set<string>, parent: string, token: string): string | null {
+  const wanted = `${parent}(${token})`.toLowerCase();
+  for (const key of tree) {
+    if (key.toLowerCase() === wanted) return key;
+  }
+  return null;
+}
+
+/**
+ * Text of the cited pin, including its child markers.
+ * Letter and roman depth come from the provision tree, so (i) after (h) stays a letter.
+ */
+export function citedSubitemText(sectionContent: string, citation: string): string | null {
+  const pins = pinGroups(citation);
+  if (pins.length === 0) return sectionContent;
+  const treeList = buildProvisionTree(sourceLabel(citation), sectionContent);
+  if (treeList.length === 0) return null;
+  const tree = new Set(treeList);
+  const root = treeList.reduce((best, key) => (key.length < best.length ? key : best));
+  const target = pins.reduce<string | null>((parent, pin) => (parent ? childKey(tree, parent, pin) : null), root);
+  if (!target) return null;
+  const lines = sectionContent.split("\n");
+  const stack = [root];
+  const marked: Array<{ line: number; key: string }> = [];
+  lines.forEach((line, index) => {
+    const token = markerOf(line);
+    if (!token) return;
+    const frames = [...stack];
+    let found: string | null = null;
+    while (frames.length > 0) {
+      const parent = frames[frames.length - 1];
+      const key = parent ? childKey(tree, parent, token) : null;
+      if (key) {
+        found = key;
+        stack.splice(0, stack.length, ...frames, key);
+        break;
+      }
+      frames.pop();
+    }
+    if (found) marked.push({ line: index, key: found });
+  });
+  const start = marked.find((entry) => entry.key.toLowerCase() === target.toLowerCase());
+  if (!start) return null;
+  let end = lines.length;
+  for (const entry of marked) {
+    if (entry.line <= start.line) continue;
+    const same = entry.key.toLowerCase() === target.toLowerCase();
+    const child = entry.key.toLowerCase().startsWith(`${target.toLowerCase()}(`);
+    if (!same && !child) {
+      end = entry.line;
+      break;
+    }
+  }
+  return lines.slice(start.line, end).join("\n");
 }
 function normaliseSourceWhitespace(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim();
@@ -57,6 +131,12 @@ export function corroborateClaimAppeal(input: {
     if (!source || quote.length < 24 || quote.length > 500 || !normaliseSourceWhitespace(source).includes(quote)) {
       return { accepted: false, reason: "Source quotation not found verbatim in selected authority" };
     }
+    const pinned = claim.citations.filter((citation) => key(sourceLabel(citation)) === label && pinGroups(citation).length > 0);
+    const insidePin = pinned.length === 0 || pinned.some((citation) => {
+      const region = citedSubitemText(source, citation);
+      return region !== null && normaliseSourceWhitespace(region).includes(quote);
+    });
+    if (!insidePin) return { accepted: false, reason: "Source quotation is outside the cited sub-item" };
     covered.add(label);
   }
   if ([...allowed].some((label) => !covered.has(label))) {

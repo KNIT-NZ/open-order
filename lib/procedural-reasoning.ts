@@ -1672,18 +1672,8 @@ function citationParentLabel(
     (label) => label.toLowerCase() === normalized.toLowerCase(),
   );
   if (exact) return exact;
-
-  for (const label of allowedLabels) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const childPattern = new RegExp(
-      `^${escaped}(?:\\([^()]+\\))+$`,
-      "i",
-    );
-    if (childPattern.test(normalized)) {
-      return label;
-    }
-  }
-
+  // Pinpoints stay intact so the grammar can grade them. Collapsing
+  // [SO 300(4)] to [SO 300] hid revoked and nonexistent subdivisions.
   return null;
 }
 
