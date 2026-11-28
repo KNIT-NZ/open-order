@@ -1297,17 +1297,21 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             }
 
             const citationValidation = citeCheck(finalAnswer);
-            const withoutNumberRanges = (answerText: string, invalid: string[]): string | null => {
+            const downgradeNumberRanges = (answerText: string, invalid: string[]): string | null => {
               if (invalid.length === 0 || !invalid.every((item) => isNumberRangeBracket(item))) return null;
-              let next = answerText;
-              for (const item of invalid) next = next.split(`[${item}]`).join("");
+              const wanted = new Set(invalid.map((item) => item.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim()));
+              let next = answerText.replace(/\[([^\[\]]+)\]/g, (match, inner: string) => {
+                const flat = inner.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+                return wanted.has(flat) ? "a provision that was not retrieved" : match;
+              });
+              next = next.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([.,;:!?])/g, "$1");
               next = removeEmptyAnswerSections(normalizeAnswerFormatting(next));
-              if (!next.trim() || !citeCheck(next).ok) return null;
+              if (!next.trim() || !citeCheck(next).ok || !checkMentions(next).ok) return null;
               return next;
             };
 
             if (!citationValidation.ok) {
-              const kept = withoutNumberRanges(finalAnswer, citationValidation.invalidCitations);
+              const kept = downgradeNumberRanges(finalAnswer, citationValidation.invalidCitations);
               if (kept) {
                 finalAnswer = kept;
                 outcomeState.pruned = true;
@@ -1381,7 +1385,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
 
               const recheckCitations = citeCheck(finalAnswer);
 
-              const keptRanges = recheckCitations.ok ? null : withoutNumberRanges(finalAnswer, recheckCitations.invalidCitations);
+              const keptRanges = recheckCitations.ok ? null : downgradeNumberRanges(finalAnswer, recheckCitations.invalidCitations);
               if (keptRanges) {
                 finalAnswer = keptRanges;
                 outcomeState.pruned = true;

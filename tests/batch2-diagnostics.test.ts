@@ -784,31 +784,50 @@ async function probe(
   return done.data;
 }
 
-test("C3 an unvalidatable number range drops its line and the other lines are served", async () => {
+test("C3 an unvalidatable number range is the placeholder, and an en dash takes the same path", async () => {
+  const bodies = {
+    "SO 1": QUOTE,
+    "SO 7": "(1) first duty of the Speaker in the House\n(2) second duty of the Speaker in the House",
+  };
+  for (const range of ["[SO 7(1) to (9)]", "[SO 7(1)–(9)]", "[SO 7(1)—(9)]"]) {
+    const done = await probe("named_admitted_source", {
+      labels: ["SO 1", "SO 7"],
+      bodies,
+      draft: [
+        "Bottom line:",
+        "The House may suspend the sitting [SO 1].",
+        "",
+        "What this means:",
+        `A member must give written notice of the motion ${range}.`,
+        "Both duties apply [SO 7(1) to (2)].",
+        "",
+        "Settlement: supported",
+      ].join("\n"),
+    });
+    const text = String(done.answerText);
+    assert.notEqual(done.fallbackCode, "invalid_citations", range);
+    assert.equal(done.abstained, false, range);
+    assert.match(text, /The House may suspend the sitting \[SO 1\]/, range);
+    assert.match(text, /\[SO 7\(1\) to \(2\)\]/, range);
+    assert.match(text, /a provision that was not retrieved/, range);
+    assert.equal(text.includes("(9)"), false, range);
+    assert.equal(/[ \t]{2,}|[ \t][.,]/.test(text), false, range);
+  }
+});
+
+test("OO-DEF-149 a comma edition on the current year stays in the answer", async () => {
   const done = await probe("named_admitted_source", {
-    labels: ["SO 1", "SO 7"],
-    bodies: {
-      "SO 1": QUOTE,
-      "SO 7": "(1) first duty of the Speaker in the House\n(2) second duty of the Speaker in the House",
-    },
     draft: [
       "Bottom line:",
-      "The House may suspend the sitting [SO 1].",
-      "",
-      "What this means:",
-      "Both duties apply [SO 7(1) to (2)].",
-      "A wider range does not [SO 1 to 9].",
+      "The House may suspend the sitting [SO 1, 2026 edition].",
       "",
       "Settlement: supported",
     ].join("\n"),
   });
-  assert.notEqual(done.fallbackCode, "invalid_citations");
-  assert.equal(done.abstained, false);
   const text = String(done.answerText);
-  assert.match(text, /The House may suspend the sitting \[SO 1\]/);
-  assert.match(text, /\[SO 7\(1\) to \(2\)\]/);
-  assert.equal(text.includes("[SO 1 to 9]"), false);
-  assert.equal(text.includes("SO 1 to 9"), false);
+  assert.equal(done.abstained, false);
+  assert.match(text, /\[SO 1, 2026 edition\]/);
+  assert.equal(text.includes("a provision that was not retrieved"), false);
 });
 
 test("the route passes one 270s budget to json and text calls", async () => {

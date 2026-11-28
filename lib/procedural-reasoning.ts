@@ -1695,6 +1695,12 @@ export function normalizeAnswerCitationLabels(input: {
 
       if (parts.length === 0) return match;
 
+      const withoutEdition = inner
+        .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+edition\)/i, "")
+        .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+edition\b/i, "")
+        .trim();
+      if (withoutEdition !== inner.trim() && citationParentLabel(withoutEdition, allowedLabels)) return match;
+
       const rewritten = parts.map((part) => {
         const parent = citationParentLabel(part, allowedLabels);
         return `[${parent ?? part}]`;
@@ -1835,7 +1841,12 @@ function citationCandidates(prefix: string, part: string): string[] {
 
 /** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
 function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
-  const normalized = cited.replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ").replace(/\s+/g, " ").trim();
+  const normalized = cited
+    .replace(/^(?:standing orders?|s\.?\s*o\.?)\s+/i, "SO ")
+    .replace(/,?\s*\((?:1[8-9]\d{2}|20\d{2})\s+edition\)/i, "")
+    .replace(/,\s*(?:1[8-9]\d{2}|20\d{2})\s+edition\b/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const parts = citationParts(normalized);
   let prefix = "";
   let parent = "";
@@ -1865,7 +1876,7 @@ function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedFo
     sawLabel = true;
   }
   if (!sawLabel) return false;
-  return mentionSpans(cited, allowedForms).every((span) => span.admitted && !span.suffix);
+  return mentionSpans(normalized, allowedForms).every((span) => span.admitted && !span.suffix);
 }
 
 function stripBracketedCitations(text: string): string {

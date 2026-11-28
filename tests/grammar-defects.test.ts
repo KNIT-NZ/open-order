@@ -491,6 +491,117 @@ test("C2 the guard and the legacy validator accept forms the grammar grounds", (
   assert.deepEqual(legacy, { ok: true });
 });
 
+test("OO-DEF-153 a group or edition after a range endpoint is not swallowed", () => {
+  const section = "(1) first duty of the Speaker\n(2) second duty of the Speaker\n(a) alpha duty\n(b) beta duty\n(c) gamma duty";
+  const labels = authorities(["SO 7"], new Map([["SO 7", section]]));
+  for (const input of ["[SO 7(1)–(2)(c)]", "[SO 7(1) to (2)(z)]", "[SO 7(1)–(2)(abc)]", "[SO 7(1)–(2) (2023)]", "[SO 7(1)–(2), 2023 edition]"]) {
+    const assessed = assessCitations(`The House may sit ${input}.`, labels);
+    assert.notEqual(assessed.reasonCode, "served", input);
+    assert.equal(assessed.mentions.some((mention) => mention.status === "ungrounded"), true, input);
+  }
+  const current = assessCitations("The House may sit [SO 7(1)–(2) (2026 edition)].", labels);
+  assert.equal(current.reasonCode, "served");
+});
+
+test("OO-DEF-155 appendix ranges use the same endpoint checks", () => {
+  const letters = "(1) the member must—\n(a) speak once in the House\n(b) sit down after speaking\n(c) leave the chamber afterwards";
+  const romans = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].map((token) => `(${token}) roman duty ${token} of the member`).join("\n");
+  const letterLabels = authorities(["Appendix B cl 1"], new Map([["Appendix B cl 1", letters]]));
+  const romanLabels = authorities(["Appendix B cl 1"], new Map([["Appendix B cl 1", romans]]));
+  const phantom = assessCitations("The member must speak [Appendix B cl 1(1)(a)–(z)].", letterLabels);
+  assert.notEqual(phantom.reasonCode, "served");
+  const ordered = assessCitations("The member must speak [Appendix B cl 1(1)(a) to (c)].", letterLabels);
+  assert.equal(ordered.reasonCode, "served");
+  const reversed = assessCitations("The member must speak [Appendix B cl 1(iv)–(i)].", romanLabels);
+  assert.notEqual(reversed.reasonCode, "served");
+  assert.equal(reversed.mentions.some((mention) => mention.code === "ungrounded-range"), true);
+  const forward = assessCitations("The member must speak [Appendix B cl 1(v) to (ix)].", romanLabels);
+  assert.equal(forward.reasonCode, "served");
+  const romanReversed = assessCitations("The member must speak [Appendix B cl 1(ix)–(v)].", romanLabels);
+  assert.notEqual(romanReversed.reasonCode, "served");
+  const current = assessCitations("The House may sit [Appendix B cl 1 (2026 edition)].", letterLabels);
+  assert.equal(current.reasonCode, "served");
+  const old = assessCitations("The House may sit [Appendix B cl 1 (2023 edition)].", letterLabels);
+  assert.notEqual(old.reasonCode, "served");
+});
+
+test("OO-DEF-153 range fuzz serves no trailing or phantom label", () => {
+  const pack = JSON.parse(readFileSync(new URL("./fixtures/so-pack.json", import.meta.url), "utf8")) as {
+    sections: Array<{ citation_label: string; content: string }>;
+  };
+  const sections = pack.sections.filter((section) => section.citation_label.startsWith("SO ") || / cl \d/.test(section.citation_label));
+  const separators = ["-", "–", "—", " to ", " through "];
+  const badTails = ["(z)", "(abc)", " (2023)", ", 2023 edition"];
+  let servedBad = 0;
+  let checked = 0;
+  for (const section of sections) {
+    const tree = buildProvisionTree(section.citation_label, section.content);
+    if (tree.length === 0) continue;
+    const root = tree.reduce((best, key) => (key.length < best.length ? key : best));
+    const byParent = new Map<string, string[]>();
+    for (const key of tree) {
+      if (key === root) continue;
+      const parent = key.replace(/\([^()]*\)$/, "");
+      const list = byParent.get(parent) ?? [];
+      list.push(key);
+      byParent.set(parent, list);
+    }
+    const suffix = (key: string) => key.slice(root.length);
+    for (const children of byParent.values()) {
+      if (children.length < 1) continue;
+      const start = children[0];
+      const realEnd = children[Math.min(1, children.length - 1)];
+      const forms = separators.flatMap((separator) => badTails.map((tail) => `${suffix(start)}${separator}${suffix(realEnd)}${tail}`));
+      if (start !== realEnd) forms.push(`${suffix(realEnd)} to ${suffix(start)}`);
+      for (const form of forms) {
+        checked += 1;
+        const input = `The House may sit [${section.citation_label}${form}].`;
+        const assessed = assessCitations(input, [{ citationLabel: section.citation_label, sectionContent: section.content }], {
+          provisionTree: { [section.citation_label]: tree },
+        });
+        const reversed = start !== realEnd && form.startsWith(suffix(realEnd));
+        if (reversed && suffix(start).startsWith(suffix(realEnd))) continue;
+        if (assessed.reasonCode === "served") servedBad += 1;
+      }
+    }
+  }
+  console.log(JSON.stringify({ rangeFuzzChecked: checked, servedBad }));
+  assert.equal(servedBad, 0);
+});
+
+test("OO-DEF-156 a long-form appeal keeps the pin", () => {
+  const section = "(1) first duty of the Speaker in the chamber\n(2) second duty of the Speaker outside";
+  const claim = {
+    id: "claim-1",
+    text: "The Speaker has the first duty [Standing Order 7(1)].",
+    citations: ["Standing Order 7(1)"],
+    lineIndex: 1,
+  };
+  const authoritiesForAppeal = [{ citationLabel: "SO 7", sectionContent: section }];
+  const outside = corroborateClaimAppeal({
+    claim,
+    verdict: {
+      id: "claim-1",
+      supported: true,
+      reason: "The cited sub-item states the duty.",
+      witnesses: [{ citationLabel: "Standing Order 7(1)", exactQuote: "second duty of the Speaker outside" }],
+    },
+    authorities: authoritiesForAppeal,
+  });
+  assert.equal(outside.accepted, false);
+  const inside = corroborateClaimAppeal({
+    claim,
+    verdict: {
+      id: "claim-1",
+      supported: true,
+      reason: "The cited sub-item states the duty.",
+      witnesses: [{ citationLabel: "Standing Order 7(1)", exactQuote: "first duty of the Speaker in the chamber" }],
+    },
+    authorities: authoritiesForAppeal,
+  });
+  assert.equal(inside.accepted, true);
+});
+
 test("OO-DEF-149 a current edition phrase is not a withhold and a superseded year is", () => {
   const labels = authorities(["SO 7"], new Map([["SO 7", "(1) first duty"]]));
   for (const input of ["[SO 7 (2026 edition)]", "[SO 7, 2026 edition]", "[SO 7(2026 edition)]"]) {
@@ -498,7 +609,14 @@ test("OO-DEF-149 a current edition phrase is not a withhold and a superseded yea
     assert.equal(assessed.reasonCode, "served", input);
     assert.equal(assessed.brackets[0]?.class, "grounded", input);
   }
-  for (const input of ["[SO 7 (2023)]", "[SO 7 (2023 edition)]"]) {
+  const comma = assessCitations("The House may sit [SO 7, 2026 edition].", labels);
+  assert.equal(comma.reasonCode, "served");
+  const legacy = validateAnswerCitations({
+    answerText: "The House may sit [SO 7, 2026 edition].",
+    authorities: [{ citationLabel: "SO 7" }],
+  });
+  assert.deepEqual(legacy, { ok: true });
+  for (const input of ["[SO 7 (2023)]", "[SO 7 (2023 edition)]", "[SO 7, 2023 edition]"]) {
     const assessed = assessCitations(`The House may sit ${input}.`, labels);
     assert.notEqual(assessed.reasonCode, "served", input);
     assert.equal(assessed.mentions.some((mention) => mention.code === "ungrounded-edition"), true, input);

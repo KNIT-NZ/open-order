@@ -34,10 +34,10 @@ function key(label: string): string {
 }
 
 function pinGroups(citation: string): string[] {
-  const trimmed = citation.trim().replace(/\s+/g, " ");
+  const normalized = citation.trim().replace(/\s+/g, " ").replace(/^(?:standing orders?|s\.?\s*o\.?s?)\s+/i, "SO ");
   const parent = sourceLabel(citation).replace(/\s+/g, " ");
-  if (!trimmed.toLowerCase().startsWith(parent.toLowerCase())) return [];
-  return [...trimmed.slice(parent.length).matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim().toLowerCase()).filter(Boolean);
+  if (!normalized.toLowerCase().startsWith(parent.toLowerCase())) return [];
+  return [...normalized.slice(parent.length).matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim().toLowerCase()).filter(Boolean);
 }
 
 function markerOf(line: string): string | null {

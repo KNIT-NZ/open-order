@@ -532,7 +532,31 @@ function pinsInOrder(start: string, end: string): boolean {
     if (delta !== 0) return delta < 0;
     return leftNumber[2].toLowerCase() <= rightNumber[2].toLowerCase();
   }
+  const leftRoman = romanValue(left);
+  const rightRoman = romanValue(right);
+  if (leftRoman !== null && rightRoman !== null) return leftRoman <= rightRoman;
   return left <= right;
+}
+
+/** An edition, or every following parenthetical, after a range endpoint. The span starts at the bracket. */
+function applyRangeTail(text: string, item: Item, cursor: number, currentYear: number): { end: number; residue: Item | null } {
+  const edition = readYear(text, cursor) ?? readEditionPhrase(text, cursor);
+  if (edition) {
+    item.year = edition.year;
+    item.yearBound = edition.year !== currentYear;
+    item.textEnd = edition.end;
+    return { end: edition.end, residue: null };
+  }
+  let end = cursor;
+  let residueStart = -1;
+  for (;;) {
+    const group = /^(\s*)([(\uFF08][^)\uFF09]*[)\uFF09])/.exec(text.slice(end));
+    if (!group) break;
+    if (residueStart < 0) residueStart = end + group[1].length;
+    end += group[0].length;
+  }
+  if (residueStart < 0) return { end: cursor, residue: null };
+  return { end, residue: pinResidue(text, residueStart, end) };
 }
 
 /** A section or pin number range. Letter ranges are a separate check. */
@@ -645,8 +669,10 @@ function readProvisionAt(text: string, index: number, inBracket: boolean, singul
       continued.rangeEnd = `${parent}${pinRange.pin}`;
       continued.textEnd = pinRange.end;
       continued.ref = `${continued.cpk}..${pinRange.pin}`;
-      cursor = pinRange.end;
-      continue;
+      const tail = applyRangeTail(text, continued, pinRange.end, 2026);
+      cursor = tail.end;
+      if (tail.residue) items.push(tail.residue);
+      break;
     }
     const range = rangeAt(text, cursor);
     if (range && items[items.length - 1].number !== null) {
@@ -896,10 +922,33 @@ function readAppendix(text: string, index: number): { items: Item[]; end: number
   if (clause) {
     const pins = readPins(text, index + clause[0].length);
     const cpk = `APP ${clause[1].toUpperCase()} cl ${clause[2]}${pins.pins}`;
-    const tail = unreadablePinTail(text, pins.end);
-    const clauseItems = [makeItem({ kind: "appendix", ref: cpk, cpk, pins: pins.pins, textStart: index, textEnd: pins.end })];
-    if (tail.end > tail.start) clauseItems.push(pinResidue(text, tail.start, tail.end));
-    return { end: tail.end, items: clauseItems };
+    const clauseItem = makeItem({ kind: "appendix", ref: cpk, cpk, pins: pins.pins, textStart: index, textEnd: pins.end });
+    let end = pins.end;
+    const pinRange = pins.pins ? readPinRange(text, end) : null;
+    if (pinRange) {
+      const parent = cpk.replace(/\([^()]*\)$/, "");
+      clauseItem.pinRange = true;
+      clauseItem.rangeEnd = `${parent}${pinRange.pin}`;
+      clauseItem.textEnd = pinRange.end;
+      clauseItem.ref = `${cpk}..${pinRange.pin}`;
+      end = pinRange.end;
+    }
+    const edition = readYear(text, end) ?? readEditionPhrase(text, end);
+    if (edition && !pinRange) {
+      clauseItem.year = edition.year;
+      clauseItem.yearBound = edition.year !== 2026;
+      clauseItem.textEnd = edition.end;
+      end = edition.end;
+    }
+    const clauseItems = [clauseItem];
+    if (pinRange) {
+      const ranged = applyRangeTail(text, clauseItem, end, 2026);
+      if (ranged.residue) clauseItems.push(ranged.residue);
+      return { end: ranged.end, items: clauseItems };
+    }
+    const unread = unreadablePinTail(text, end);
+    if (unread.end > unread.start) clauseItems.push(pinResidue(text, unread.start, unread.end));
+    return { end: unread.end, items: clauseItems };
   }
   const ofApp = /^(?:clauses|clause|cl\.?)\s+(\d+[A-Za-z]*)([\s\S]*?)\s+of\s+appendix\s+([a-f])/i.exec(slice);
   if (ofApp && ofApp[0].length < 120) {
@@ -1140,12 +1189,20 @@ function gradePinRange(item: Item, admitted: Set<string>, trees: TreeIndex): { s
   const start = item.cpk;
   const end = item.rangeEnd;
   if (!start || !end) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
+  if (item.yearBound) return { status: "ungrounded", code: "ungrounded-edition", cpk: start };
+  if (isRevoked(start) || isRevoked(end)) return { status: "ungrounded", code: "ungrounded-revoked", cpk: start };
   const ancestor = ancestorOf(start, admitted);
   if (!ancestor) return { status: "ungrounded", code: "ungrounded-not-admitted", cpk: start };
+  const parent = start.replace(/\([^()]*\)$/, "");
   if (trees.unknown.has(ancestor)) return { status: "ungrounded", code: "unknown-tree", cpk: start };
   const nodes = trees.nodes.get(ancestor);
   if (!nodes) return { status: "ungrounded", code: "unknown-tree", cpk: start };
-  if (!nodes.has(start) || !nodes.has(end)) return { status: "ungrounded", code: "ungrounded-nonexistent", cpk: start };
+  if (!nodes.has(start) || !nodes.has(end)) {
+    if (AMBIGUOUS_PARENTS.has(parent) || AMBIGUOUS_PARENTS.has(ancestor)) {
+      return { status: "ungrounded", code: "ambiguous-tree", cpk: start };
+    }
+    return { status: "ungrounded", code: "ungrounded-nonexistent", cpk: start };
+  }
   if (!pinsInOrder(start, end)) return { status: "ungrounded", code: "ungrounded-range", cpk: start };
   return { status: "grounded", code: "grounded-pinpoint", cpk: start };
 }
