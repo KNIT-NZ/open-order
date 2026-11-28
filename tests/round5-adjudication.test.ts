@@ -190,6 +190,11 @@ test("withholding stage follows the recovery that actually ran", () => {
     { status: "ran_nothing_admitted", ran: true, stage: "recovery" },
   ] as const;
   assert.equal(withholdingStage({ adjudicated: false, recoveryRan: false }), "selection");
+  assert.equal(withholdingStage({
+    adjudicated: true,
+    recoveryRan: false,
+    recoveryStatus: "v40_no_governing_witness",
+  }), "recovery");
   for (const item of cases) {
     const stage = withholdingStage({ adjudicated: true, recoveryRan: item.ran });
     assert.equal(stage, item.stage, item.status);
@@ -267,6 +272,22 @@ test("withholding text matches the stage that withheld", () => {
     retrievedEvidenceCount: 0,
   });
   assert.match(empty, /No authorities were retrieved/);
+  assert.equal(empty.includes("Your options:"), false);
+  assert.equal(empty.includes("validation failed"), false);
+  assert.equal(empty.includes("(miscellaneous"), false);
+  const recovered = buildFallbackAnswer({
+    question: "synthetic",
+    planIntent: "explain_rule",
+    authorities: [],
+    effectiveCorpus: null,
+    fallbackReason: "Grounded-claim validation encountered an unclassified internal error (HTTP 500); attempts: 2.",
+    failureClass: "selection",
+    retrievedEvidenceCount: 2,
+    withheldStage: "recovery",
+  });
+  assert.match(recovered, /withheld at recovery/);
+  assert.equal(recovered.includes("HTTP"), false);
+  assert.equal(recovered.includes("validation failed"), false);
   assert.equal(empty.includes("Retrieval found possible authorities"), false);
 });
 

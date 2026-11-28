@@ -154,6 +154,28 @@ test("the citation filter recognises a qualified source", () => {
   assert.deepEqual(matched.map((item) => item.citationLabel), ["SO 1"]);
 });
 
+test("a citation token matches the whole label, so SO 12 does not list SO 1", () => {
+  const pack = [{ citationLabel: "SO 1" }, { citationLabel: "SO 12" }];
+  assert.deepEqual(
+    authoritiesReferencedByAnswer("See [SO 12].", pack).map((item) => item.citationLabel),
+    ["SO 12"],
+  );
+  assert.deepEqual(
+    authoritiesReferencedByAnswer("See [SO 1].", pack).map((item) => item.citationLabel),
+    ["SO 1"],
+  );
+  assert.deepEqual(
+    authoritiesReferencedByAnswer("See [SO 1(2)].", pack).map((item) => item.citationLabel),
+    ["SO 1"],
+  );
+});
+
+test("an answer that cites no admitted label lists nothing", () => {
+  const pack = [{ citationLabel: "SO 1" }, { citationLabel: "SO 2" }];
+  assert.deepEqual(authoritiesReferencedByAnswer("The House may sit.", pack), []);
+  assert.deepEqual(authoritiesReferencedByAnswer("See [SO 99].", pack), []);
+});
+
 test("a qualified-only admission is listed as Qualified", async () => {
   await withCorpusCommitteeNames(NAMES, async () => {
     const result = await ask({ results: [source("SO 1", "s1", QUALIFIED_PATH)] });

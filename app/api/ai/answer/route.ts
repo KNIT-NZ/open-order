@@ -10,6 +10,7 @@ import { scheduleOperationalEvent } from "@/lib/open-order/operational-writer";
 import { z } from "zod";
 import { searchPlanSchema } from "@/lib/ai/search-plan-schema";
 import { generateJson, streamText } from "@/lib/ai";
+import type { AiTask } from "@/lib/ai/types";
 import {
   ANSWER_STREAM_DEADLINE_MS,
   ANSWER_STREAM_HEARTBEAT_MS,
@@ -75,11 +76,14 @@ import { corroborateClaimAppeal, rejectedBottomLineClaims } from "@/lib/ai/claim
 import { searchProceduralAuthorities } from "@/lib/procedural-search";
 import {
   answerSectionHasContent,
+  attachClaimQualifications,
+  mentionRewriteEdit,
   appendEvidenceGapSection,
   buildAuthorityPayload,
   buildAuthorityProfile,
   buildCorpusBridgeSearchRequests,
   buildFallbackAnswer,
+  firstDraftDebugEnabled,
   withholdingStage,
   buildMissingSlotRecoveryRequests,
   buildProceduralQueryPlan,
@@ -257,12 +261,26 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       };
       let firstDraftRecord: ReturnType<typeof freezeFirstDraft> | null = null;
       let answerEdits: string[] = [];
+      let mentionRewrites = 0;
+      const claimRemovalCounts: Record<string, number> = {};
+      const noteClaimRemovals = (codes: readonly string[]) => {
+        for (const code of codes) {
+          if (!/^[a-z0-9_]{1,40}$/.test(code)) continue;
+          claimRemovalCounts[code] = (claimRemovalCounts[code] ?? 0) + 1;
+        }
+      };
+      let adjudicationTrace: {
+        nominationCount: number;
+        unavailableNominations: number;
+        dossierOutcomes: string[];
+      } = { nominationCount: 0, unavailableNominations: 0, dossierOutcomes: [] };
       // `other` is a failed attempt that was not a 429, a 5xx, or a timeout.
       const providerAttempts: Array<{ model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
       const stageModels: Array<{ task: string; model: string; outcome: "ok" | "429" | "5xx" | "timeout" | "other" }> = [];
       let openAttemptIndex: number | null = null;
       let lastAttemptedModel: string | null = null;
       let answerModel: string | null = null;
+      let repairModel: string | null = null;
       let activeSignal: AbortSignal | undefined;
         const noteRetry = () => { outcomeState.providerRetries += 1; };
         const noteCheckedWithholding = () => {
@@ -290,18 +308,19 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           providerAttempts.push({ model: attempt.model, outcome: attempt.outcome });
         }
         lastAttemptedModel = attempt.model;
-        if (task === "query.plan" || task === "answer.generate" || task === "answer.validate") {
+        if (task === "query.plan" || task === "scenario.adjudication" || task === "source.recovery"
+          || task === "answer.generate" || task === "answer.validate" || task === "answer.repair") {
           stageModels.push({ task, model: attempt.model, outcome: attempt.outcome });
         }
         if (task === "answer.generate" && attempt.outcome === "ok") answerModel = attempt.model;
+        if (task === "answer.repair" && attempt.outcome === "ok") repairModel = attempt.model;
       };
       // Only models that actually served a stage. A failed attempt does not count.
       const mixedModels = () => new Set(stageModels.filter((attempt) => attempt.outcome === "ok").map((attempt) => attempt.model)).size > 1;
       // Last model whose attempt started. This does not mean the attempt succeeded;
       // read providerAttempts for each outcome.
       const servedModel = () => resolveServedModel(answerModel, lastAttemptedModel);
-      const exposeFirstDraft = process.env.OPEN_ORDER_DEBUG_FIRST_DRAFT === "1"
-        && process.env.VERCEL_ENV !== "production";
+      const exposeFirstDraft = firstDraftDebugEnabled(process.env);
       const decorate = (event: string, data: unknown) => {
         if (event === "stage" && data && typeof data === "object") {
           const stage = data as { key?: unknown; label?: unknown };
@@ -311,12 +330,25 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         }
         if (!(data && typeof data === "object")) return data;
         const record = data as Record<string, unknown>;
+        const shown = event === "done" && Array.isArray(record.authorities)
+          ? record.authorities as Array<{ unconfirmed?: boolean }>
+          : [];
         const trace = {
           schemaVersion: 2,
           requestId,
           buildCommit,
           stageTimeline,
           incidentRepair,
+          claimRemovalCounts: { ...claimRemovalCounts },
+          adjudication: {
+            nominationCount: adjudicationTrace.nominationCount,
+            unavailableNominations: adjudicationTrace.unavailableNominations,
+            dossierOutcomes: adjudicationTrace.dossierOutcomes.slice(),
+          },
+          shownAuthorities: {
+            count: shown.length,
+            unconfirmed: shown.filter((item) => item?.unconfirmed === true).length,
+          },
         };
         if (event === "error") {
           const reason = typeof record.reason === "string"
@@ -336,7 +368,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
         }
         if (event === "done") {
           const outcome = deriveAnswerOutcome({ ...outcomeState, fallbackReason: outcomeState.fallbackCode });
-          const prose = typeof record.fallbackReason === "string" ? record.fallbackReason : null;
           return {
             ...record,
             route: outcome.route,
@@ -347,7 +378,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             repairAccepted: outcome.repairAccepted,
             appealAttempted: outcome.appealAttempted,
             appealAccepted: outcome.appealAccepted,
-            fallbackReason: prose,
+            fallbackReason: outcome.fallbackReason === "none" ? null : outcome.fallbackReason,
             fallbackCode: outcome.fallbackReason,
             partial: outcome.partial,
             abstained: outcome.abstained,
@@ -377,7 +408,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
       let citationList = (_answerText: string): Array<{ citationLabel?: string; unconfirmed?: boolean }> => [];
       const run = async () => {
         const started = startedAt;
-        const callJson = <T,>(request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
+        const callJson = <T,>(request: { task: AiTask; systemInstruction: string; prompt: string; temperature?: number; validate?: (value: unknown) => void }) =>
           generate<T>({
             ...request,
             signal: activeSignal,
@@ -385,7 +416,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             onProviderAttempt: (attempt) => recordAttempt(request.task, attempt),
             onProviderAttemptStart: beginAttempt,
           });
-        const callText = (request: { task: "query.plan" | "answer.generate" | "answer.validate"; systemInstruction: string; prompt: string; temperature?: number }) =>
+        const callText = (request: { task: AiTask; systemInstruction: string; prompt: string; temperature?: number }) =>
           streamAnswer({
             ...request,
             signal: activeSignal,
@@ -640,8 +671,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           );
           const v40IncidentGate = adjudicationRoute.adjudicate;
           outcomeState.route = v40IncidentGate ? "incident_adjudication" : "semantic_selector";
-          let actUnconfirmed = false;
-          let forumUnconfirmed = false;
           const actLabels = new Set<string>();
           const forumLabels = new Set<string>();
           const remember = (target: Set<string>, labels: string[]) => {
@@ -653,7 +682,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const noteActQualification = (labels: string[]) => {
             remember(actLabels, labels);
             if (actLabels.size === 0) return;
-            actUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "act_attestation_unconfirmed")) {
               outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "act_attestation_unconfirmed" });
             }
@@ -661,7 +689,6 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
           const noteForumQualification = (labels: string[]) => {
             remember(forumLabels, labels);
             if (forumLabels.size === 0) return;
-            forumUnconfirmed = true;
             if (!outcomeState.uncertainty.some((item) => item.facet === "forum_identity_unconfirmed")) {
               outcomeState.uncertainty.push({ class: "retrieval_uncertainty", facet: "forum_identity_unconfirmed" });
             }
@@ -719,8 +746,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 const v40Provider = await runClaimValidationWithRetry({
                   requestStartedAt: started,
                   invoke: () => callJson<unknown>({
-                    // Evidence adjudication is a strict validation operation.
-                    task: "answer.validate",
+                    task: "scenario.adjudication",
                     systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
                     prompt: buildV40SourceAdjudicationPrompt({
                       question, situation: plan.situation as V40Situation | undefined,
@@ -766,7 +792,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     v40Diagnostic.recovery.status = "provider_unavailable";
                     try {
                       const rawRecovery = await callJson<unknown>({
-                        task: "answer.validate", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
+                        task: "source.recovery", systemInstruction: V402_SOURCE_RECOVERY_SYSTEM_PROMPT,
                         prompt: buildV40SourceAdjudicationPrompt({ question,
                           situation: plan.situation as V40Situation | undefined,
                           candidates, legacySelected: [] }), temperature: 0,
@@ -826,6 +852,19 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               noteEvidenceGap("no retrieved source body");
             }
           }
+          {
+            const knownStatus = new Set(["not_nominated", "rejected", "admitted", "withheld_no_primary", "not_reviewed_limit"]);
+            const rows = v40Diagnostic.dispositions ?? [];
+            adjudicationTrace = {
+              nominationCount: rows.filter((row) => row.status !== "not_nominated").length,
+              unavailableNominations: Number(v40Diagnostic.unavailableNominations) || 0,
+              dossierOutcomes: rows.map((row) => {
+                const status = knownStatus.has(row.status) ? row.status : "other";
+                const reason = /^[a-z0-9_:,-]{1,80}$/i.test(String(row.reason ?? "")) ? String(row.reason) : "other_reason";
+                return `${status}:${reason}`;
+              }),
+            };
+          }
           selected = {
             ...selected,
             finalAuthorities: v40AuthoritySet,
@@ -883,7 +922,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               judge: async () => {
                 if (activeSignal?.aborted) throw new DOMException("The answer deadline elapsed.", "AbortError");
                 const raw = await callJson<unknown>({
-                  task: "answer.validate",
+                  task: "scenario.adjudication",
                   systemInstruction: V40_SOURCE_ADJUDICATION_SYSTEM_PROMPT,
                   prompt: buildV40SourceAdjudicationPrompt({
                     question,
@@ -947,6 +986,21 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const fallback = String(outcomeState.fallbackCode ?? "none").trim();
             const declined = outcomeState.abstained === true || fallback !== "none";
             return declined ? cited.filter((item) => !item.unconfirmed) : cited;
+          };
+          const mentionLabels = authorityPayload.map((authority) => ({ citationLabel: authority.citationLabel }));
+          const checkMentions = (answerText: string) => validateAnswerAuthorityMentions({
+            answerText,
+            authorities: mentionLabels,
+          });
+          const rewriteDraft = (answerText: string) => {
+            const rewrite = rewriteForbiddenAuthorityMentions({ answerText, authorities: mentionLabels });
+            if (rewrite.removedMentions.length === 0) return { text: answerText, removed: 0 };
+            return { text: normalizeAnswerFormatting(rewrite.rewrittenText), removed: rewrite.removedMentions.length };
+          };
+          const commitRewrites = (removed: number) => {
+            if (removed <= 0) return;
+            mentionRewrites += removed;
+            outcomeState.rewritten = true;
           };
 
           const diagnosticConcepts = [
@@ -1055,7 +1109,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             const noAuthorityReason = searches.some((search) => search.results.length > 0)
               ? "Retrieved evidence did not satisfy the semantic authority-selection requirements."
               : "No relevant authorities were retrieved.";
-            const withheldStage = withholdingStage({ adjudicated: v40IncidentGate, recoveryRan });
+            const withheldStage = withholdingStage({
+              adjudicated: v40IncidentGate,
+              recoveryRan,
+              recoveryStatus: v40Diagnostic.recovery.status,
+            });
             const fallbackAnswer = groundedFallback({
               question,
               planIntent: plan.intent,
@@ -1183,6 +1241,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             });
 
             finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(initialPrune.prunedText));
+            noteClaimRemovals(initialPrune.removalCodes);
             if (initialPrune.removedLines.length > 0) {
               pruneNote = clientCheckNote([`pruned_lines=${boundedCount(initialPrune.removedLines.length, COUNT_DIGITS)}`]);
               outcomeState.pruned = true;
@@ -1269,18 +1328,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               return;
             }
 
-            const authorityMentionValidation = validateAnswerAuthorityMentions({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
-
-            if (!authorityMentionValidation.ok) {
-              const rewrite = rewriteForbiddenAuthorityMentions({
-                answerText: finalAnswer,
-                authorities: authorityPayload,
-              });
-
-              finalAnswer = normalizeAnswerFormatting(rewrite.rewrittenText);
+            if (!checkMentions(finalAnswer).ok) {
+              const rewrittenDraft = rewriteDraft(finalAnswer);
+              finalAnswer = rewrittenDraft.text;
+              const removedCount = rewrittenDraft.removed;
+              commitRewrites(removedCount);
 
               const secondPrune = pruneValidatedAnswerContent({
                 answerText: finalAnswer,
@@ -1288,21 +1340,19 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               });
 
               finalAnswer = removeEmptyAnswerSections(normalizeAnswerFormatting(secondPrune.prunedText));
+              noteClaimRemovals(secondPrune.removalCodes);
 
               rewriteNote = clientCheckNote([
-                `rewritten_mentions=${boundedCount(rewrite.removedMentions.length, COUNT_DIGITS)}`,
+                `rewritten_mentions=${boundedCount(Math.min(removedCount, 99), COUNT_DIGITS)}`,
                 secondPrune.removedLines.length > 0
                   ? `pruned_lines=${boundedCount(secondPrune.removedLines.length, COUNT_DIGITS)}`
                   : null,
               ]);
-              if (rewrite.removedMentions.length > 0) outcomeState.rewritten = true;
+              if (removedCount > 0) outcomeState.rewritten = true;
               if (secondPrune.removedLines.length > 0) outcomeState.pruned = true;
-              if (rewrite.removedMentions.length > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
+              if (removedCount > 0 || secondPrune.removedLines.length > 0) noteCheckedWithholding();
 
-              const recheckMentions = validateAnswerAuthorityMentions({
-                answerText: finalAnswer,
-                authorities: authorityPayload,
-              });
+              const recheckMentions = checkMentions(finalAnswer);
 
               const recheckCitations = validateAnswerCitations({
                 answerText: finalAnswer,
@@ -1437,7 +1487,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               send("stage", {key:"validating", label:"Repairing the missing incident decision"});
               try {
                 const proposedRepair = await callText({
-                  task: "answer.generate",
+                  task: "answer.repair",
                   systemInstruction: ANSWER_V401_INCIDENT_REPAIR_SYSTEM_PROMPT,
                   prompt: buildV401IncidentRepairPrompt({
                     question, currentAnswer: finalAnswer,
@@ -1464,13 +1514,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                 repairedAnswer = removeEmptyAnswerSections(
                   normalizeAnswerFormatting(repairedPrune.prunedText),
                 );
+                const repairedRewrite = rewriteDraft(repairedAnswer);
+                repairedAnswer = repairedRewrite.text;
+                noteClaimRemovals(repairedPrune.removalCodes);
                 const repairedClaims = extractAnswerClaims(repairedAnswer);
                 const repairedCitations = validateAnswerCitations({
                   answerText: repairedAnswer, authorities: authorityPayload,
                 });
-                const repairedMentions = validateAnswerAuthorityMentions({
-                  answerText: repairedAnswer, authorities: authorityPayload,
-                });
+                const repairedMentions = checkMentions(repairedAnswer);
                 const qualificationVetoes = findOmittedSourceQualifications({
                   claims: repairedClaims, authorities: finalAuthorities,
                 });
@@ -1526,6 +1577,14 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     });
                     outcomeState.repairAccepted = true;
                     outcomeState.settlement = null;
+                    if (repairModel) answerModel = repairModel;
+                    commitRewrites(repairedRewrite.removed);
+                    if (repairedRewrite.removed > 0) {
+                      rewriteNote = clientCheckNote([
+                        rewriteNote,
+                        `rewritten_mentions=${boundedCount(Math.min(repairedRewrite.removed, 99), COUNT_DIGITS)}`,
+                      ]);
+                    }
                     noteCheckedWithholding();
                     finalAnswer = repairedAnswer;
                     answerClaims = repairedClaims;
@@ -1683,6 +1742,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               ]);
               outcomeState.pruned = true;
               noteCheckedWithholding();
+              noteClaimRemovals(semanticPrune.removedClaims.map((claim) =>
+                qualificationVetoIds.has(claim.id) ? "omitted_source_qualification" : "unsupported_by_passage"));
             } else {
               finalAnswer = removeEmptyAnswerSections(finalAnswer);
               if (appealDiagnostic) claimValidationNote = clientCheckNote([appealDiagnostic]);
@@ -1693,10 +1754,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               answerText: finalAnswer,
               authorities: authorityPayload,
             });
-            let finalMentionValidation = validateAnswerAuthorityMentions({
-              answerText: finalAnswer,
-              authorities: authorityPayload,
-            });
+            let finalMentionValidation = checkMentions(finalAnswer);
 
             let hasBottomLine = answerSectionHasContent(
               finalAnswer,
@@ -1714,7 +1772,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               reconstructionDiagnostic = "attempted_rejected";
               try {
                 const rawRecovery = await callJson<unknown>({
-                  task: "answer.validate",
+                  task: "answer.repair",
                   systemInstruction: ANSWER_BOTTOM_LINE_RECOVERY_SYSTEM_PROMPT,
                   prompt: buildBottomLineRecoveryPrompt({
                     question,
@@ -1733,8 +1791,11 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                   validate: (value) => { bottomLineRecoverySchema.parse(value); },
                 });
                 const recovery = bottomLineRecoverySchema.parse(rawRecovery);
-                const line = recovery.bottomLine.trim();
-                if (line.length >= 20 && !line.includes("\n") &&
+                const rawLine = recovery.bottomLine.trim();
+                const singleLine = rawLine.length >= 20 && !rawLine.includes("\n") && /\[[^\]]+\]/.test(rawLine);
+                const recoveredRewrite = singleLine ? rewriteDraft(rawLine) : { text: rawLine, removed: 0 };
+                const line = recoveredRewrite.text.trim();
+                if (singleLine && line.length >= 20 && !line.includes("\n") &&
                     /\[[^\]]+\]/.test(line)) {
                   const candidate = normalizeAnswerFormatting(`Bottom line:\n${line}\n\n${finalAnswer}`);
                   const candidateClaims = extractAnswerClaims(`Bottom line:\n${line}`);
@@ -1742,10 +1803,7 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                     answerText: candidate,
                     authorities: authorityPayload,
                   }).ok;
-                  const mentionOK = validateAnswerAuthorityMentions({
-                    answerText: candidate,
-                    authorities: authorityPayload,
-                  }).ok;
+                  const mentionOK = checkMentions(candidate).ok;
                   const qualificationOK = findOmittedSourceQualifications({
                     claims: candidateClaims,
                     authorities: finalAuthorities,
@@ -1773,15 +1831,20 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
                         answerText: finalAnswer,
                         authorities: authorityPayload,
                       });
-                      finalMentionValidation = validateAnswerAuthorityMentions({
-                        answerText: finalAnswer,
-                        authorities: authorityPayload,
-                      });
+                      finalMentionValidation = checkMentions(finalAnswer);
                       hasBottomLine = answerSectionHasContent(finalAnswer,"Bottom line:");
                       reconstructionDiagnostic = "accepted_after_recheck";
                       outcomeState.repairAccepted = true;
                       outcomeState.settlement = null;
                       noteCheckedWithholding();
+                      if (repairModel) answerModel = repairModel;
+                      commitRewrites(recoveredRewrite.removed);
+                      if (recoveredRewrite.removed > 0) {
+                        rewriteNote = clientCheckNote([
+                          rewriteNote,
+                          `rewritten_mentions=${boundedCount(Math.min(recoveredRewrite.removed, 99), COUNT_DIGITS)}`,
+                        ]);
+                      }
                     }
                   }
                 }
@@ -1817,6 +1880,8 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
               ]);
               outcomeState.fallbackCode = !hasBottomLine ? "bottom_line_lost" : "validation_rejected";
               outcomeState.abstained = true;
+              const rejectionEdit = mentionRewriteEdit(mentionRewrites);
+              if (rejectionEdit) answerEdits = [rejectionEdit];
               const fallbackReason = !hasBottomLine
                 ? "The AI draft lost its grounded Bottom line during semantic entailment validation."
                 : "The AI draft could not retain a valid set of grounded claims after semantic entailment validation.";
@@ -1881,19 +1946,12 @@ export async function runAnswerRoute(request: NextRequest, deps: AnswerRouteDeps
             finalAnswer = labelBareRulings(finalAnswer, finalAuthorities);
             const cited = dropUnreferencedCitationEntries(finalAnswer);
             finalAnswer = cited.text;
-            const qualificationLines: string[] = [];
-            if (actUnconfirmed) {
-              const named = [...actLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
-              qualificationLines.push(`${named} has not been confirmed to govern the specific act asked about. Check that it applies before relying on it.`);
-            }
-            if (forumUnconfirmed) {
-              const named = [...forumLabels].map((label) => `[${label}]`).join(", ") || "The cited source";
-              qualificationLines.push(`${named} has not been confirmed to be the body the question is about. Check that it applies before relying on it.`);
-            }
-            if (qualificationLines.length > 0) {
-              finalAnswer = `${finalAnswer}\n\nQualification:\n${qualificationLines.join("\n")}`;
-            }
-            answerEdits = cited.dropped;
+            finalAnswer = attachClaimQualifications(finalAnswer, {
+              actLabels: [...actLabels],
+              forumLabels: [...forumLabels],
+            });
+            const mentionEdit = mentionRewriteEdit(mentionRewrites);
+            answerEdits = [...cited.dropped, ...(mentionEdit ? [mentionEdit] : [])];
             if (answerEdits.length > 0) noteCheckedWithholding();
             if (evidenceGaps.length > 0) outcomeState.partial.push("evidence_gap");
             if (claimValidationAttempts > 1) {

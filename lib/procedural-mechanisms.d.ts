@@ -68,6 +68,8 @@ export function selectOverlookedCandidates<T extends { sectionId?: string; citat
   objectText?: string;
 }): T[];
 export function filterDraftNamedAuthorities<T extends { citationLabel?: string }>(named: T[], admitted: Array<{ citationLabel?: string }>): T[];
+export function citationTokensInBrackets(text: string): string[];
+export function citationTokenMatchesLabel(token: string, label: string): boolean;
 export function authoritiesReferencedByAnswer<T extends { citationLabel?: string }>(answerText: string, authorities: T[]): T[];
 export function resolveServedModel(answerModel: string | null | undefined, lastAttemptedModel: string | null | undefined): string | null;
 export function negativePowerWitnessScore(input: { actor?: string; act?: string; source?: string }): number;

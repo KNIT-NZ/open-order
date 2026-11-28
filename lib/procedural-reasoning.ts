@@ -1,7 +1,7 @@
 // lib/procedural-reasoning.ts
 import type { ProceduralSearchResult } from "@/lib/procedural-search";
 import { cleanQuery } from "@/lib/search-core";
-import { conceptsMatchingLabels, usableSourceAnchor } from "@/lib/procedural-mechanisms";
+import { citationTokenMatchesLabel, citationTokensInBrackets, conceptsMatchingLabels, usableSourceAnchor } from "@/lib/procedural-mechanisms";
 import {
   CONCEPT_REGISTRY,
   type AuthorityExclusionSpec,
@@ -1831,6 +1831,52 @@ function isCitationAllowed(cited: string, allowedLabels: Set<string>): boolean {
   return false;
 }
 
+function citationParts(cited: string): string[] {
+  const parts = cited.split(/\s*(?:,|;|\band\b)\s*/).map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : [cited];
+}
+
+function citationCandidates(prefix: string, part: string): string[] {
+  const direct = `${prefix}${part}`.replace(/\s+/g, " ").trim();
+  const forms = [direct];
+  if (/^(?:standing orders?|s\.?\s*o\.?s?)\s+$/i.test(prefix)) forms.push(`SO ${part}`);
+  return forms;
+}
+
+/** A bare "(2)" or "(a)" continues the previous label. A bare "2" continues its prefix. */
+function citationIsGrounded(cited: string, allowedLabels: Set<string>, allowedForms: Set<string>): boolean {
+  const parts = citationParts(cited);
+  let prefix = "";
+  let parent = "";
+  let sawLabel = false;
+  for (const part of parts) {
+    if (/^\([0-9a-z]+\)$/i.test(part)) {
+      const continued = parent ? citationCandidates("", `${parent}${part}`) : [];
+      const ok = continued.some((item) => isCitationAllowed(item, allowedLabels))
+        || (parent !== "" && isCitationAllowed(parent, allowedLabels));
+      if (!ok) return false;
+      continue;
+    }
+    // A quantity is not a provision only when it continues a label already admitted.
+    if (parent !== "" && QUANTITY_CONTINUATION.test(part)) continue;
+    if (/^\d+[a-z]*$/i.test(part)) {
+      const resolved = citationCandidates(prefix, part).find((item) => isCitationAllowed(item, allowedLabels));
+      if (!resolved) return false;
+      parent = resolved.replace(/\(.*/, "");
+      sawLabel = true;
+      continue;
+    }
+    if (!isCitationAllowed(part, allowedLabels)) return false;
+    const head = part.match(/^(.*?\d+[a-z]*)/i);
+    parent = (head?.[1] ?? part).replace(/\(.*/, "");
+    const lead = part.match(/^(.*?)(?=\d)/);
+    prefix = lead?.[1] ?? prefix;
+    sawLabel = true;
+  }
+  if (!sawLabel) return false;
+  return mentionSpans(cited, allowedForms).every((span) => span.admitted && !span.suffix);
+}
+
 function stripBracketedCitations(text: string): string {
   return text.replace(/\[[^\]]+\]/g, " ");
 }
@@ -1844,31 +1890,146 @@ function normalizeAuthorityMention(text: string): string {
     .toLowerCase();
 }
 
+// Any Unicode space, newline, thin space, U+202F, or zero-width mark that can sit inside a name.
+const WS_CLASS = String.raw`\s\u00a0\u1680\u2000-\u200d\u2028\u2029\u202f\u205f\u2060\u3000\ufeff`;
+const WS = `[${WS_CLASS}]*`;
+const WS1 = `[${WS_CLASS}]+`;
+// All or nothing: a short number cannot stop before another digit or a slash, and a longer number is taken whole.
+const SO_NUM = String.raw`(?:\d{7,}(?:/\d{1,6})?(?!\d)|\d{1,6}(?![\d/]))[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?`;
+const SO_SEP = String.raw`(?:,${WS}(?:and|or)?${WS}|${WS}(?:and|or|through|to|&)${WS}|${WS}[-–—]${WS})`;
+// Units, times, and people counts are followers. Procedural nouns are followers only after "or more/fewer/less".
+// A word followed by an apostrophe is not a follower: "Members' bills" still names 99.
+const UNIT = String.raw`(?:per${WS1}cent|calendar${WS1}days?|working${WS1}days?|sitting${WS1}days?|members?|mps?|people|persons?|speakers?|parties|party|votes?|times?|percent|days?|hours?|hrs?|minutes?|mins?|seconds?|secs|weeks?|months?|years?|noon|am|pm|o'clock)`;
+const PROCEDURAL = String.raw`(?:questions?|bills?|motions?|amendments?|readings?)`;
+const QUANTITY = String.raw`(?:or${WS1}(?:more|fewer|less)${WS1}(?:${UNIT}|${PROCEDURAL})|${UNIT})(?!['’])`;
+const JOINED = String.raw`${SO_SEP}${SO_NUM}(?!${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.)|${WS}%)`;
+const QUANTITY_CONTINUATION = new RegExp(String.raw`^\d{1,6}[a-z]{0,4}(?:${WS}\(\d{1,4}[a-z]{0,2}\))?${WS1}(?:${QUANTITY}\b|a\.m\.|p\.m\.|%)$`, "i");
+const LIST_SPAN = `${SO_NUM}(?:${JOINED})*`;
+const PLURAL_INTRO = String.raw`(?:standing${WS1}orders\b|s\.?${WS}o\.?${WS}s\b)`;
+const SINGULAR_INTRO = String.raw`(?:standing(?:${WS}-${WS}|${WS1})order\b|s\.?${WS}o\.?(?!\.?${WS}s\b))(?:${WS}no\.?)?`;
+// N/M never starts in the middle of a longer number. A fraction after an SO name takes the name with it.
+// (?<!\d) does not change a match the all-or-nothing number already takes whole. It stays so a
+// shorter alternative cannot resume on the second digit of "12/9".
+const RULING_NUM = String.raw`(?<!\d)\d{1,6}\/\d{1,6}(?!\d)`;
+const PROVISION_MENTION = String.raw`\b(?:${PLURAL_INTRO}|${SINGULAR_INTRO})${WS}${RULING_NUM}|\b${PLURAL_INTRO}${WS}${LIST_SPAN}|\b${SINGULAR_INTRO}${WS}${SO_NUM}(?:${JOINED})*|\bappendix${WS1}[a-f]${WS1}(?:cl(?:ause)?\.?${WS}\d{1,6}[a-z]{0,4}|(?:table|part)${WS1}\d{1,6}${WS1}row${WS1}\d{1,6}|note)\b|\bspeakers?'?${WS1}rulings?${WS}${RULING_NUM}|\bs\.?${WS}r\.?${WS}${RULING_NUM}|\b${RULING_NUM}\b`;
+
+let provisionPattern: RegExp | undefined;
+function answerMentionPattern(): RegExp {
+  provisionPattern ??= new RegExp(PROVISION_MENTION, "gi");
+  provisionPattern.lastIndex = 0;
+  return provisionPattern;
+}
+
+function allowedProvisionForms(label: string): string[] {
+  const flat = label.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim();
+  const forms = new Set<string>([normalizeAuthorityMention(flat), flat.toLowerCase()]);
+  const ruling = flat.match(/^(?:s\.?\s*r\.?|speakers?'?\s+rulings?)\s*(\d+\/\d+)$/i);
+  if (ruling) {
+    forms.add(ruling[1]);
+    forms.add(`sr ${ruling[1]}`);
+  }
+  const bare = flat.match(/^(\d+\/\d+)$/);
+  if (bare) forms.add(bare[1]);
+  const standing = flat.match(/^(?:standing\s+orders?|s\.?\s*o\.?|so)\s*(\d+[a-z]*)$/i);
+  if (standing) forms.add(`so ${standing[1].toLowerCase()}`);
+  return [...forms];
+}
+
+/** Whole tokens. A ruling N/M stays N/M and never collapses to N. A huge range fails closed. */
+function standingTokens(mention: string): string[] | null {
+  const body = mention.replace(new RegExp(`^(?:${PLURAL_INTRO}|${SINGULAR_INTRO})${WS}`, "i"), "");
+  const number = new RegExp(SO_NUM, "gi");
+  const found = [...body.matchAll(number)];
+  if (found.length === 0) return null;
+  const tokens: string[] = [];
+  for (let index = 0; index < found.length; index += 1) {
+    const token = found[index][0].replace(new RegExp(`[${WS_CLASS}]+`, "g"), "").toLowerCase();
+    if (index > 0) {
+      const between = body.slice((found[index - 1].index ?? 0) + found[index - 1][0].length, found[index].index);
+      if (/(?:to|through|[-–—])/i.test(between)) {
+        const start = Number(found[index - 1][0]);
+        const end = Number(found[index][0]);
+        if (!Number.isInteger(start) || !Number.isInteger(end) || end < start || end - start > 100) return null;
+        tokens.pop();
+        for (let value = start; value <= end; value += 1) tokens.push(String(value));
+        continue;
+      }
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+function tokenAdmitted(token: string, allowed: Set<string>): boolean {
+  const parent = token.replace(/\(\d+[a-z]*\)$/i, "");
+  return [token, parent].some((item) => allowed.has(item) || allowed.has(`so ${item}`) || allowed.has(`sr ${item}`));
+}
+
+function mentionIsAdmitted(mention: string, allowed: Set<string>): boolean {
+  const flat = mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim();
+  const ruling = flat.match(/(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/);
+  // A long standing-order spelling of a fraction is never that order. Only the short
+  // "SO N/M" and "S.O. N/M" spellings can be an admitted ruling.
+  if (ruling && /^(?:standing orders?|s\.?\s*o\.?s)\b/i.test(flat)) return false;
+  if (ruling && /^(?:s\.?\s*o\.?|so)\b/i.test(flat)) {
+    const whole = ruling[0];
+    return allowed.has(whole) || allowed.has(`sr ${whole}`) || allowed.has(`so ${whole}`);
+  }
+  if (ruling && /rulings?|s\.?\s*r\.?|^\d+\/\d+$/i.test(flat)) {
+    const whole = ruling[0];
+    return allowed.has(whole) || allowed.has(`sr ${whole}`);
+  }
+  if (/^appendix\b/i.test(mention.trim())) return allowed.has(normalizeAuthorityMention(mention));
+  const tokens = standingTokens(mention);
+  if (!tokens || tokens.length === 0) return false;
+  return tokens.every((token) => tokenAdmitted(token, allowed));
+}
+
+function maskBrackets(text: string): string {
+  return text.replace(/\[[^\]]*\]/g, (span) => "\u0000".repeat(span.length));
+}
+
+type MentionSpan = { start: number; end: number; mention: string; admitted: boolean; suffix: boolean };
+
+/** The check and the rewrite read these spans, so they cannot disagree. */
+function mentionSpans(text: string, allowed: Set<string>): MentionSpan[] {
+  const masked = maskBrackets(text);
+  const suffix = new RegExp(`^${WS}\\(referred to in\\b[^)]*;${WS}not retrieved\\)`, "i");
+  const spans: MentionSpan[] = [];
+  let coveredUntil = 0;
+  for (const match of masked.matchAll(answerMentionPattern())) {
+    const start = match.index ?? 0;
+    if (start < coveredUntil) continue;
+    const mention = match[0];
+    const admitted = mentionIsAdmitted(mention, allowed);
+    let end = start + mention.length;
+    const trailed = text.slice(end).match(suffix);
+    if (trailed) end += trailed[0].length;
+    spans.push({
+      start,
+      end,
+      mention,
+      admitted,
+      suffix: Boolean(trailed),
+    });
+    coveredUntil = end;
+  }
+  return spans;
+}
+
+function allowedSet(authorities: Array<{ citationLabel: string }>): Set<string> {
+  return new Set(authorities.flatMap((authority) => allowedProvisionForms(authority.citationLabel)));
+}
+
 export function validateAnswerAuthorityMentions(input: {
   answerText: string;
   authorities: Array<{ citationLabel: string }>;
 }): { ok: true } | { ok: false; invalidAuthorityMentions: string[] } {
-  const allowed = new Set(
-    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
-  );
-
-  const prose = stripBracketedCitations(input.answerText);
-
-  const matches = [
-    ...new Set(
-      prose.match(/\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi) ?? [],
-    ),
-  ];
-
-  const invalid = matches.filter((m) => {
-    const normalized = normalizeAuthorityMention(m);
-    return !allowed.has(normalized);
-  });
-
-  if (invalid.length > 0) {
-    return { ok: false, invalidAuthorityMentions: invalid };
-  }
-
+  const allowed = allowedSet(input.authorities);
+  const invalid = mentionSpans(input.answerText, allowed)
+    .filter((span) => !span.admitted || span.suffix)
+    .map((span) => span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
+  if (invalid.length > 0) return { ok: false, invalidAuthorityMentions: [...new Set(invalid)] };
   return { ok: true };
 }
 
@@ -1879,28 +2040,20 @@ export function rewriteForbiddenAuthorityMentions(input: {
   rewrittenText: string;
   removedMentions: string[];
 } {
-  const allowed = new Set(
-    input.authorities.map((a) => normalizeAuthorityMention(a.citationLabel)),
-  );
-
-  const pattern = /\b(?:standing order|so)\s+\d+[a-z]*\b|\bappendix\s+[a-f]\s+(?:cl(?:ause)?\.?\s+\d+[a-z]*|(?:table|part)\s+\d+\s+row\s+\d+|note)\b|\b\d+\/\d+\b/gi;
+  const allowed = allowedSet(input.authorities);
+  const spans = mentionSpans(input.answerText, allowed).filter((span) => !span.admitted || span.suffix);
+  if (spans.length === 0) return { rewrittenText: input.answerText, removedMentions: [] };
   const removed: string[] = [];
-
-  const rewritten = input.answerText.replace(pattern, (match) => {
-    const normalized = normalizeAuthorityMention(match);
-
-    if (allowed.has(normalized)) {
-      return match;
-    }
-
-    removed.push(match);
-    return "the retrieved authority";
-  });
-
-  return {
-    rewrittenText: rewritten,
-    removedMentions: [...new Set(removed)],
-  };
+  let cursor = 0;
+  let rewritten = "";
+  for (const span of spans) {
+    rewritten += input.answerText.slice(cursor, span.start);
+    rewritten += span.admitted ? span.mention : "a provision that was not retrieved";
+    removed.push(span.mention.replace(new RegExp(`[${WS_CLASS}]+`, "g"), " ").trim());
+    cursor = span.end;
+  }
+  rewritten += input.answerText.slice(cursor);
+  return { rewrittenText: rewritten, removedMentions: [...new Set(removed)] };
 }
 
 export function validateAnswerCitations(input: {
@@ -1915,12 +2068,13 @@ export function validateAnswerCitations(input: {
   const allowedLabels = new Set(
     input.authorities.map((authority) => authority.citationLabel),
   );
+  const allowedForms = allowedSet(input.authorities);
 
   const invalidCitations = [
     ...new Set(
       cited.filter(
         (citation) =>
-          !isCitationAllowed(citation, allowedLabels) ||
+          !citationIsGrounded(citation, allowedLabels, allowedForms) ||
           looksLikeEmbeddedAuthorityReference(citation),
       ),
     ),
@@ -1958,14 +2112,51 @@ function isSubstantiveSection(section: string | null): boolean {
 function lineHasAllowedCitation(
   line: string,
   allowedLabels: Set<string>,
+  allowedForms: Set<string>,
 ): boolean {
   const citations = extractInlineCitations(line);
   if (citations.length === 0) return false;
-  return citations.every((citation) => isCitationAllowed(citation, allowedLabels));
+  return citations.every((citation) => citationIsGrounded(citation, allowedLabels, allowedForms));
 }
 
 function isLikelyBestAuthorityLine(line: string): boolean {
   return /^\-\s*\[[^\]]+\]/.test(line.trim()) || /^\-\s*\S+/.test(line.trim());
+}
+
+export type ClaimRemovalCode =
+  | "no_citation"
+  | "citation_not_admitted"
+  | "unsupported_by_passage"
+  | "omitted_source_qualification";
+
+function stripModelCrossReferenceSuffixes(line: string): string {
+  return line.replace(/\(\s*referred to in\b[^)]*;\s*not retrieved\s*\)/gi, " ");
+}
+
+/** Full "Standing Order N" or uppercase "SO N". Never the word "so", and never a bare fraction. */
+function admittedLabelsNamedIn(line: string, allowedLabels: Set<string>): string[] {
+  const allowed = allowedSet([...allowedLabels].map((citationLabel) => ({ citationLabel })));
+  const visible = stripModelCrossReferenceSuffixes(line);
+  const found: string[] = [];
+  for (const span of mentionSpans(visible, allowed)) {
+    if (!span.admitted || !/^(?:Standing Orders?|SO|S\.O\.s?|Speakers?'? ruling|SR)\b/.test(span.mention)) continue;
+    const tokens = standingTokens(span.mention) ?? [];
+    const ruling = span.mention.match(/(?<!\d)\d{1,6}\/\d{1,6}(?!\d)/)?.[0] ?? "";
+    for (const label of allowedLabels) {
+      const forms = new Set(allowedProvisionForms(label));
+      const hit = tokens.some((token) => tokenAdmitted(token, forms))
+        || (ruling !== "" && (forms.has(ruling) || forms.has(`sr ${ruling}`)));
+      if (hit && !found.includes(label)) found.push(label);
+    }
+  }
+  return found;
+}
+
+export function claimRemovalCode(line: string, allowedLabels: Set<string>): ClaimRemovalCode {
+  const citations = extractInlineCitations(line);
+  if (citations.length === 0) return "no_citation";
+  if (citations.some((citation) => !isCitationAllowed(citation, allowedLabels))) return "citation_not_admitted";
+  return "no_citation";
 }
 
 export function pruneValidatedAnswerContent(input: {
@@ -1974,14 +2165,17 @@ export function pruneValidatedAnswerContent(input: {
 }): {
   prunedText: string;
   removedLines: string[];
+  removalCodes: ClaimRemovalCode[];
 } {
   const allowedLabels = new Set(
     input.authorities.map((authority) => authority.citationLabel),
   );
+  const allowedForms = allowedSet(input.authorities);
 
   const lines = normalizeAnswerFormatting(input.answerText).split("\n");
   const kept: string[] = [];
   const removedLines: string[] = [];
+  const removalCodes: ClaimRemovalCode[] = [];
   let currentSection: string | null = null;
 
   for (const rawLine of lines) {
@@ -2009,10 +2203,18 @@ export function pruneValidatedAnswerContent(input: {
     }
 
     if (isSubstantiveSection(currentSection)) {
-      if (lineHasAllowedCitation(trimmed, allowedLabels)) {
+      if (lineHasAllowedCitation(trimmed, allowedLabels, allowedForms)) {
         kept.push(line);
       } else {
-        removedLines.push(line);
+        const named = extractInlineCitations(trimmed).length === 0
+          ? admittedLabelsNamedIn(trimmed, allowedLabels)
+          : [];
+        if (named.length > 0) {
+          kept.push(`${line} ${named.map((label) => `[${label}]`).join(" ")}`);
+        } else {
+          removedLines.push(line);
+          removalCodes.push(claimRemovalCode(trimmed, allowedLabels));
+        }
       }
       continue;
     }
@@ -2028,7 +2230,78 @@ export function pruneValidatedAnswerContent(input: {
   return {
     prunedText,
     removedLines,
+    removalCodes,
   };
+}
+
+/** Off in any production environment, hosted or not. */
+export function firstDraftDebugEnabled(env: {
+  OPEN_ORDER_DEBUG_FIRST_DRAFT?: string;
+  NODE_ENV?: string;
+  VERCEL_ENV?: string;
+} = process.env): boolean {
+  if (env.OPEN_ORDER_DEBUG_FIRST_DRAFT !== "1") return false;
+  if (env.NODE_ENV === "production") return false;
+  if (env.VERCEL_ENV === "production") return false;
+  return true;
+}
+
+/** A count only. Above 99 the reported count saturates at 99 and is not dropped. */
+export function mentionRewriteEdit(count: number): string | null {
+  if (!Number.isInteger(count) || count < 1) return null;
+  return `removed_mentions=${Math.min(count, 99)}`;
+}
+
+const ACT_QUALIFICATION = "has not been confirmed to govern the specific act asked about.";
+const FORUM_QUALIFICATION = "has not been confirmed to be the body the question is about.";
+
+function lineCitesLabel(line: string, label: string): boolean {
+  return citationTokensInBrackets(line).some((token) => citationTokenMatchesLabel(token, label));
+}
+
+/** Put a real uncertainty on the claim it qualifies. Do not brand a settled provision. */
+export function attachClaimQualifications(answerText: string, input: {
+  actLabels?: string[];
+  forumLabels?: string[];
+}): string {
+  const actLabels = [...new Set((input.actLabels ?? []).map((label) => label.trim()).filter(Boolean))];
+  const forumLabels = [...new Set((input.forumLabels ?? []).map((label) => label.trim()).filter(Boolean))];
+  if (actLabels.length === 0 && forumLabels.length === 0) return answerText;
+  const substantive = new Set(["Bottom line:", "What this means:", "Your options:", "Risks or constraints:"]);
+  const lines = String(answerText ?? "").split("\n");
+  let section: string | null = null;
+  const claimIndexes: number[] = [];
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (substantive.has(trimmed) || trimmed === "Best authorities to inspect or cite:" || trimmed === "Possibly relevant, not confirmed to apply:") {
+      section = trimmed;
+      return;
+    }
+    if (section && substantive.has(section) && trimmed) claimIndexes.push(index);
+  });
+  const citing = (label: string): number[] =>
+    claimIndexes.filter((index) => lineCitesLabel(lines[index] ?? "", label));
+  const append = (indexes: number[], sentence: string) => {
+    for (const index of indexes) {
+      if (lines[index].includes(sentence)) continue;
+      lines[index] = `${lines[index]} ${sentence}`;
+    }
+  };
+  const qualificationSection: string[] = [];
+  for (const label of actLabels) {
+    const sentence = `[${label}] ${ACT_QUALIFICATION}`;
+    const hits = citing(label);
+    if (hits.length > 0) append(hits, sentence);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
+  }
+  for (const label of forumLabels) {
+    const sentence = `[${label}] ${FORUM_QUALIFICATION}`;
+    const hits = citing(label);
+    if (hits.length > 0) append(hits, sentence);
+    else if (!answerText.includes(sentence)) qualificationSection.push(sentence);
+  }
+  if (qualificationSection.length > 0) lines.push("", "Qualification:", ...qualificationSection);
+  return lines.join("\n");
 }
 
 export type AnswerClaim = {
@@ -2141,9 +2414,11 @@ function classifyOption(result: ProceduralSearchResult): string {
 export function withholdingStage(input: {
   adjudicated: boolean;
   recoveryRan: boolean;
+  recoveryStatus?: string;
 }): "selection" | "adjudication" | "recovery" {
   if (!input.adjudicated) return "selection";
-  return input.recoveryRan ? "recovery" : "adjudication";
+  if (input.recoveryRan || input.recoveryStatus === "v40_no_governing_witness") return "recovery";
+  return "adjudication";
 }
 
 export function buildFallbackAnswer(input: {
@@ -2187,7 +2462,7 @@ export function buildFallbackAnswer(input: {
         : foundButRejected
           ? "Retrieval found possible authorities, but none passed source-grounded selection; no procedural conclusion can be made from this result."
           : best.length > 0
-            ? `Relevant authorities were retrieved, but the drafted answer did not pass the grounding checks, so I cannot safely state a stronger procedural conclusion from this result set ${citations.join(" ")}.`
+            ? `Relevant authorities were retrieved, but the drafted answer did not pass the checks ${citations.join(" ")}.`
             : "No sufficiently relevant authority was retrieved to support a procedural conclusion.";
 
   const whatThisMeans = foundButRejected
@@ -2196,25 +2471,18 @@ export function buildFallbackAnswer(input: {
       ? `Treat the authorities below as inspection points rather than as a synthesised answer ${citations[0]}.`
       : "A narrower search or additional authority is needed before giving procedural advice.";
 
-  const options = best.length > 0
-    ? best.map(classifyOption)
-    : [unconfirmedOnly
-      ? "No retrieved source was confirmed to govern the act asked about."
-      : foundButRejected
-        ? "No source-grounded authority passed final selection."
-        : "No clearly relevant authority was retrieved."];
+  const options = best.length > 0 ? best.map(classifyOption) : [];
 
   const inspect =
     best.length > 0
       ? best
           .map((authority) => {
-            const profile = buildAuthorityProfile(authority);
             const why =
               authority.heading?.trim() ||
               authority.path[authority.path.length - 1] ||
               "Relevant authority";
 
-            return `- [${authority.citationLabel}] ${why} (${profile.authorityClass}; ${profile.authorityFunction})`;
+            return `- [${authority.citationLabel}] ${why}`;
           })
           .join("\n")
       : unconfirmedOnly
@@ -2238,18 +2506,16 @@ export function buildFallbackAnswer(input: {
     "",
     "What this means:",
     whatThisMeans,
-    "",
-    "Your options:",
-    ...options.map((option) => `- ${option}`),
+    ...(options.length > 0 ? ["", "Your options:", ...options.map((option) => `- ${option}`)] : []),
     "",
     "Risks or constraints:",
     `- A substantive answer was withheld because ${
       input.failureClass === "drafting_unavailable" ? "answer generation did not complete" :
       input.failureClass === "validation_unavailable" ? "the claim check did not complete" :
-      input.failureClass === "provider" ? "drafting failed" :
-      input.failureClass === "selection" ? "authority selection was inconclusive" :
-      "validation failed"
-    }: ${input.fallbackReason}`,
+      input.failureClass === "provider" ? "an answer could not be completed" :
+      input.failureClass === "selection" ? "no source was confirmed to govern this question" :
+      "the drafted answer could not be grounded in the retrieved sources"
+    }.`,
     "",
     "Best authorities to inspect or cite:",
     inspect,

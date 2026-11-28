@@ -281,9 +281,11 @@ async function ask(scenario: Scenario): Promise<Array<{ event: string; data: Rec
     return value as T;
   };
   const streamText = async (request: AiStreamTextRequest): Promise<string> => {
-    request.onProviderAttemptStart?.("gemini-3.5-flash-lite");
-    request.onProviderAttempt?.({ model: "gemini-3.5-flash-lite", outcome: "ok" });
-    if (request.systemInstruction.includes("repairing an incomplete")) return draftFor("supported");
+    const repair = request.systemInstruction.includes("repairing an incomplete");
+    const model = repair ? "gemini-repair-model" : "gemini-3.5-flash-lite";
+    request.onProviderAttemptStart?.(model);
+    request.onProviderAttempt?.({ model, outcome: "ok" });
+    if (repair) return draftFor("supported");
     return draftFor(scenario);
   };
   const search = async (): Promise<ProceduralSearchResponse> => ({
@@ -390,6 +392,7 @@ test("rewriting an unretrieved mention caps the done answer at partial", async (
   const done = doneOf(await ask("rewrite"));
   assert.equal(done.answerState, "partial");
   assert.match(String(done.rewriteNote), /rewritten_mentions=1/);
+  assert.ok((done.answerEdits as string[]).includes("removed_mentions=1"));
 });
 
 test("an accepted incident repair caps the done answer at partial", async () => {
@@ -397,6 +400,7 @@ test("an accepted incident repair caps the done answer at partial", async () => 
   assert.equal(done.answerState, "partial");
   assert.equal(done.repairAccepted, true);
   assert.match(String(done.claimValidationNote), /repair=accepted/);
+  assert.equal(done.servedModel, "gemini-repair-model");
 });
 
 test("dropping an unreferenced authority list entry caps the done answer at partial", async () => {
@@ -607,13 +611,13 @@ test("withholding paths leave unconfirmed sources out of the authority list", as
     { code: "drafting_unavailable", draft: cited, kind: "procedure" as const, throwDraft: true },
     { code: "prune_emptied_draft", draft: "What this means:\nAn uncited line only.", kind: "procedure" as const },
     {
-      code: "ungrounded_mentions",
-      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      code: "prune_emptied_draft",
+      draft: "Bottom line:\nThe House may sit [SO 1 and SO 99].\n\nWhat this means:\nThe House may sit [SO 1, SO 99].",
       kind: "procedure" as const,
     },
     {
-      code: "ungrounded_mentions",
-      draft: `Bottom line:\n${QUOTE} [SO 1]\n\nWhat this means:\nThe Speaker may act, and so [SO 1] 3 members may object.\n\nSettlement: supported`,
+      code: "prune_emptied_draft",
+      draft: "Bottom line:\nThe House may sit [SO 1; SR 2/9].",
       kind: "incident" as const,
     },
   ];

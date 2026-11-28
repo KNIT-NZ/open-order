@@ -178,6 +178,13 @@ export type AiPipelineTrace = {
   requestId: string;
   buildCommit: string | null;
   stageTimeline: Array<{ key: string; label: string; atMs: number }>;
+  claimRemovalCounts?: Record<string, number>;
+  adjudication?: {
+    nominationCount: number;
+    unavailableNominations: number;
+    dossierOutcomes: string[];
+  };
+  shownAuthorities?: { count: number; unconfirmed: number };
 };
 
 export type AiTerminalValidation = {

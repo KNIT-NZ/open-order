@@ -183,7 +183,7 @@ export function AssistantPanel({
                   </span>
                   <span>
                     Final authorities:{" "}
-                    {assistant.diagnostics.finalAuthoritySelection.length}
+                    {assistant.authorities.length}
                   </span>
                   <span>
                     Latency:{" "}
@@ -274,7 +274,7 @@ export function AssistantPanel({
 
                     return (
                       <div
-                        key={authority.sectionId}
+                        key={`${authority.documentCorpus}:${authority.sectionId}:${authority.citationLabel}`}
                         className={styles.aiAuthorityCard}
                       >
                         <div
@@ -299,8 +299,9 @@ export function AssistantPanel({
                               </span>
                             ) : null}
                             {authority.unconfirmed ? (
-                              <span className={styles.aiAuthorityHeading} aria-label="Qualified authority, not confirmed to govern">
+                              <span className={styles.aiAuthorityHeading}>
                                 Qualified
+                                <span className={styles.visuallyHidden}> authority, not confirmed to govern</span>
                               </span>
                             ) : null}
                           </div>

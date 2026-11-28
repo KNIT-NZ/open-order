@@ -509,33 +509,42 @@ export function formatAiDebugSnapshot(input: AiDiagnostics): string {
           .join("\n\n")
       : "None";
 
-  const authoritiesText =
-    input.authorities.length > 0
-      ? input.authorities
-          .map((authority, index) => {
-            const path = authority.path?.length
-              ? authority.path.join(" > ")
-              : "None";
-
-            return [
-              `${index + 1}. ${authority.citationLabel}`,
-              `   corpus: ${authority.documentCorpus}`,
-              `   heading: ${authority.heading ?? "None"}`,
-              `   sectionKey: ${authority.sectionKey}`,
-              `   rank: ${authority.rank.toFixed(2)}`,
-              `   path: ${path}`,
-              `   sourceHref: ${authority.sourceHref ?? "None"}`,
-            ].join("\n");
-          })
-          .join("\n\n")
-      : "None";
+  const shownCount = input.authorities.length;
+  const qualifiedCount = input.authorities.filter((authority) => authority.unconfirmed === true).length;
+  const traceShown = input.pipelineTrace?.shownAuthorities;
+  const authorityRows = input.authorities
+    .map((authority, index) => {
+      const path = authority.path?.length
+        ? authority.path.join(" > ")
+        : "None";
+      return [
+        `${index + 1}. ${authority.citationLabel}`,
+        `   corpus: ${authority.documentCorpus}`,
+        `   heading: ${authority.heading ?? "None"}`,
+        `   sectionKey: ${authority.sectionKey}`,
+        `   rank: ${authority.rank.toFixed(2)}`,
+        `   qualified: ${authority.unconfirmed ? "Yes" : "No"}`,
+        `   path: ${path}`,
+        `   sourceHref: ${authority.sourceHref ?? "None"}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+  const authoritiesText = input.authorities.length === 0
+    ? "None"
+    : [
+        `Count: ${shownCount}`,
+        `Qualified: ${qualifiedCount}`,
+        ...(traceShown ? [`Trace count: ${traceShown.count}`, `Trace qualified: ${traceShown.unconfirmed}`] : []),
+        "",
+        authorityRows,
+      ].join("\n");
 
   const selector = input.selectorSummary;
   const semanticSummary = selector
     ? [
         "Selector: v5.18 semantic authority pack (not the legacy blueprint)",
         `Candidate authorities evaluated: ${selector.candidateCount}`,
-        `Final authorities selected: ${selector.selectedLabels.join(", ") || "None"}`,
+        `Final authorities selected: ${input.authorities.map((authority) => authority.citationLabel).join(", ") || "None"}`,
         `Minimum obligation coverage: ${selector.minObligationCoverage.toFixed(3)}`,
         `All semantic obligations met by selector: ${selector.allObligationsComplete ? "Yes" : "No"}`,
         "Per-obligation coverage:",
